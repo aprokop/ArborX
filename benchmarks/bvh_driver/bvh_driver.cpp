@@ -105,13 +105,12 @@ Spec create_spec_from_string(std::string const &spec_string)
 template <typename T>
 using BoostRTree = BoostExt::RTree<T, ArborX::Point>;
 
-#ifdef KOKKOS_ENABLE_SERIAL
+template <typename DeviceType>
 class NanoflannKDTree
 {
 public:
-  using DeviceType = Kokkos::Device<Kokkos::Serial, Kokkos::HostSpace>;
-  using ExecutionSpace = Kokkos::Serial;
   using device_type = DeviceType;
+  using ExecutionSpace = typename DeviceType::execution_space;
 
   using DatasetAdapter = ArborX::NanoflannPointCloudAdapter<Kokkos::HostSpace>;
   using CoordinateType = DatasetAdapter::CoordinateType;
@@ -124,11 +123,13 @@ public:
     _tree.buildIndex();
   }
 
-  template <typename Query>
-  void query(Kokkos::View<Query *, DeviceType> queries,
-             Kokkos::View<int *, DeviceType> &indices,
-             Kokkos::View<int *, DeviceType> &offset,
-             ArborX::Experimental::TraversalPolicy const &)
+#ifdef KOKKOS_ENABLE_SERIAL
+  template <typename Query, typename U = ExecutionSpace>
+  std::enable_if_t<std::is_same<U, Kokkos::Serial>{}>
+  query(Kokkos::View<Query *, DeviceType> queries,
+        Kokkos::View<int *, DeviceType> &indices,
+        Kokkos::View<int *, DeviceType> &offset,
+        ArborX::Experimental::TraversalPolicy const &)
   {
     using Predicates = Kokkos::View<Query *, DeviceType>;
     using Access =
@@ -140,7 +141,15 @@ public:
 
     std::vector<std::pair<SizeType, CoordinateType>> returned_indices_distances;
 
-    queryDispatch(Tag{}, queries, returned_indices_distances, offset);
+    std::vector<std::pair<SizeType, CoordinateType>> ret_matches;
+    for (int i = 0; i < n_queries; ++i)
+    {
+      ret_matches.resize(0);
+      offset(i) = queryDispatch(Tag{}, queries(i), ret_matches);
+
+      returned_indices_distances.insert(returned_indices_distances.end(),
+                                        ret_matches.begin(), ret_matches.end());
+    }
 
     ArborX::exclusivePrefixSum(ExecutionSpace{}, offset);
     int const n_results = ArborX::lastElement(offset);
@@ -150,6 +159,55 @@ public:
       for (int j = offset(i); j < offset(i + 1); ++j)
         indices(j) = returned_indices_distances[j].first;
   }
+#endif
+
+#ifdef KOKKOS_ENABLE_OPENMP
+  template <typename Query, typename U = ExecutionSpace>
+  std::enable_if_t<std::is_same<U, Kokkos::OpenMP>{}>
+  query(Kokkos::View<Query *, DeviceType> queries,
+        Kokkos::View<int *, DeviceType> &indices,
+        Kokkos::View<int *, DeviceType> &offset,
+        ArborX::Experimental::TraversalPolicy const &)
+  {
+    using Predicates = Kokkos::View<Query *, DeviceType>;
+    using Access =
+        ArborX::Traits::Access<Predicates, ArborX::Traits::PredicatesTag>;
+    using Tag = typename ArborX::Traits::Helper<Access>::tag;
+
+    ExecutionSpace exec_space;
+
+    int const n_queries = queries.extent_int(0);
+    Kokkos::realloc(offset, n_queries + 1);
+
+    std::vector<std::pair<SizeType, CoordinateType>> returned_indices_distances;
+
+    Kokkos::parallel_for(
+        "nanoflann:first_pass",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n_queries),
+        [&](int const i) {
+          std::vector<std::pair<SizeType, CoordinateType>> ret_matches;
+          offset(i) = queryDispatch(Tag{}, queries(i), ret_matches);
+        });
+
+    ArborX::exclusivePrefixSum(ExecutionSpace{}, offset);
+    int const n_results = ArborX::lastElement(offset);
+
+    Kokkos::realloc(indices, n_results);
+    Kokkos::parallel_for(
+        "nanoflann:second_pass",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n_queries),
+        [&](int const i) {
+          std::vector<std::pair<SizeType, CoordinateType>> ret_matches;
+          int num_results = queryDispatch(Tag{}, queries(i), ret_matches);
+
+          auto shift = offset(i);
+          for (int j = 0; j < num_results; ++j)
+          {
+            indices(shift + j) = ret_matches[j].first;
+          }
+        });
+  }
+#endif
 
 private:
   using DistanceType =
@@ -159,66 +217,45 @@ private:
                                           SizeType>;
 
   template <typename Query>
-  void queryDispatch(ArborX::Details::SpatialPredicateTag,
-                     Kokkos::View<Query *, DeviceType> queries,
-                     std::vector<std::pair<SizeType, CoordinateType>>
-                         &returned_indices_distances,
-                     Kokkos::View<int *, DeviceType> &offset)
+  auto
+  queryDispatch(ArborX::Details::SpatialPredicateTag, Query const &query,
+                std::vector<std::pair<SizeType, CoordinateType>> &ret_matches)
   {
-    int const n_queries = queries.extent_int(0);
+    auto const sphere = ArborX::getGeometry(query);
+    auto const radius = sphere.radius();
+    auto const *const centroid = &sphere.centroid()[0];
 
-    std::vector<std::pair<SizeType, CoordinateType>> ret_matches;
-    for (int i = 0; i < n_queries; ++i)
-    {
-      auto const sphere = ArborX::getGeometry(queries(i));
-      auto const radius = sphere.radius();
-      auto const *const centroid = &sphere.centroid()[0];
+    nanoflann::SearchParams params;
+    auto num_results =
+        _tree.radiusSearch(centroid, radius * radius, ret_matches, params);
 
-      ret_matches.resize(0);
-
-      nanoflann::SearchParams params;
-      offset(i) =
-          _tree.radiusSearch(centroid, radius * radius, ret_matches, params);
-
-      returned_indices_distances.insert(returned_indices_distances.end(),
-                                        ret_matches.begin(), ret_matches.end());
-    }
+    return num_results;
   }
 
   template <typename Query>
-  void queryDispatch(ArborX::Details::NearestPredicateTag,
-                     Kokkos::View<Query *, DeviceType> queries,
-                     std::vector<std::pair<SizeType, CoordinateType>>
-                         &returned_indices_distances,
-                     Kokkos::View<int *, DeviceType> &offset)
+  auto
+  queryDispatch(ArborX::Details::NearestPredicateTag, Query const &query,
+                std::vector<std::pair<SizeType, CoordinateType>> &ret_matches)
   {
-    int const n_queries = queries.extent_int(0);
+    auto const k = query._k;
+    auto const *const query_point = &ArborX::getGeometry(query)[0];
 
-    std::vector<SizeType> query_indices;
-    std::vector<CoordinateType> distances_sq;
-    for (int i = 0; i < n_queries; ++i)
-    {
-      auto const k = queries(i)._k;
-      auto const *const query_point = &ArborX::getGeometry(queries(i))[0];
+    std::vector<SizeType> query_indices(k);
+    std::vector<CoordinateType> distances_sq(k);
 
-      query_indices.resize(k);
-      distances_sq.resize(k);
-      memset(query_indices.data(), 0, k * sizeof(SizeType));
-      memset(distances_sq.data(), 0, k * sizeof(CoordinateType));
+    int num_results = _tree.knnSearch(query_point, k, query_indices.data(),
+                                      distances_sq.data());
 
-      offset(i) = _tree.knnSearch(query_point, k, query_indices.data(),
-                                  distances_sq.data());
+    for (int j = 0; j < num_results; ++j)
+      ret_matches.push_back(
+          std::make_pair(query_indices[j], std::sqrt(distances_sq[j])));
 
-      for (int j = 0; j < offset(j); ++j)
-        returned_indices_distances.push_back(
-            std::make_pair(query_indices[j], std::sqrt(distances_sq[j])));
-    }
+    return num_results;
   }
 
   DatasetAdapter _dataset_adapter;
   KDTree _tree;
 };
-#endif
 
 template <typename DeviceType>
 Kokkos::View<ArborX::Point *, DeviceType>
@@ -270,9 +307,9 @@ makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
 
   Kokkos::View<decltype(ArborX::intersects(ArborX::Sphere{})) *, DeviceType>
       queries(Kokkos::ViewAllocateWithoutInitializing("queries"), n_queries);
-  // Radius is computed so that the number of results per query for a uniformly
-  // distributed points in a [-a,a]^3 box is approximately n_neighbors.
-  // Calculation: n_values*(4/3*M_PI*r^3)/(2a)^3 = n_neighbors
+  // Radius is computed so that the number of results per query for a
+  // uniformly distributed points in a [-a,a]^3 box is approximately
+  // n_neighbors. Calculation: n_values*(4/3*M_PI*r^3)/(2a)^3 = n_neighbors
   double const r = std::cbrt(static_cast<double>(n_neighbors) * 6. / M_PI);
   using ExecutionSpace = typename DeviceType::execution_space;
   Kokkos::parallel_for(
@@ -405,9 +442,9 @@ void register_benchmark(std::string const &description, Spec const &spec)
 // Benchmark removes its own arguments from the command line arguments. This
 // means, that by virtue of returning references to internal data members in
 // argc() and argv() function, it will necessarily modify the members. It will
-// decrease _argc, and "reduce" _argv data. Hence, we must keep a copy of _argv
-// that is not modified from the outside to release memory in the destructor
-// correctly.
+// decrease _argc, and "reduce" _argv data. Hence, we must keep a copy of
+// _argv that is not modified from the outside to release memory in the
+// destructor correctly.
 class CmdLineArgs
 {
 private:
@@ -592,8 +629,21 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef KOKKOS_ENABLE_SERIAL
-    if (spec.backends == "all" || spec.backends = "nanoflann")
-      register_benchmark<NanoflannKDTree>("NanoflannKDTree", spec);
+    if (spec.backends == "all" || spec.backends = "nanoflann_serial")
+      register_benchmark<NanoflannKDTree<Serial>>("NanoflannKDTree<Serial>",
+                                                  spec);
+#else
+    if (spec.backends == "rtree_serial")
+      throw std::runtime_error("Serial backend not available!");
+#endif
+
+#ifdef KOKKOS_ENABLE_OPENMP
+    if (spec.backends == "all" || spec.backends = "nanoflann_openmp")
+      register_benchmark<NanoflannKDTree<OpenMP>>("NanoflannKDTree<OpenMP>",
+                                                  spec);
+#else
+    if (spec.backends == "rtree_openmp")
+      throw std::runtime_error("OpenMP backend not available!");
 #endif
   }
 
