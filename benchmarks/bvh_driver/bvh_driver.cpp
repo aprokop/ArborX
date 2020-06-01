@@ -102,6 +102,9 @@ Spec create_spec_from_string(std::string const &spec_string)
   return spec;
 }
 
+template <typename T>
+using BoostRTree = BoostExt::RTree<T, ArborX::Point>;
+
 #ifdef KOKKOS_ENABLE_SERIAL
 class NanoflannKDTree
 {
@@ -573,18 +576,24 @@ int main(int argc, char *argv[])
 #endif
 
 #if defined(KOKKOS_ENABLE_SERIAL)
-    if (spec.backends == "all" || spec.backends == "rtree")
-    {
-      using BoostRTree = BoostExt::RTree<ArborX::Point>;
-      register_benchmark<BoostRTree>("BoostRTree", spec);
-    }
+    if (spec.backends == "all" || spec.backends == "rtree_serial")
+      register_benchmark<BoostRTree<Serial>>("BoostRTree<Serial>", spec);
+#else
+    if (spec.backends == "rtree_serial")
+      throw std::runtime_error("Serial backend not available!");
+#endif
+
+#if defined(KOKKOS_ENABLE_OPENMP)
+    if (spec.backends == "all" || spec.backends == "rtree_openmp")
+      register_benchmark<BoostRTree<OpenMP>>("BoostRTree<OpenMP>", spec);
+#else
+    if (spec.backends == "rtree_openmp")
+      throw std::runtime_error("OpenMP backend not available!");
 #endif
 
 #ifdef KOKKOS_ENABLE_SERIAL
     if (spec.backends == "all" || spec.backends = "nanoflann")
-    {
       register_benchmark<NanoflannKDTree>("NanoflannKDTree", spec);
-    }
 #endif
   }
 

@@ -1131,7 +1131,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree, DeviceType, ARBORX_DEVICE_TYPES)
 
   ArborX::BVH<DeviceType> bvh(bounding_boxes);
 
-  BoostExt::RTree<ArborX::Box> rtree(bounding_boxes_host);
+  BoostExt::RTree<typename Kokkos::DefaultHostExecutionSpace::device_type,
+                  ArborX::Box>
+      rtree(bounding_boxes_host);
 
   ARBORX_TEST_QUERY_TREE(bvh, nearest_queries,
                          query(rtree, nearest_queries_host));
