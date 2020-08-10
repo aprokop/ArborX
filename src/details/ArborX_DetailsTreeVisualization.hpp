@@ -148,8 +148,8 @@ struct TreeVisualization
       auto getNodePr = [&](int i) { return TreeAccess::getNodePtr(tree, i); };
 
       if (node_is_internal)
-        for (Node const *child : {getNodePr(node->children.first),
-                                  getNodePr(node->children.second)})
+        for (Node const *child :
+             {getNodePr(node->left_child), getNodePr(node->right_child)})
         {
           auto const child_label = getNodeLabel(child, tree);
           auto const edge_attributes = getEdgeAttributes(node, child, tree);
@@ -198,8 +198,8 @@ struct TreeVisualization
       visitor.visit(node, tree);
 
       if (!node->isLeaf())
-        for (Node const *child : {getNodePtr(node->children.first),
-                                  getNodePtr(node->children.second)})
+        for (Node const *child :
+             {getNodePtr(node->left_child), getNodePtr(node->right_child)})
           stack.push(child);
     }
   }
