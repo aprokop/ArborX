@@ -33,6 +33,7 @@ unsigned int expandBits(unsigned int v)
   return v;
 }
 
+#if 0
 // Calculates a 30-bit Morton code for the
 // given 3D point located within the unit cube [0,1].
 KOKKOS_INLINE_FUNCTION
@@ -55,7 +56,31 @@ unsigned int morton3D(double x, double y, double z)
   unsigned int zz = expandBits((unsigned int)z);
   return xx * 4 + yy * 2 + zz;
 }
+#else
+KOKKOS_INLINE_FUNCTION
+unsigned int morton3D(double x, double y, double z)
+{
+  using KokkosExt::max;
+  using KokkosExt::min;
 
+  auto xx = (unsigned int)min(max(x * 1024.0, 0.0), 1023.0);
+  auto yy = (unsigned int)min(max(y * 1024.0, 0.0), 1023.0);
+  auto zz = (unsigned int)min(max(z * 1024.0, 0.0), 1023.0);
+
+  unsigned int table[8] = {0b000, 0b001, 0b011, 0b010,
+                           0b110, 0b111, 0b101, 0b100};
+
+  unsigned int v = 0;
+  for (unsigned int i = 0; i < 10; i++)
+  {
+    unsigned int xbit = ((xx & (1u << i)) != 0);
+    unsigned int ybit = ((yy & (1u << i)) != 0);
+    unsigned int zbit = ((zz & (1u << i)) != 0);
+    v |= table[4 * zbit + 2 * ybit + xbit] << (3 * i);
+  }
+  return v;
+}
+#endif
 } // namespace Details
 
 } // namespace ArborX
