@@ -12,6 +12,7 @@
 #include "ArborX_EnableViewComparison.hpp"
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsMortonCode.hpp> // expandBits, morton3D
+#include <ArborX_DetailsNode.hpp>       // ROPE_SENTINEL
 #include <ArborX_DetailsSortUtils.hpp>  // sortObjects
 #include <ArborX_DetailsTreeConstruction.hpp>
 
@@ -171,6 +172,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   using ArborX::Box;
   using ArborX::Details::makeLeafNode;
   using ArborX::Details::Node;
+  using ArborX::Details::ROPE_SENTINEL;
   Kokkos::View<Node *, DeviceType> leaf_nodes("leaf_nodes", n);
   Kokkos::View<Node *, DeviceType> internal_nodes("internal_nodes", n - 1);
   for (int i = 0; i < n; ++i)
@@ -178,19 +180,25 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   auto getNodePtr = [&leaf_nodes, &internal_nodes](int i) {
     return i < n - 1 ? &internal_nodes(i) : &leaf_nodes(i - n + 1);
   };
-  std::function<void(Node const *, std::ostream &)> traverseRecursive;
+  std::function<void(std::ostream &)> traverseRecursive;
   traverseRecursive = [&leaf_nodes, &internal_nodes, &traverseRecursive,
-                       &getNodePtr](Node const *node, std::ostream &os) {
-    if (node->isLeaf())
+                       &getNodePtr](std::ostream &os) {
+    int next = 0;
+    Node const *node;
+    while (next != ROPE_SENTINEL)
     {
-      os << "L" << node - leaf_nodes.data();
-    }
-    else
-    {
-      os << "I" << node - internal_nodes.data();
-      for (Node const *child :
-           {getNodePtr(node->left_child), getNodePtr(node->right_child)})
-        traverseRecursive(child, os);
+      node = getNodePtr(next);
+
+      if (node->isLeaf())
+      {
+        os << "L" << node - leaf_nodes.data();
+        next = node->rope;
+      }
+      else
+      {
+        os << "I" << node - internal_nodes.data();
+        next = node->left_child;
+      }
     }
   };
 
@@ -201,7 +209,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   Node const *root = internal_nodes.data();
 
   std::ostringstream sol;
-  traverseRecursive(root, sol);
+  traverseRecursive(sol);
   std::cout << "sol=" << sol.str() << "\n";
 
   BOOST_TEST(sol.str().compare(ref.str()) == 0);

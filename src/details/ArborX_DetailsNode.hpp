@@ -22,6 +22,9 @@ namespace ArborX
 {
 namespace Details
 {
+
+int constexpr ROPE_SENTINEL = -1;
+
 struct Node
 {
   KOKKOS_DEFAULTED_FUNCTION
@@ -39,8 +42,10 @@ struct Node
     return -left_child;
   }
 
+  // An interesting property to remember: a right child is always the rope
+  // of the left child.
   int left_child = -1;
-  int right_child = -1;
+  int rope = ROPE_SENTINEL;
   Box bounding_box;
 };
 

@@ -221,7 +221,7 @@ public:
       ExecutionSpace const &space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
           sorted_morton_codes,
-      Kokkos::View<Node const *, LeafNodesViewProperties...> leaf_nodes,
+      Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
       Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
       : _sorted_morton_codes(sorted_morton_codes)
       , _leaf_nodes(leaf_nodes)
@@ -276,6 +276,7 @@ public:
   KOKKOS_FUNCTION void operator()(int i) const
   {
     auto const leaf_nodes_shift = _num_internal_nodes;
+    auto const num_leaf_nodes = _num_internal_nodes + 1;
 
     Box bbox = getNodePtr(i)->bounding_box;
 
@@ -360,8 +361,27 @@ public:
 
       auto *parent_node = getNodePtr(karras_parent);
       parent_node->left_child = left_child;
-      parent_node->right_child = right_child;
       parent_node->bounding_box = bbox;
+
+      // Temporarily store right child in the rope to shortcut later rope
+      // setting. For the right-most path that is unnecessary, but it still
+      // needs to be initialized as internal nodes are allocated without
+      // initialing.
+      parent_node->rope =
+          (range_right != num_leaf_nodes - 1 ? right_child : ROPE_SENTINEL);
+
+      // Set correct ropes for right-most path in the left subtree.
+      Node *child = getNodePtr(left_child);
+      int next_right_child = child->rope;
+      child->rope = right_child;
+      while (!child->isLeaf())
+      {
+        // Here, we use the shortcut the traversal, as we stored the right
+        // child in the rope on the previous step.
+        child = getNodePtr(next_right_child);
+        next_right_child = child->rope;
+        child->rope = right_child;
+      }
 
       i = karras_parent;
 
@@ -370,7 +390,7 @@ public:
 
 private:
   Kokkos::View<unsigned int const *, MemorySpace> _sorted_morton_codes;
-  Kokkos::View<Node const *, MemorySpace> _leaf_nodes;
+  Kokkos::View<Node *, MemorySpace> _leaf_nodes;
   Kokkos::View<Node *, MemorySpace> _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
   int _num_internal_nodes;
@@ -383,7 +403,7 @@ void generateHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
         sorted_morton_codes,
-    Kokkos::View<Node const *, LeafNodesViewProperties...> leaf_nodes,
+    Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
     Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
 {
   using MemorySpace = typename decltype(internal_nodes)::memory_space;
@@ -411,8 +431,7 @@ void generateHierarchy(
       space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>{
           sorted_morton_codes},
-      Kokkos::View<Node const *, LeafNodesViewProperties...>{leaf_nodes},
-      internal_nodes);
+      leaf_nodes, internal_nodes);
 }
 
 } // namespace TreeConstruction
