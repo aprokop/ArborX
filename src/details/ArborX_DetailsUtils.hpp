@@ -168,6 +168,30 @@ private:
   Kokkos::View<T *, DeviceType> _in;
   Kokkos::View<T *, DeviceType> _out;
 };
+
+template <typename T, typename DeviceType>
+class InclusiveScanFunctor
+{
+public:
+  InclusiveScanFunctor(Kokkos::View<T *, DeviceType> const &in,
+                       Kokkos::View<T *, DeviceType> const &out)
+      : _in(in)
+      , _out(out)
+  {
+  }
+  KOKKOS_INLINE_FUNCTION void operator()(int i, T &update,
+                                         bool final_pass) const
+  {
+    T const in_i = _in(i);
+    update += in_i;
+    if (final_pass)
+      _out(i) = update;
+  }
+
+private:
+  Kokkos::View<T *, DeviceType> _in;
+  Kokkos::View<T *, DeviceType> _out;
+};
 } // namespace Details
 
 /** \brief Computes an exclusive scan.
@@ -243,11 +267,68 @@ template <typename T, typename... P>
   exclusivePrefixSum(ExecutionSpace{}, v);
 }
 
+/** \brief Computes an inclusive scan.
+ *
+ *  \param[in] space Execution space
+ *  \param[in] src Input view with range of elements to sum
+ *  \param[out] dst Output view; may be equal to \p src
+ *
+ *  When \p dst is not provided or if \p src and \p dst are the same view, the
+ *  scan is performed in-place.  "Inclusive" means that the i-th input element
+ *  is included in the i-th sum.
+ *
+ *  \pre \p src and \p dst must be of rank 1 and have the same size.
+ */
+template <typename ExecutionSpace, typename ST, typename... SP, typename DT,
+          typename... DP>
+void inclusivePrefixSum(ExecutionSpace &&space,
+                        Kokkos::View<ST, SP...> const &src,
+                        Kokkos::View<DT, DP...> const &dst)
+{
+  static_assert(
+      std::is_same<
+          typename Kokkos::ViewTraits<DT, DP...>::value_type,
+          typename Kokkos::ViewTraits<DT, DP...>::non_const_value_type>::value,
+      "inclusivePrefixSum requires non-const destination type");
+
+  static_assert(
+      (unsigned(Kokkos::ViewTraits<DT, DP...>::rank) ==
+       unsigned(Kokkos::ViewTraits<ST, SP...>::rank)) &&
+          (unsigned(Kokkos::ViewTraits<DT, DP...>::rank) == unsigned(1)),
+      "inclusivePrefixSum requires Views of rank 1");
+
+  using ValueType = typename Kokkos::ViewTraits<DT, DP...>::value_type;
+  using DeviceType = typename Kokkos::ViewTraits<DT, DP...>::device_type;
+
+  auto const n = src.extent(0);
+  ARBORX_ASSERT(n == dst.extent(0));
+  Kokkos::RangePolicy<std::decay_t<ExecutionSpace>> policy(
+      std::forward<ExecutionSpace>(space), 0, n);
+  Kokkos::parallel_scan(
+      ARBORX_MARK_REGION("inclusive_scan"), policy,
+      Details::InclusiveScanFunctor<ValueType, DeviceType>(src, dst));
+}
+
+/** \brief In-place inclusive scan.
+ *
+ *  \param[in] space Execution space
+ *  \param[in,out] v View with range of elements to sum
+ *
+ *  Calls \c inclusivePrefixSum(v, v)
+ */
+template <typename ExecutionSpace, typename T, typename... P>
+inline std::enable_if_t<
+    Kokkos::is_execution_space<std::remove_reference_t<ExecutionSpace>>::value>
+inclusivePrefixSum(ExecutionSpace &&space, Kokkos::View<T, P...> const &v)
+{
+  inclusivePrefixSum(std::forward<ExecutionSpace>(space), v, v);
+}
+
 /** \brief Get a copy of the last element.
  *
- *  Returns a copy of the last element in the view on the host.  Note that it
- *  may require communication between host and device (e.g. if the view passed
- *  as an argument lives on the device).
+ *  Returns a copy of the last element in the view on the host.  Note that
+ * it may require communication between host and device (e.g. if the view
+ * passed as an argument lives on the device).
  *
  *  \pre \c v is of rank 1 and not empty.
  */

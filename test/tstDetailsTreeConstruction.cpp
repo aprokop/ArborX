@@ -152,11 +152,11 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   // starting from root, visiting first the left child and then the right one
   std::ostringstream ref;
   ref << "I0"
-      << "I3"
       << "I1"
+      << "I2"
       << "L0"
       << "L1"
-      << "I2"
+      << "I3"
       << "L2"
       << "L3"
       << "I4"
