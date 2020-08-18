@@ -145,12 +145,12 @@ struct TreeVisualization
     {
       auto const node_label = getNodeLabel(node, tree);
       auto const node_is_internal = !node->isLeaf();
-      auto getNodePr = [&](int i) { return TreeAccess::getNodePtr(tree, i); };
+      auto getNodePtr = [&](int i) { return TreeAccess::getNodePtr(tree, i); };
 
       if (node_is_internal)
         for (Node const *child :
-             {getNodePr(node->left_child),                    // left child
-              getNodePtr(getNodePr(node->left_child)->rope)}) // right child
+             {getNodePtr(node->left_child),                    // left child
+              getNodePtr(getNodePtr(node->left_child)->rope)}) // right child
         {
           auto const child_label = getNodeLabel(child, tree);
           auto const edge_attributes = getEdgeAttributes(node, child, tree);
