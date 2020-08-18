@@ -206,6 +206,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   ArborX::Details::TreeConstruction::generateHierarchy(
       space, sorted_morton_codes, leaf_nodes, internal_nodes);
 
+  for (int i = 0; i < 2 * n - 1; i++)
+    printf("%d : (%d, %d)\n", i, getNodePtr(i)->left_child,
+           getNodePtr(i)->rope);
+
   Node const *root = internal_nodes.data();
 
   std::ostringstream sol;
