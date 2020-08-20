@@ -55,24 +55,40 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     {
       Kokkos::parallel_for(
           ARBORX_MARK_REGION("BVH:spatial_queries_degenerated_one_leaf_tree"),
-          Kokkos::RangePolicy<ExecutionSpace, OneLeafTree>(
+          Kokkos::RangePolicy<ExecutionSpace, OneLeafTraversal>(
               space, 0, Access::size(predicates)),
           *this);
     }
     else
     {
-      Kokkos::parallel_for(ARBORX_MARK_REGION("BVH:spatial_queries"),
-                           Kokkos::RangePolicy<ExecutionSpace>(
-                               space, 0, Access::size(predicates)),
-                           *this);
+#if defined(KOKKOS_ENABLE_CUDA)
+      if (std::is_same<ExecutionSpace, Kokkos::Cuda>{})
+        Kokkos::parallel_for(
+            ARBORX_MARK_REGION("BVH:spatial_queries"),
+            Kokkos::RangePolicy<ExecutionSpace, RopesBasedTraversal>(
+                space, 0, Access::size(predicates)),
+            *this);
+      else
+#endif
+        Kokkos::parallel_for(
+            ARBORX_MARK_REGION("BVH:spatial_queries"),
+            Kokkos::RangePolicy<ExecutionSpace, StackBasedTraversal>(
+                space, 0, Access::size(predicates)),
+            *this);
     }
   }
 
-  struct OneLeafTree
+  struct OneLeafTraversal
+  {
+  };
+  struct StackBasedTraversal
+  {
+  };
+  struct RopesBasedTraversal
   {
   };
 
-  KOKKOS_FUNCTION void operator()(OneLeafTree, int queryIndex) const
+  KOKKOS_FUNCTION void operator()(OneLeafTraversal, int queryIndex) const
   {
     auto const &predicate = Access::get(predicates_, queryIndex);
 
@@ -82,7 +98,48 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     }
   }
 
-  KOKKOS_FUNCTION void operator()(int queryIndex) const
+  KOKKOS_FUNCTION void operator()(StackBasedTraversal, int queryIndex) const
+  {
+    auto const &predicate = Access::get(predicates_, queryIndex);
+
+    Node const *stack[64];
+    Node const **stack_ptr = stack;
+    *stack_ptr++ = nullptr;
+    Node const *node = bvh_.getRoot();
+    do
+    {
+      Node const *child_left = bvh_.getNodePtr(node->left_child);
+      Node const *child_right = bvh_.getNodePtr(child_left->rope);
+
+      bool overlap_left = predicate(bvh_.getBoundingVolume(child_left));
+      bool overlap_right = predicate(bvh_.getBoundingVolume(child_right));
+
+      if (overlap_left && child_left->isLeaf())
+      {
+        callback_(predicate, child_left->getLeafPermutationIndex());
+      }
+      if (overlap_right && child_right->isLeaf())
+      {
+        callback_(predicate, child_right->getLeafPermutationIndex());
+      }
+
+      bool traverse_left = (overlap_left && !child_left->isLeaf());
+      bool traverse_right = (overlap_right && !child_right->isLeaf());
+
+      if (!traverse_left && !traverse_right)
+      {
+        node = *--stack_ptr;
+      }
+      else
+      {
+        node = traverse_left ? child_left : child_right;
+        if (traverse_left && traverse_right)
+          *stack_ptr++ = child_right;
+      }
+    } while (node != nullptr);
+  }
+
+  KOKKOS_FUNCTION void operator()(RopesBasedTraversal, int queryIndex) const
   {
     auto const &predicate = Access::get(predicates_, queryIndex);
 
