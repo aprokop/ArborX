@@ -279,8 +279,8 @@ public:
     if (range_right != _num_internal_nodes)
     {
       // The way Karras indices constructed, the rope is going to be the right
-      // child of the first internal that we are in the left subtree of. The
-      // determination of whether that node is internal or leaf requires an
+      // child of the first internal node that we are in the left subtree of.
+      // The determination of whether that node is internal or leaf requires an
       // additional delta() evaluation.
       rope = range_right + 1;
       if (delta_right < delta(range_right + 1))
