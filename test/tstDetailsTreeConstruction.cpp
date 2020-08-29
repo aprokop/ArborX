@@ -177,8 +177,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
 
   // Reference solution for a recursive traversal from top to bottom starting
   // from the root, visiting first the left child and then the right one
-  std::string ref_recursive = "I0I3I1L0L1I2L2L3I4L4I5I6L5L6L7";
-  std::cout << "ref(recursive) = " << ref_recursive << "\n";
+  std::ostringstream ref_recursive;
+  // clang-format off
+  ref_recursive << "I0" << "I3" << "I1" << "L0" << "L1" << "I2" << "L2" << "L3"
+                << "I4" << "L4" << "I5" << "I6" << "L5" << "L6" << "L7";
+
+  // clang-format on
+  std::cout << "ref(recursive) = " << ref_recursive.str() << "\n";
 
   std::function<void(Node const *, std::ostream &)> traverseRecursive;
   traverseRecursive = [&leaf_nodes, &internal_nodes, &traverseRecursive,
@@ -200,11 +205,16 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   traverseRecursive(root, sol_recursive);
   std::cout << "sol(recursive) = " << sol_recursive.str() << "\n";
 
-  BOOST_TEST(sol_recursive.str().compare(ref_recursive) == 0);
+  BOOST_TEST(sol_recursive.str().compare(ref_recursive.str()) == 0);
 
   // Reference solution for a rope-based traversal starting from the root.
-  std::string ref_ropes = "I0I3I1L0L1I2L2L3I4L4I5I6L5L6L7";
-  std::cout << "ref(ropes) = " << ref_ropes << "\n";
+  std::ostringstream ref_ropes;
+  // clang-format off
+  ref_ropes << "I0" << "I3" << "I1" << "L0" << "L1" << "I2" << "L2" << "L3"
+            << "I4" << "L4" << "I5" << "I6" << "L5" << "L6" << "L7";
+
+  // clang-format on
+  std::cout << "ref(ropes) = " << ref_ropes.str() << "\n";
 
   std::function<void(Node const *, std::ostream &)> traverseRopes;
   traverseRopes = [&leaf_nodes, &internal_nodes, &traverseRopes,
@@ -223,8 +233,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   };
 
   std::ostringstream sol_ropes;
-  traverseRecursive(root, sol_ropes);
+  traverseRopes(root, sol_ropes);
   std::cout << "sol(ropes) = " << sol_ropes.str() << "\n";
 
-  BOOST_TEST(sol_ropes.str().compare(ref_ropes) == 0);
+  BOOST_TEST(sol_ropes.str().compare(ref_ropes.str()) == 0);
 }
