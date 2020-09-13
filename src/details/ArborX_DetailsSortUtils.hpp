@@ -75,7 +75,7 @@ namespace Details
 // NOTE returns the permutation indices **and** sorts the input view
 template <typename ExecutionSpace, typename ViewType,
           class SizeType = unsigned int>
-Kokkos::View<SizeType *, typename ViewType::device_type>
+Kokkos::View<SizeType *, typename ViewType::memory_space>
 sortObjects(ExecutionSpace const &space, ViewType &view)
 {
   int const n = view.extent(0);
@@ -90,7 +90,7 @@ sortObjects(ExecutionSpace const &space, ViewType &view)
                   Kokkos::Impl::min_max_functor<ViewType>(view), reducer);
   if (result.min_val == result.max_val)
   {
-    Kokkos::View<SizeType *, typename ViewType::device_type> permute(
+    Kokkos::View<SizeType *, typename ViewType::memory_space> permute(
         Kokkos::view_alloc(Kokkos::WithoutInitializing,
                            "ArborX::Sorting::permute"),
         n);
@@ -112,7 +112,7 @@ sortObjects(ExecutionSpace const &space, ViewType &view)
     (defined(KOKKOS_ENABLE_HIP) && defined(ARBORX_ENABLE_ROCTHRUST))
 // NOTE returns the permutation indices **and** sorts the input view
 template <typename ViewType, class SizeType = unsigned int>
-Kokkos::View<SizeType *, typename ViewType::device_type> sortObjects(
+Kokkos::View<SizeType *, typename ViewType::memory_space> sortObjects(
 #if defined(KOKKOS_ENABLE_CUDA)
     Kokkos::Cuda const &space,
 #else
@@ -127,7 +127,7 @@ Kokkos::View<SizeType *, typename ViewType::device_type> sortObjects(
                              typename ViewType::execution_space>::value,
                 "");
 
-  Kokkos::View<SizeType *, typename ViewType::device_type> permute(
+  Kokkos::View<SizeType *, typename ViewType::memory_space> permute(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::Sorting::permutation"),
       n);
@@ -151,7 +151,7 @@ Kokkos::View<SizeType *, typename ViewType::device_type> sortObjects(
 #if defined(KOKKOS_ENABLE_SYCL) && defined(ARBORX_ENABLE_ONEDPL)
 // NOTE returns the permutation indices **and** sorts the input view
 template <typename ViewType, class SizeType = unsigned int>
-Kokkos::View<SizeType *, typename ViewType::device_type>
+Kokkos::View<SizeType *, typename ViewType::memory_space>
 sortObjects(Kokkos::Experimental::SYCL const &space, ViewType &view)
 {
   int const n = view.extent(0);
@@ -161,7 +161,7 @@ sortObjects(Kokkos::Experimental::SYCL const &space, ViewType &view)
                                     Kokkos::Experimental::SYCL>::value,
       "");
 
-  Kokkos::View<SizeType *, typename ViewType::device_type> permute(
+  Kokkos::View<SizeType *, typename ViewType::memory_space> permute(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::Sorting::permutation"),
       n);

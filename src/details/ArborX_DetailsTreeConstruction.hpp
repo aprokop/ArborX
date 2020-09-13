@@ -409,6 +409,239 @@ void generateLBVHHierarchy(
       ConstMortonCodes(sorted_morton_codes), leaf_nodes, internal_nodes);
 }
 
+namespace
+{
+// Ideally, this would be
+//     static int constexpr INVALID_MATCH = -1;
+// inside the GeneratePLOCHierachyFunctor class. But prior to C++17, this would
+// require to also have a definition outside of the class as it is odr-used.
+// This is a workaround.
+constexpr int INVALID_INDEX = -1;
+constexpr int RADIUS = 4;
+} // namespace
+
+template <typename MemorySpace, typename Node>
+class GeneratePLOCHierarchy
+{
+public:
+  struct SearchTag
+  {
+  };
+  struct MergeTag
+  {
+  };
+  struct CompactTag
+  {
+  };
+
+public:
+  template <typename ExecutionSpace, typename... LeafNodesViewProperties,
+            typename... InternalNodesViewProperties>
+  GeneratePLOCHierarchy(
+      ExecutionSpace const &space,
+      Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
+      Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
+      : _leaf_nodes(leaf_nodes)
+      , _internal_nodes(internal_nodes)
+      , _cluster_indices(Kokkos::view_alloc(
+                             Kokkos::WithoutInitializing,
+                             "ArborX::TreeConstruction::PLOC::cluster_indices"),
+                         leaf_nodes.extent(0))
+      , _match(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                                  "ArborX::TreeConstruction::PLOC::match"),
+               leaf_nodes.extent(0))
+      , _num_internal_nodes(_internal_nodes.extent_int(0))
+      , _parent(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                                   "ArborX::TreeConstruction::PLOC::parent"))
+      , _size(_num_internal_nodes + 1)
+  {
+    Kokkos::deep_copy(_parent, _num_internal_nodes - 1);
+
+    auto const leaf_nodes_shift = _num_internal_nodes;
+    iota(space, _cluster_indices, leaf_nodes_shift);
+  }
+
+  KOKKOS_FUNCTION Node *getNodePtr(int i) const
+  {
+    int const n = _num_internal_nodes;
+    return (i < n ? &(_internal_nodes(i)) : &(_leaf_nodes(i - n)));
+  }
+
+  KOKKOS_FUNCTION
+  float cost(Box const &box1, Box const &box2) const
+  {
+    using KokkosExt::max;
+    using KokkosExt::min;
+
+    float e[3];
+    for (int d = 0; d < 3; ++d)
+    {
+      e[d] = max(box1.maxCorner()[d], box2.maxCorner()[d]) -
+             min(box1.minCorner()[d], box2.minCorner()[d]);
+    }
+
+    // Return surface area of the box (actually, 1/2 of it)
+    return e[0] * e[1] + e[0] * e[2] + e[1] * e[2];
+  }
+
+  KOKKOS_FUNCTION void operator()(SearchTag, int const i) const
+  {
+    auto const *node = getNodePtr(_cluster_indices(i));
+
+    auto start = KokkosExt::max(0, i - RADIUS);
+    auto end = KokkosExt::min(_size, i + RADIUS + 1);
+
+    int pos = 0; // value does not matter, only to silence a warning
+    auto cost_min = KokkosExt::ArithmeticTraits::infinity<float>::value;
+    for (int j = start; j < end; ++j)
+      if (j != i)
+      {
+        auto const *other_node = getNodePtr(_cluster_indices(j));
+        float c = cost(node->bounding_volume, other_node->bounding_volume);
+        if (c < cost_min)
+        {
+          cost_min = c;
+          pos = j;
+        }
+      }
+    _match(i) = pos;
+  }
+
+  KOKKOS_FUNCTION void operator()(MergeTag, int const i) const
+  {
+    int const j = _match(i);
+    if (i < j && _match(j) == i)
+    {
+      // Merge clusters
+      int parent = Kokkos::atomic_fetch_sub(&_parent(), 1);
+      auto *parent_node = getNodePtr(parent);
+
+      auto left_child_index = _cluster_indices(i);
+      auto right_child_index = _cluster_indices(j);
+
+      parent_node->left_child = left_child_index;
+      parent_node->right_child = right_child_index;
+
+      parent_node->bounding_volume =
+          getNodePtr(left_child_index)->bounding_volume;
+      expand(parent_node->bounding_volume,
+             getNodePtr(right_child_index)->bounding_volume);
+
+      _cluster_indices(i) = parent;
+      _cluster_indices(j) = INVALID_INDEX;
+    }
+  }
+
+  KOKKOS_FUNCTION void operator()(CompactTag, int const i, int &update,
+                                  bool final_pass) const
+  {
+    int cluster_index = _cluster_indices(i);
+    if (cluster_index != INVALID_INDEX)
+    {
+      if (final_pass)
+        _cluster_indices(update) = cluster_index;
+      update++;
+    }
+  }
+
+  int size() const { return _size; }
+  void setSize(int size) { _size = size; }
+
+private:
+  Kokkos::View<Node *, MemorySpace> _leaf_nodes;
+  Kokkos::View<Node *, MemorySpace> _internal_nodes;
+  Kokkos::View<int *, MemorySpace> _cluster_indices;
+  Kokkos::View<int *, MemorySpace> _match;
+  int _num_internal_nodes;
+  Kokkos::View<int, MemorySpace> _parent;
+  int _size;
+};
+
+template <typename ExecutionSpace, typename Primitives, typename Indices,
+          typename Nodes>
+inline void
+initializeLeafNodes(ExecutionSpace const &space, Primitives const &primitives,
+                    Indices const &permutation_indices, Nodes const &leaf_nodes)
+{
+  Kokkos::Profiling::pushRegion("ArborX::TreeConstruction::initialize_leaves");
+
+  using Node = typename Nodes::value_type;
+  using BoundingVolume = typename Node::bounding_volume_type;
+  using Access = AccessTraits<Primitives, PrimitivesTag>;
+
+  auto const n = Access::size(primitives);
+
+  ARBORX_ASSERT(permutation_indices.extent(0) == n);
+  ARBORX_ASSERT(leaf_nodes.extent(0) == n);
+
+  Kokkos::parallel_for(
+      "ArborX::TreeConstruction::initialize_leaf_nodes",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, n), KOKKOS_LAMBDA(int i) {
+        auto const original_index = permutation_indices(i);
+        BoundingVolume bounding_volume{};
+        expand(bounding_volume, Access::get(primitives, original_index));
+        leaf_nodes(i) =
+            makeLeafNode(typename Node::Tag{}, original_index, bounding_volume);
+      });
+  Kokkos::Profiling::popRegion();
+}
+
+template <typename ExecutionSpace, typename Node,
+          typename... LeafNodesViewProperties,
+          typename... InternalNodesViewProperties>
+void generatePLOCHierarchy(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
+    Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
+{
+  Kokkos::Profiling::pushRegion("ArborX::TreeConstruction::PLOC");
+
+  using MemorySpace = typename decltype(internal_nodes)::memory_space;
+
+  Kokkos::Profiling::pushRegion(
+      "ArborX::TreeConstruction::PLOC::construct_hierarchy");
+
+  // Construct hierarchy
+  using PLOCFunctor = GeneratePLOCHierarchy<MemorySpace, Node>;
+  PLOCFunctor ploc_functor(exec_space, leaf_nodes, internal_nodes);
+
+  int iter = 0;
+  while (ploc_functor.size() > 1)
+  {
+    printf("Iteration #%d: size = %d\n", iter, ploc_functor.size());
+    Kokkos::parallel_for(
+        "ArborX::PLOC::generate_ploc_hierarchy::search",
+        Kokkos::RangePolicy<ExecutionSpace, typename PLOCFunctor::SearchTag>(
+            exec_space, 0, ploc_functor.size()),
+        ploc_functor);
+
+    Kokkos::parallel_for(
+        "ArborX::PLOC::generate_ploc_hierarchy::merge",
+        Kokkos::RangePolicy<ExecutionSpace, typename PLOCFunctor::MergeTag>(
+            exec_space, 0, ploc_functor.size()),
+        ploc_functor);
+
+    int size = 0;
+    Kokkos::parallel_scan(
+        "ArborX::PLOC::generate_ploc_hierarchy::compact",
+        Kokkos::RangePolicy<ExecutionSpace, typename PLOCFunctor::CompactTag>(
+            exec_space, 0, ploc_functor.size()),
+        ploc_functor, size);
+
+    ploc_functor.setSize(size);
+    ++iter;
+  }
+
+  Kokkos::Profiling::popRegion();
+  Kokkos::Profiling::pushRegion(
+      "ArborX::TreeConstruction::PLOC::install_ropes");
+  // TODO: install ropes post construction
+
+  Kokkos::Profiling::popRegion();
+
+  Kokkos::Profiling::popRegion();
+}
+
 } // namespace TreeConstruction
 } // namespace Details
 } // namespace ArborX

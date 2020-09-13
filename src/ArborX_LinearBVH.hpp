@@ -41,7 +41,8 @@ struct TreeVisualization;
 
 enum class ConstructionAlgorithm
 {
-  LBVH
+  LBVH,
+  PLOC
 };
 } // namespace Details
 
@@ -287,10 +288,22 @@ BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // generate bounding volume hierarchy
-  ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
-  Details::TreeConstruction::generateLBVHHierarchy(
-      space, primitives, permutation_indices, morton_indices, getLeafNodes(),
-      getInternalNodes());
+  switch (policy._algorithm)
+  {
+  case Details::ConstructionAlgorithm::LBVH:
+
+    Details::TreeConstruction::generateLBVHHierarchy(
+        space, primitives, permutation_indices, morton_indices, getLeafNodes(),
+        getInternalNodes());
+    break;
+
+  case Details::ConstructionAlgorithm::PLOC:
+    Details::TreeConstruction::initializeLeafNodes(
+        space, primitives, permutation_indices, getLeafNodes());
+    Details::TreeConstruction::generatePLOCHierarchy(space, getLeafNodes(),
+                                                     getInternalNodes());
+    break;
+  }
 
   Kokkos::deep_copy(
       space,
