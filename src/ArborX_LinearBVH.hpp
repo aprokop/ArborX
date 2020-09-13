@@ -29,7 +29,29 @@ namespace Details
 {
 template <typename DeviceType>
 struct TreeVisualization;
-}
+
+enum class ConstructionAlgorithm
+{
+  LBVH
+};
+} // namespace Details
+
+namespace Experimental
+{
+
+struct ConstructionPolicy
+{
+  Details::ConstructionAlgorithm _algorithm =
+      Details::ConstructionAlgorithm::LBVH;
+
+  ConstructionPolicy &setAlgorithm(Details::ConstructionAlgorithm algorithm)
+  {
+    _algorithm = algorithm;
+    return *this;
+  }
+};
+
+} // namespace Experimental
 
 template <typename MemorySpace, typename Enable = void>
 class BoundingVolumeHierarchy
@@ -44,7 +66,9 @@ public:
 
   template <typename ExecutionSpace, typename Primitives>
   BoundingVolumeHierarchy(ExecutionSpace const &space,
-                          Primitives const &primitives);
+                          Primitives const &primitives,
+                          Experimental::ConstructionPolicy const &policy =
+                              Experimental::ConstructionPolicy());
 
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
@@ -164,7 +188,8 @@ using BVH = BoundingVolumeHierarchy<MemorySpace>;
 template <typename MemorySpace, typename Enable>
 template <typename ExecutionSpace, typename Primitives>
 BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
-    ExecutionSpace const &space, Primitives const &primitives)
+    ExecutionSpace const &space, Primitives const &primitives,
+    Experimental::ConstructionPolicy const &policy)
     : _size(AccessTraits<Primitives, PrimitivesTag>::size(primitives))
     , _internal_and_leaf_nodes(Kokkos::ViewAllocateWithoutInitializing(
                                    "ArborX::BVH::internal_and_leaf_nodes"),
@@ -220,6 +245,7 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // generate bounding volume hierarchy
+  ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
   Details::TreeConstruction::generateHierarchy(
       space, primitives, permutation_indices, morton_indices, getLeafNodes(),
       getInternalNodes());
