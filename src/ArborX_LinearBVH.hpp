@@ -288,7 +288,7 @@ BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
 
   // generate bounding volume hierarchy
   ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
-  Details::TreeConstruction::generateHierarchy(
+  Details::TreeConstruction::generateLBVHHierarchy(
       space, primitives, permutation_indices, morton_indices, getLeafNodes(),
       getInternalNodes());
 

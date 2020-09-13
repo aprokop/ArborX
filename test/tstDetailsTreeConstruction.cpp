@@ -141,7 +141,7 @@ void generateHierarchy(Primitives primitives, MortonCodes sorted_morton_codes,
       "Testing::indices", n);
   ArborX::iota(space, permutation_indices);
 
-  ArborX::Details::TreeConstruction::generateHierarchy(
+  ArborX::Details::TreeConstruction::generateLBVHHierarchy(
       space, primitives, permutation_indices, sorted_morton_codes, leaf_nodes,
       internal_nodes);
 }

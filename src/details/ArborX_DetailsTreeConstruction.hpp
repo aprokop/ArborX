@@ -134,14 +134,14 @@ namespace
 {
 // Ideally, this would be
 //     static constexpr int UNTOUCHED_NODE = -1;
-// inside the GenerateHierarchyFunctor class. But prior to C++17, this would
+// inside the GenerateLBVHHierarchy class. But prior to C++17, this would
 // require to also have a definition outside the class as it is odr-used.
 // This is a workaround.
 constexpr int UNTOUCHED_NODE = -1;
 } // namespace
 
 template <typename Primitives, typename MemorySpace, typename Node>
-class GenerateHierarchy
+class GenerateLBVHHierarchy
 {
 public:
   template <typename ExecutionSpace,
@@ -149,7 +149,7 @@ public:
             typename... MortonCodesViewProperties,
             typename... LeafNodesViewProperties,
             typename... InternalNodesViewProperties>
-  GenerateHierarchy(
+  GenerateLBVHHierarchy(
       ExecutionSpace const &space, Primitives const &primitives,
       Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>
           permutation_indices,
@@ -388,7 +388,7 @@ template <typename ExecutionSpace, typename Primitives,
           typename... MortonCodesViewProperties, typename Node,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
-void generateHierarchy(
+void generateLBVHHierarchy(
     ExecutionSpace const &space, Primitives const &primitives,
     Kokkos::View<unsigned int *, PermutationIndicesViewProperties...>
         permutation_indices,
@@ -404,7 +404,7 @@ void generateHierarchy(
 
   using MemorySpace = typename decltype(internal_nodes)::memory_space;
 
-  GenerateHierarchy<Primitives, MemorySpace, Node>(
+  GenerateLBVHHierarchy<Primitives, MemorySpace, Node>(
       space, primitives, ConstPermutationIndices(permutation_indices),
       ConstMortonCodes(sorted_morton_codes), leaf_nodes, internal_nodes);
 }
