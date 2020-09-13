@@ -344,7 +344,10 @@ void findHalos(ExecutionSpace exec_space, Primitives const &primitives,
   // build the tree
   start = clock::now();
   Kokkos::Profiling::pushRegion("ArborX:HaloFinder:tree_construction");
-  ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+  ArborX::BVH<MemorySpace> bvh(
+      exec_space, primitives,
+      ArborX::Experimental::ConstructionPolicy().setAlgorithm(
+          ArborX::Details::ConstructionAlgorithm::PLOC));
   Kokkos::Profiling::popRegion();
   elapsed_construction = clock::now() - start;
 
