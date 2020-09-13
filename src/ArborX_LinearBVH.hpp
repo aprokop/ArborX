@@ -232,7 +232,7 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
 
   // generate bounding volume hierarchy
   ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
-  Details::TreeConstruction::generateHierarchy(
+  Details::TreeConstruction::generateLBVHHierarchy(
       space, morton_indices, getLeafNodes(), getInternalNodes());
 
   Kokkos::Profiling::popRegion();

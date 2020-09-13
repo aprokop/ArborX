@@ -195,7 +195,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   };
 
   typename DeviceType::execution_space space{};
-  ArborX::Details::TreeConstruction::generateHierarchy(
+  ArborX::Details::TreeConstruction::generateLBVHHierarchy(
       space, sorted_morton_codes, leaf_nodes, internal_nodes);
 
   Node const *root = internal_nodes.data();

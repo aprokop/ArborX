@@ -204,20 +204,20 @@ namespace
 {
 // Ideally, this would be
 //     static int constexpr UNTOUCHED_NODE = -1;
-// inside the GenerateHierachyFunctor class. But prior to C++17, this would
+// inside the GenerateLBVHHierachyFunctor class. But prior to C++17, this would
 // require to also have a definition outside of the class as it is odr-used.
 // This is a workaround.
 int constexpr UNTOUCHED_NODE = -1;
 } // namespace
 
 template <typename MemorySpace>
-class GenerateHierarchyFunctor
+class GenerateLBVHHierarchyFunctor
 {
 public:
   template <typename ExecutionSpace, typename... MortonCodesViewProperties,
             typename... LeafNodesViewProperties,
             typename... InternalNodesViewProperties>
-  GenerateHierarchyFunctor(
+  GenerateLBVHHierarchyFunctor(
       ExecutionSpace const &space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
           sorted_morton_codes,
@@ -379,7 +379,7 @@ private:
 template <typename ExecutionSpace, typename... MortonCodesViewProperties,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
-void generateHierarchy(
+void generateLBVHHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
         sorted_morton_codes,
@@ -393,21 +393,21 @@ void generateHierarchy(
       ARBORX_MARK_REGION("generate_hierarchy"),
       Kokkos::RangePolicy<ExecutionSpace>(space, n_internal_nodes,
                                           2 * n_internal_nodes + 1),
-      GenerateHierarchyFunctor<MemorySpace>(space, sorted_morton_codes,
-                                            leaf_nodes, internal_nodes));
+      GenerateLBVHHierarchyFunctor<MemorySpace>(space, sorted_morton_codes,
+                                                leaf_nodes, internal_nodes));
 }
 
 template <typename ExecutionSpace, typename... MortonCodesViewProperties,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
-void generateHierarchy(
+void generateLBVHHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int *, MortonCodesViewProperties...>
         sorted_morton_codes,
     Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
     Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
 {
-  generateHierarchy(
+  generateLBVHHierarchy(
       space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>{
           sorted_morton_codes},
