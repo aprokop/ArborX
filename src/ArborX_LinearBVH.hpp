@@ -35,7 +35,32 @@ namespace ArborX
 namespace Details
 {
 struct HappyTreeFriends;
+
+template <typename DeviceType>
+struct TreeVisualization;
+
+enum class ConstructionAlgorithm
+{
+  LBVH
+};
 } // namespace Details
+
+namespace Experimental
+{
+
+struct ConstructionPolicy
+{
+  Details::ConstructionAlgorithm _algorithm =
+      Details::ConstructionAlgorithm::LBVH;
+
+  ConstructionPolicy &setAlgorithm(Details::ConstructionAlgorithm algorithm)
+  {
+    _algorithm = algorithm;
+    return *this;
+  }
+};
+
+} // namespace Experimental
 
 template <typename MemorySpace, typename BoundingVolume = Box,
           typename Enable = void>
@@ -51,7 +76,9 @@ public:
 
   template <typename ExecutionSpace, typename Primitives>
   BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                               Primitives const &primitives);
+                               Primitives const &primitives,
+                               Experimental::ConstructionPolicy const &policy =
+                                   Experimental::ConstructionPolicy());
 
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
@@ -194,7 +221,8 @@ template <typename MemorySpace, typename BoundingVolume, typename Enable>
 template <typename ExecutionSpace, typename Primitives>
 BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
     BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                                 Primitives const &primitives)
+                                 Primitives const &primitives,
+                                 Experimental::ConstructionPolicy const &policy)
     : _size(AccessTraits<Primitives, PrimitivesTag>::size(primitives))
     , _internal_and_leaf_nodes(
           Kokkos::view_alloc(Kokkos::WithoutInitializing,
@@ -259,6 +287,7 @@ BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // generate bounding volume hierarchy
+  ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
   Details::TreeConstruction::generateHierarchy(
       space, primitives, permutation_indices, morton_indices, getLeafNodes(),
       getInternalNodes());
