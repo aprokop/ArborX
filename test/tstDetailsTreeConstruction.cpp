@@ -150,9 +150,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   // reference solution for a recursive traversal from top to bottom
   // starting from root, visiting first the left child and then the right one
   std::ostringstream ref;
-  ref << "I0"
-      << "I3"
+  ref << "I3"
       << "I1"
+      << "I0"
       << "L0"
       << "L1"
       << "I2"
@@ -160,8 +160,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
       << "L3"
       << "I4"
       << "L4"
-      << "I5"
       << "I6"
+      << "I5"
       << "L5"
       << "L6"
       << "L7";
@@ -195,10 +195,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   };
 
   typename DeviceType::execution_space space{};
-  ArborX::Details::TreeConstruction::generateHierarchy(
+  int root_node_index = ArborX::Details::TreeConstruction::generateHierarchy(
       space, sorted_morton_codes, leaf_nodes, internal_nodes);
 
-  Node const *root = internal_nodes.data();
+  Node const *root = internal_nodes.data() + root_node_index;
 
   std::ostringstream sol;
   traverseRecursive(root, sol);

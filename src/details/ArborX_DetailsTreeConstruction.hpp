@@ -222,13 +222,15 @@ public:
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
           sorted_morton_codes,
       Kokkos::View<Node const *, LeafNodesViewProperties...> leaf_nodes,
-      Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
+      Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes,
+      Kokkos::View<int, MemorySpace> root_node_index)
       : _sorted_morton_codes(sorted_morton_codes)
       , _leaf_nodes(leaf_nodes)
       , _internal_nodes(internal_nodes)
       , _ranges(Kokkos::ViewAllocateWithoutInitializing("ranges"),
                 internal_nodes.extent(0))
       , _num_internal_nodes(_internal_nodes.extent_int(0))
+      , _root_node_index(root_node_index)
   {
     Kokkos::deep_copy(space, _ranges, UNTOUCHED_NODE);
   }
@@ -293,8 +295,7 @@ public:
       // Determine whether this node is left or right child of its parent
       bool const is_left_child = delta_right < delta_left;
 
-      int left_child;
-      int right_child;
+      int apetrei_parent;
       if (is_left_child)
       {
         // The main benefit of the Apetrei index (which is also called a split
@@ -302,7 +303,12 @@ public:
         // just on the child's range. This is different from a Karras index,
         // where the index can only be computed based on the range of the
         // parent, and thus requires knowing the ranges of both children.
-        int const apetrei_parent = range_right;
+        apetrei_parent = range_right;
+
+        // Children set themselves in their parent, as the parent cannot
+        // calculate its own children
+        Node *parent_node = getNodePtr(apetrei_parent);
+        parent_node->children.first = i;
 
         // The range of the parent is the union of the ranges of children. Each
         // child updates one of these range values, the farthest from the
@@ -319,53 +325,45 @@ public:
         if (range_right == UNTOUCHED_NODE)
           break;
 
-        // This is slightly convoluted due to the fact that the indices of leaf
-        // nodes have to be shifted. The determination whether the other child
-        // is a leaf node depends on the position of the split (which is
-        // apetrei index) to the range boundary.
-        left_child = i;
-        right_child = apetrei_parent + 1;
-        if (right_child == range_right)
-          right_child += leaf_nodes_shift;
-
         delta_right = delta(range_right);
 
-        expand(bbox, getNodePtr(right_child)->bounding_box);
+        expand(bbox, getNodePtr(parent_node->children.second)->bounding_box);
+        parent_node->bounding_box = bbox;
       }
       else
       {
         // The comments for this clause are identical to the ones above (in the
         // if clause), and thus ommitted for brevity.
 
-        int const apetrei_parent = range_left - 1;
+        apetrei_parent = range_left - 1;
+
+        Node *parent_node = getNodePtr(apetrei_parent);
+        parent_node->children.second = i;
 
         range_left = Kokkos::atomic_compare_exchange(
             &_ranges(apetrei_parent), UNTOUCHED_NODE, range_right);
         if (range_left == UNTOUCHED_NODE)
           break;
 
-        left_child = apetrei_parent;
-        if (left_child == range_left)
-          left_child += leaf_nodes_shift;
-        right_child = i;
-
         delta_left = delta(range_left - 1);
 
-        expand(bbox, getNodePtr(left_child)->bounding_box);
+        expand(bbox, getNodePtr(parent_node->children.first)->bounding_box);
+        parent_node->bounding_box = bbox;
       }
 
-      // Having the full range for the parent, we can compute the Karras index.
-      int const karras_parent =
-          delta_right < delta_left ? range_right : range_left;
+      i = apetrei_parent;
 
-      auto *parent_node = getNodePtr(karras_parent);
-      parent_node->children.first = left_child;
-      parent_node->children.second = right_child;
-      parent_node->bounding_box = bbox;
-
-      i = karras_parent;
-
-    } while (i != 0);
+      // NOTE: this check cannot be moved outside. This is because if a thread
+      // with range_right = _num_internal_nodes exits early, its range_left is
+      // set to UNTOUCHED_NODE, which is -1, which makes it pass this check,
+      // resulting in race condition on setting the root.
+      if (range_right - range_left == _num_internal_nodes)
+      {
+        // root node
+        _root_node_index() = i;
+        break;
+      }
+    } while (true);
   }
 
 private:
@@ -373,13 +371,14 @@ private:
   Kokkos::View<Node const *, MemorySpace> _leaf_nodes;
   Kokkos::View<Node *, MemorySpace> _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
+  Kokkos::View<int, MemorySpace> _root_node_index;
   int _num_internal_nodes;
 };
 
 template <typename ExecutionSpace, typename... MortonCodesViewProperties,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
-void generateHierarchy(
+int generateHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
         sorted_morton_codes,
@@ -388,26 +387,31 @@ void generateHierarchy(
 {
   using MemorySpace = typename decltype(internal_nodes)::memory_space;
   auto const n_internal_nodes = internal_nodes.extent(0);
+  Kokkos::View<int, MemorySpace> root_node_index("root_node");
 
-  Kokkos::parallel_for(
-      ARBORX_MARK_REGION("generate_hierarchy"),
-      Kokkos::RangePolicy<ExecutionSpace>(space, n_internal_nodes,
-                                          2 * n_internal_nodes + 1),
-      GenerateHierarchyFunctor<MemorySpace>(space, sorted_morton_codes,
-                                            leaf_nodes, internal_nodes));
+  Kokkos::parallel_for(ARBORX_MARK_REGION("generate_hierarchy"),
+                       Kokkos::RangePolicy<ExecutionSpace>(
+                           space, n_internal_nodes, 2 * n_internal_nodes + 1),
+                       GenerateHierarchyFunctor<MemorySpace>(
+                           space, sorted_morton_codes, leaf_nodes,
+                           internal_nodes, root_node_index));
+  auto root_node_index_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, root_node_index);
+
+  return root_node_index_host();
 }
 
 template <typename ExecutionSpace, typename... MortonCodesViewProperties,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
-void generateHierarchy(
+int generateHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int *, MortonCodesViewProperties...>
         sorted_morton_codes,
     Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
     Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
 {
-  generateHierarchy(
+  return generateHierarchy(
       space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>{
           sorted_morton_codes},
