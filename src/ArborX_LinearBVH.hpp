@@ -210,13 +210,6 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
       space, morton_indices, getLeafNodes(), getInternalNodes());
 
   Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::pushRegion("ArborX:BVH:install_ropes");
-
-  // Replace right children with ropes
-  Details::TreeConstruction::installRopes(space, getLeafNodes(),
-                                          getInternalNodes());
-
-  Kokkos::Profiling::popRegion();
   Kokkos::Profiling::popRegion();
 }
 

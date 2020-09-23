@@ -221,7 +221,7 @@ public:
       ExecutionSpace const &space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
           sorted_morton_codes,
-      Kokkos::View<Node const *, LeafNodesViewProperties...> leaf_nodes,
+      Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
       Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
       : _sorted_morton_codes(sorted_morton_codes)
       , _leaf_nodes(leaf_nodes)
@@ -273,11 +273,32 @@ public:
                   : const_cast<Node *>(&(_leaf_nodes(i - n))));
   }
 
+  KOKKOS_FUNCTION int calculateRope(int range_right, int delta_right) const
+  {
+    int rope;
+    if (range_right != _num_internal_nodes)
+    {
+      // The way Karras indices constructed, the rope is going to be the right
+      // child of the first internal node that we are in the left subtree of.
+      // The determination of whether that node is internal or leaf requires an
+      // additional delta() evaluation.
+      rope = range_right + 1;
+      if (delta_right < delta(range_right + 1))
+        rope += _num_internal_nodes;
+    }
+    else
+    {
+      // The node is on the right-most path in the tree. The only reason we
+      // need to set it is because nodes may have been allocated without
+      // initializing.
+      rope = ROPE_SENTINEL;
+    }
+    return rope;
+  }
+
   KOKKOS_FUNCTION void operator()(int i) const
   {
     auto const leaf_nodes_shift = _num_internal_nodes;
-
-    Box bbox = getNodePtr(i)->bounding_box;
 
     // For a leaf node, the range is just one index
     int range_left = i - leaf_nodes_shift;
@@ -285,6 +306,10 @@ public:
 
     int delta_left = delta(range_left - 1);
     int delta_right = delta(range_right);
+
+    Node *leaf_node = getNodePtr(i);
+    Box bbox = leaf_node->bounding_box;
+    leaf_node->rope = calculateRope(range_right, delta_right);
 
     // Walk toward the root and do process it even though technically its
     // bounding box has already been computed (bounding box of the scene)
@@ -360,7 +385,7 @@ public:
 
       auto *parent_node = getNodePtr(karras_parent);
       parent_node->left_child = left_child;
-      parent_node->rope = right_child;
+      parent_node->rope = calculateRope(range_right, delta_right);
       parent_node->bounding_box = bbox;
 
       i = karras_parent;
@@ -370,7 +395,7 @@ public:
 
 private:
   Kokkos::View<unsigned int const *, MemorySpace> _sorted_morton_codes;
-  Kokkos::View<Node const *, MemorySpace> _leaf_nodes;
+  Kokkos::View<Node *, MemorySpace> _leaf_nodes;
   Kokkos::View<Node *, MemorySpace> _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
   int _num_internal_nodes;
@@ -383,7 +408,7 @@ void generateHierarchy(
     ExecutionSpace const &space,
     Kokkos::View<unsigned int const *, MortonCodesViewProperties...>
         sorted_morton_codes,
-    Kokkos::View<Node const *, LeafNodesViewProperties...> leaf_nodes,
+    Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
     Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
 {
   using MemorySpace = typename decltype(internal_nodes)::memory_space;
@@ -411,93 +436,7 @@ void generateHierarchy(
       space,
       Kokkos::View<unsigned int const *, MortonCodesViewProperties...>{
           sorted_morton_codes},
-      Kokkos::View<Node const *, LeafNodesViewProperties...>{leaf_nodes},
-      internal_nodes);
-}
-
-template <typename MemorySpace>
-class InstallRopesFunctor
-{
-public:
-  template <typename ExecutionSpace, typename... LeafNodesViewProperties,
-            typename... InternalNodesViewProperties>
-  InstallRopesFunctor(
-      ExecutionSpace const &space,
-      Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
-      Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
-      : _leaf_nodes(leaf_nodes)
-      , _internal_nodes(internal_nodes)
-      , _right_children(
-            Kokkos::view_alloc("right_children", Kokkos::WithoutInitializing),
-            internal_nodes.extent(0))
-  {
-    copyAndResetRightChildren(space);
-  }
-
-  template <typename ExecutionSpace>
-  void copyAndResetRightChildren(ExecutionSpace const &space)
-  {
-    int const n_internal_nodes = _internal_nodes.extent(0);
-    int const n_nodes = 2 * n_internal_nodes + 1;
-
-    // avoid *this capture
-    auto right_children = _right_children;
-    auto internal_nodes = _internal_nodes;
-    Kokkos::parallel_for(ARBORX_MARK_REGION("copy_right_children"),
-                         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_nodes),
-                         KOKKOS_LAMBDA(int const i) {
-                           auto &node = internal_nodes(i);
-                           if (i < n_internal_nodes)
-                             right_children(i) = node.rope;
-                           node.rope = ROPE_SENTINEL;
-                         });
-  }
-
-  KOKKOS_FUNCTION void operator()(int const i) const
-  {
-    int const n_internal_nodes = _internal_nodes.extent(0);
-
-    // Rope target is the right child of this internal nodes
-    auto const rope_target = _right_children(i);
-
-    // Traverse the right-most path of the left subtree
-    int cur_node_index = _internal_nodes(i).left_child;
-    while (true)
-    {
-      auto &node = (cur_node_index < n_internal_nodes
-                        ? _internal_nodes(cur_node_index)
-                        : _leaf_nodes(cur_node_index - n_internal_nodes));
-
-      node.rope = rope_target;
-
-      if (node.isLeaf())
-        break;
-
-      cur_node_index = _right_children(cur_node_index);
-    }
-  }
-
-private:
-  Kokkos::View<Node *, MemorySpace> _leaf_nodes;
-  Kokkos::View<Node *, MemorySpace> _internal_nodes;
-  Kokkos::View<int *, MemorySpace> _right_children;
-};
-
-template <typename ExecutionSpace, typename... LeafNodesViewProperties,
-          typename... InternalNodesViewProperties>
-void installRopes(
-    ExecutionSpace const &space,
-    Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
-    Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
-{
-  using MemorySpace = typename decltype(internal_nodes)::memory_space;
-
-  auto const n_internal_nodes = internal_nodes.extent(0);
-
-  Kokkos::parallel_for(
-      ARBORX_MARK_REGION("install_ropes"),
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_internal_nodes),
-      InstallRopesFunctor<MemorySpace>(space, leaf_nodes, internal_nodes));
+      leaf_nodes, internal_nodes);
 }
 
 } // namespace TreeConstruction
