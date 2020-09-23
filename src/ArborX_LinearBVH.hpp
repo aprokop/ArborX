@@ -103,18 +103,21 @@ private:
   KOKKOS_FUNCTION
   bounding_volume_type const &getBoundingVolume(Node const *node) const
   {
-    return node->bounding_box;
+    int id = node - _internal_and_leaf_nodes.data();
+    return _volumes(id);
   }
 
   KOKKOS_FUNCTION
   bounding_volume_type &getBoundingVolume(Node *node)
   {
-    return node->bounding_box;
+    int id = node - _internal_and_leaf_nodes.data();
+    return _volumes(id);
   }
 
   size_t _size;
   bounding_volume_type _bounds;
   Kokkos::View<Node *, MemorySpace> _internal_and_leaf_nodes;
+  Kokkos::View<Box *, MemorySpace> _volumes;
 };
 
 template <typename DeviceType>
@@ -150,6 +153,8 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
     , _internal_and_leaf_nodes(
           Kokkos::ViewAllocateWithoutInitializing("internal_and_leaf_nodes"),
           _size > 0 ? 2 * _size - 1 : 0)
+    , _volumes(Kokkos::ViewAllocateWithoutInitializing("volumes"),
+               _size > 0 ? 2 * _size - 1 : 0)
 {
   Kokkos::Profiling::pushRegion("ArborX:BVH:construction");
 
@@ -178,7 +183,7 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
     Kokkos::View<unsigned int *, MemorySpace> permutation_indices(
         Kokkos::view_alloc("permute", space), 1);
     Details::TreeConstruction::initializeLeafNodes(
-        space, primitives, permutation_indices, getLeafNodes());
+        space, primitives, permutation_indices, getLeafNodes(), _volumes);
     Kokkos::Profiling::popRegion();
     return;
   }
@@ -202,14 +207,15 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
 
   // initialize leaves using the computed ordering
   Details::TreeConstruction::initializeLeafNodes(
-      space, primitives, permutation_indices, getLeafNodes());
+      space, primitives, permutation_indices, getLeafNodes(),
+      Kokkos::subview(_volumes, std::make_pair(size() - 1, 2 * size() - 1)));
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX:BVH:generate_hierarchy");
 
   // generate bounding volume hierarchy
   Details::TreeConstruction::generateHierarchy(
-      space, morton_indices, getLeafNodes(), getInternalNodes());
+      space, morton_indices, getLeafNodes(), getInternalNodes(), _volumes);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::popRegion();

@@ -173,8 +173,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
   using ArborX::Details::Node;
   Kokkos::View<Node *, DeviceType> leaf_nodes("leaf_nodes", n);
   Kokkos::View<Node *, DeviceType> internal_nodes("internal_nodes", n - 1);
+  Kokkos::View<Box *, DeviceType> volumes("volumes", 2 * n - 1);
   for (int i = 0; i < n; ++i)
-    leaf_nodes(i) = makeLeafNode(i, Box{});
+    leaf_nodes(i) = makeLeafNode(i);
   auto getNodePtr = [&leaf_nodes, &internal_nodes](int i) {
     return i < n - 1 ? &internal_nodes(i) : &leaf_nodes(i - n + 1);
   };
@@ -196,7 +197,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(example_tree_construction, DeviceType,
 
   typename DeviceType::execution_space space{};
   ArborX::Details::TreeConstruction::generateHierarchy(
-      space, sorted_morton_codes, leaf_nodes, internal_nodes);
+      space, sorted_morton_codes, leaf_nodes, internal_nodes, volumes);
 
   Node const *root = internal_nodes.data();
 
