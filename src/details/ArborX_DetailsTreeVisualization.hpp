@@ -74,7 +74,10 @@ struct TreeVisualization
     KOKKOS_INLINE_FUNCTION static typename Tree::bounding_volume_type
     getBoundingVolume(Node const *node, Tree const &tree)
     {
-      return tree.getBoundingVolume(node);
+      // This ties it to a the tree implementation where internal and leaf nodes
+      // are stored together
+      int i = node - tree.getRoot();
+      return tree.getBoundingVolume(i);
     }
   };
 

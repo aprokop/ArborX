@@ -98,21 +98,19 @@ private:
   Node *getRoot() { return _internal_and_leaf_nodes.data(); }
 
   KOKKOS_FUNCTION
+  int getRootIndex() const { return 0; }
+
+  KOKKOS_FUNCTION
   Node const *getNodePtr(int i) const { return &_internal_and_leaf_nodes(i); }
 
   KOKKOS_FUNCTION
-  bounding_volume_type const &getBoundingVolume(Node const *node) const
+  bounding_volume_type const &getBoundingVolume(int i) const
   {
-    int id = node - _internal_and_leaf_nodes.data();
-    return _volumes(id);
+    return _volumes(i);
   }
 
   KOKKOS_FUNCTION
-  bounding_volume_type &getBoundingVolume(Node *node)
-  {
-    int id = node - _internal_and_leaf_nodes.data();
-    return _volumes(id);
-  }
+  bounding_volume_type &getBoundingVolume(int i) { return _volumes(i); }
 
   size_t _size;
   bounding_volume_type _bounds;
