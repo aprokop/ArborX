@@ -262,16 +262,14 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
       {
         return lhs.second < rhs.second;
       }
-    };
+    } compare;
+
     // Use a priority queue for convenience to store the results and
     // preserve the heap structure internally at all time.  There is no
     // memory allocation, elements are stored in the buffer passed as an
     // argument. The farthest leaf node is on top.
     assert(k == (int)buffer.size());
-    PriorityQueue<PairIndexDistance, CompareDistance,
-                  UnmanagedStaticVector<PairIndexDistance>>
-        heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
-                                                      buffer.size()));
+    int heap_size = 0;
 
     Node const *stack[64];
     auto *stack_ptr = stack;
@@ -309,12 +307,20 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         {
           auto leaf_pair = Kokkos::make_pair(
               child_left->getLeafPermutationIndex(), distance_left);
-          if ((int)heap.size() < k)
-            heap.push(leaf_pair);
+          if (heap_size < k)
+          {
+            buffer[heap_size++] = leaf_pair;
+            pushHeap(buffer.data(), buffer.data() + heap_size, compare);
+          }
           else
-            heap.popPush(leaf_pair);
-          if ((int)heap.size() == k)
-            radius = heap.top().second;
+          {
+            bubbleDown(buffer.data(), std::ptrdiff_t(0),
+                       std::ptrdiff_t(heap_size), leaf_pair, compare);
+          }
+          if (heap_size == k)
+          {
+            radius = buffer[0].second;
+          }
         }
 
         // Note: radius may have been already updated here from the left child
@@ -322,12 +328,20 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         {
           auto leaf_pair = Kokkos::make_pair(
               child_right->getLeafPermutationIndex(), distance_right);
-          if ((int)heap.size() < k)
-            heap.push(leaf_pair);
+          if (heap_size < k)
+          {
+            buffer[heap_size++] = leaf_pair;
+            pushHeap(buffer.data(), buffer.data() + heap_size, compare);
+          }
           else
-            heap.popPush(leaf_pair);
-          if ((int)heap.size() == k)
-            radius = heap.top().second;
+          {
+            bubbleDown(buffer.data(), std::ptrdiff_t(0),
+                       std::ptrdiff_t(heap_size), leaf_pair, compare);
+          }
+          if (heap_size == k)
+          {
+            radius = buffer[0].second;
+          }
         }
 
         traverse_left = (distance_left < radius && !child_left->isLeaf());
@@ -370,14 +384,14 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     // Sort the leaf nodes and output the results.
     // NOTE: Do not try this at home.  Messing with the underlying container
     // invalidates the state of the PriorityQueue.
-    sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
-    for (decltype(heap.size()) i = 0; i < heap.size(); ++i)
+    sortHeap(buffer.data(), buffer.data() + heap_size, compare);
+    for (int i = 0; i < heap_size; ++i)
     {
-      int const leaf_index = (heap.data() + i)->first;
-      auto const leaf_distance = (heap.data() + i)->second;
+      int const leaf_index = buffer[i].first;
+      auto const leaf_distance = buffer[i].second;
       callback_(predicate, leaf_index, leaf_distance);
     }
-    return heap.size();
+    return heap_size;
   }
 };
 
