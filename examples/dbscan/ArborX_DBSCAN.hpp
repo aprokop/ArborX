@@ -164,8 +164,15 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
   if (core_min_size == 1)
   {
     // Perform the queries and build clusters through callback
+
+    // CCSCorePoints always returns true. However, it does not necessarily mean
+    // that these are core points in DBSCAN definition (with min_pts = 1).
+    // Rather, anything that will be called inside the callback becomes a core
+    // point there, as it means that at least one neighbor is found. So, for
+    // simplicity, we just allow everything to be define as cores.
     using CorePoints = CCSCorePoints;
     CorePoints is_core_point;
+
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
     bvh.query(
         exec_space, predicates,
@@ -188,12 +195,34 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
     elapsed_neigh = clock::now() - start_local;
 
     using CorePoints = DBSCANCorePoints<MemorySpace>;
+    CorePoints is_core_point{num_neigh, core_min_size};
+
+    // Compute mapping: core point index -> point index
+    Kokkos::View<int *, MemorySpace> mapping_full(
+        Kokkos::ViewAllocateWithoutInitializing("ArborX::DBSCAN::mapping"), n);
+    int num_core_points = 0;
+    Kokkos::parallel_scan(
+        "ArborX::DBSCAN::compute_mapping",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int const i, int &update, bool final_pass) {
+          if (is_core_point(i))
+          {
+            if (final_pass)
+              mapping_full(update) = i;
+            ++update;
+          }
+        },
+        num_core_points);
+    auto mapping =
+        Kokkos::subview(mapping_full, Kokkos::make_pair(0, num_core_points));
+
+    auto const core_predicates = wrap(primitives, mapping, eps);
 
     start_local = clock::now();
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters:query");
-    bvh.query(exec_space, predicates,
-              Details::DBSCANCallback<MemorySpace, CorePoints>{
-                  stat, CorePoints{num_neigh, core_min_size}});
+    bvh.query(
+        exec_space, core_predicates,
+        Details::DBSCANCallback<MemorySpace, CorePoints>{stat, is_core_point});
     Kokkos::Profiling::popRegion();
     elapsed_query = clock::now() - start_local;
   }

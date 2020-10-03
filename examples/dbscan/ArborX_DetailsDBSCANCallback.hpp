@@ -69,6 +69,8 @@
 
 #include <Kokkos_Core.hpp>
 
+#include <cassert>
+
 namespace ArborX
 {
 namespace Details
@@ -184,33 +186,26 @@ struct DBSCANCallback
   {
     int const i = ArborX::getData(query);
 
-    // NOTE: for halo finder/ccs algorithm (in which is_core_point(i) is always
-    // true), the algorithm below will be simplified to
-    //   if (i > j)
+    // This should only be run on core points
+    assert(is_core_point_(i));
 
-    if (!is_core_point_(j))
+    if (!is_core_point_(j)) // always false for halo finder/ccs algorithm
     {
-      // The neighbor is not a core point, do nothing
-      return;
-    }
-
-    bool is_boundary_point =
-        !is_core_point_(i); // is_core_point_(j) is aready true
-
-    if (is_boundary_point && stat_(i) == i)
-    {
-      // For a boundary point that was not processed before (stat_(i) == i),
+      // For a boundary point that has not processed yet (stat_(j) == j),
       // set its representative to that of the core point. This way, when
       // another neighbor that is core point appears later, we won't process
       // this point.
       //
-      // NOTE: DO NOT USE combine_trees(i, j) here. This may set this boundary
+      // NOTE: DO NOT USE combine_trees(i, j) here. This may set the boundary
       // point as a representative for the whole cluster. This would mean that
-      // a) stat_(i) == i still (so it would be processed later, and b) it may
+      // a) stat_(j) == j still (so it would be processed later, and b) it may
       // be combined with a different cluster later forming a bridge.
-      stat_(i) = representative(j);
+
+      // It is not clear whether using representative(i) for the last argument
+      // here is any better than simply using i.
+      Kokkos::atomic_compare_exchange(&stat_(j), j, representative(i));
     }
-    else if (!is_boundary_point && i > j)
+    else if (i > j)
     {
       // For a core point that is connected to another core point, do the
       // standard CCS algorithm
