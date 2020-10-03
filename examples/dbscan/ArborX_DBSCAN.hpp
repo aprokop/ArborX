@@ -23,29 +23,46 @@
 namespace ArborX
 {
 
-template <typename View>
+struct Iota
+{
+  int _n = 0;
+  KOKKOS_FUNCTION auto operator()(int const i) const { return i; }
+  KOKKOS_FUNCTION auto extent(int const i) const
+  {
+    assert(i == 0);
+    (void)i;
+    return _n;
+  }
+};
+
+template <typename View, typename Mapping>
 struct Wrapped
 {
-  View _M_view;
+  View _view;
+  Mapping _mapping;
   double _r;
 };
 
-template <typename View>
-auto wrap(View v, double r)
+template <typename View, typename Mapping>
+auto wrap(View v, Mapping mapping, double r)
 {
-  return Wrapped<View>{v, r};
+  return Wrapped<View, Mapping>{v, mapping, r};
 }
 
 namespace Traits
 {
-template <typename View>
-struct Access<Wrapped<View>, PredicatesTag>
+template <typename View, typename Mapping>
+struct Access<Wrapped<View, Mapping>, PredicatesTag>
 {
   using memory_space = typename View::memory_space;
-  static size_t size(Wrapped<View> const &w) { return w._M_view.extent(0); }
-  static KOKKOS_FUNCTION auto get(Wrapped<View> const &w, size_t i)
+  static size_t size(Wrapped<View, Mapping> const &w)
   {
-    return attach(intersects(Sphere{w._M_view(i), w._r}), (int)i);
+    return w._mapping.extent(0);
+  }
+  static KOKKOS_FUNCTION auto get(Wrapped<View, Mapping> const &w, size_t i)
+  {
+    auto const real_i = w._mapping(i);
+    return attach(intersects(Sphere{w._view(real_i), w._r}), (int)real_i);
   }
 };
 } // namespace Traits
@@ -125,9 +142,10 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
 
   start_total = clock::now();
 
-  auto const predicates = wrap(primitives, eps);
-
   int const n = primitives.extent_int(0);
+
+  Iota iota{n};
+  auto const predicates = wrap(primitives, iota, eps);
 
   // Build the tree
   start = clock::now();
@@ -147,11 +165,11 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
   {
     // Perform the queries and build clusters through callback
     using CorePoints = CCSCorePoints;
-    CorePoints core_points;
+    CorePoints is_core_point;
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
     bvh.query(
         exec_space, predicates,
-        Details::DBSCANCallback<MemorySpace, CorePoints>{stat, core_points});
+        Details::DBSCANCallback<MemorySpace, CorePoints>{stat, is_core_point});
     Kokkos::Profiling::popRegion();
   }
   else
