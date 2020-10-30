@@ -130,7 +130,9 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
   // Build the tree
   start = clock::now();
   Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
-  ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+  ArborX::BVH<MemorySpace> bvh(
+      exec_space, primitives,
+      ArborX::Experimental::ConstructionPolicy().setSelfCollisionMode(true));
   Kokkos::Profiling::popRegion();
   elapsed_construction = clock::now() - start;
 

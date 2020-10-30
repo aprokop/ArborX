@@ -29,11 +29,6 @@ namespace Details
 {
 template <typename DeviceType>
 struct TreeVisualization;
-
-enum class ConstructionAlgorithm
-{
-  LBVH
-};
 } // namespace Details
 
 namespace Experimental
@@ -41,12 +36,11 @@ namespace Experimental
 
 struct ConstructionPolicy
 {
-  Details::ConstructionAlgorithm _algorithm =
-      Details::ConstructionAlgorithm::LBVH;
+  bool _self_collision = false;
 
-  ConstructionPolicy &setAlgorithm(Details::ConstructionAlgorithm algorithm)
+  ConstructionPolicy &setSelfCollisionMode(bool self_collision)
   {
-    _algorithm = algorithm;
+    _self_collision = self_collision;
     return *this;
   }
 };
@@ -92,6 +86,9 @@ public:
     Details::BoundingVolumeHierarchyImpl::query(space, *this, predicates,
                                                 std::forward<Args>(args)...);
   }
+
+  // FIXME: should not be public
+  Kokkos::View<unsigned int *, MemorySpace> _permute;
 
 private:
   template <typename BVH, typename Predicates, typename Callback,
@@ -240,12 +237,13 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
 
   // compute the ordering of primitives along Z-order space-filling curve
   auto permutation_indices = Details::sortObjects(space, morton_indices);
+  if (policy._self_collision)
+    _permute = permutation_indices;
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // generate bounding volume hierarchy
-  ARBORX_ASSERT(policy._algorithm == Details::ConstructionAlgorithm::LBVH);
   Details::TreeConstruction::generateHierarchy(
       space, primitives, permutation_indices, morton_indices, getLeafNodes(),
       getInternalNodes());
