@@ -18,6 +18,8 @@
 #include <ArborX_DetailsUtils.hpp>
 #include <ArborX_LinearBVH.hpp>
 
+#include <Kokkos_ScatterView.hpp>
+
 #include <chrono>
 
 namespace ArborX
@@ -238,12 +240,15 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
 
   Kokkos::View<int *, MemorySpace> cluster_sizes(
       "ArborX::DBSCAN::cluster_sizes", n);
+  auto scatter_cluster_sizes =
+      Kokkos::Experimental::create_scatter_view(cluster_sizes);
   Kokkos::parallel_for("ArborX::DBSCAN::compute_cluster_sizes",
                        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
                        KOKKOS_LAMBDA(int const i) {
-                         Kokkos::atomic_fetch_add(&cluster_sizes(clusters(i)),
-                                                  1);
+                         auto access = scatter_cluster_sizes.access();
+                         ++access(clusters(i));
                        });
+  Kokkos::Experimental::contribute(cluster_sizes, scatter_cluster_sizes);
 
   // The idea here is to replace cluster indices for small clusters (containing
   // less than cluster_min_size points) to INT_MAX. This way, during the sort
