@@ -81,7 +81,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
 
-    if (predicate(_bvh.getBoundingVolume(_bvh.getRoot())))
+    if (predicate(_bvh.getBoundingVolume(_bvh.getRootIndex())))
     {
       _callback(predicate, 0);
     }
@@ -94,45 +94,49 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
 
-    Node const *stack[64];
-    Node const **stack_ptr = stack;
-    *stack_ptr++ = nullptr;
-    Node const *node = _bvh.getRoot();
+    int constexpr TERMINATION_INDEX = -1;
+
+    int stack[64];
+    auto *stack_ptr = stack;
+    *stack_ptr++ = TERMINATION_INDEX;
+    int node_index = _bvh.getRootIndex();
     do
     {
-      Node const *child_left = _bvh.getNodePtr(node->left_child);
-      Node const *child_right = _bvh.getNodePtr(node->right_child);
+      auto const child_left_index = _bvh.getLeftChildIndex(node_index);
+      auto const child_right_index = _bvh.getRightChildIndex(node_index);
 
-      bool overlap_left = predicate(_bvh.getBoundingVolume(child_left));
-      bool overlap_right = predicate(_bvh.getBoundingVolume(child_right));
+      bool overlap_left = predicate(_bvh.getBoundingVolume(child_left_index));
+      bool overlap_right = predicate(_bvh.getBoundingVolume(child_right_index));
 
-      if (overlap_left && child_left->isLeaf())
+      if (overlap_left && _bvh.isLeaf(child_left_index))
       {
         if (invoke_callback_and_check_early_exit(
-                _callback, predicate, child_left->getLeafPermutationIndex()))
+                _callback, predicate,
+                _bvh.getLeafPermutationIndex(child_left_index)))
           return;
       }
-      if (overlap_right && child_right->isLeaf())
+      if (overlap_right && _bvh.isLeaf(child_right_index))
       {
         if (invoke_callback_and_check_early_exit(
-                _callback, predicate, child_right->getLeafPermutationIndex()))
+                _callback, predicate,
+                _bvh.getLeafPermutationIndex(child_right_index)))
           return;
       }
 
-      bool traverse_left = (overlap_left && !child_left->isLeaf());
-      bool traverse_right = (overlap_right && !child_right->isLeaf());
+      bool traverse_left = (overlap_left && !_bvh.isLeaf(child_left_index));
+      bool traverse_right = (overlap_right && !_bvh.isLeaf(child_right_index));
 
       if (!traverse_left && !traverse_right)
       {
-        node = *--stack_ptr;
+        node_index = *--stack_ptr;
       }
       else
       {
-        node = traverse_left ? child_left : child_right;
+        node_index = traverse_left ? child_left_index : child_right_index;
         if (traverse_left && traverse_right)
-          *stack_ptr++ = child_right;
+          *stack_ptr++ = child_right_index;
       }
-    } while (node != nullptr);
+    } while (node_index != TERMINATION_INDEX);
   }
 
   // Ropes-based traversal
@@ -143,32 +147,30 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
 
-    Node const *node;
-    int next = 0; // start with root
+    int node_index = _bvh.getRootIndex();
     do
     {
-      node = _bvh.getNodePtr(next);
-
-      if (predicate(_bvh.getBoundingVolume(node)))
+      if (predicate(_bvh.getBoundingVolume(node_index)))
       {
-        if (!node->isLeaf())
+        if (!_bvh.isLeaf(node_index))
         {
-          next = node->left_child;
+          node_index = _bvh.getLeftChildIndex(node_index);
         }
         else
         {
           if (invoke_callback_and_check_early_exit(
-                  _callback, predicate, node->getLeafPermutationIndex()))
+                  _callback, predicate,
+                  _bvh.getLeafPermutationIndex(node_index)))
             return;
-          next = node->rope;
+          node_index = _bvh.getRope(node_index);
         }
       }
       else
       {
-        next = node->rope;
+        node_index = _bvh.getRope(node_index);
       }
 
-    } while (next != ROPE_SENTINEL);
+    } while (node_index != ROPE_SENTINEL);
   }
 };
 
@@ -280,31 +282,13 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     _callback(predicate, 0);
   }
 
-  template <typename Tag = typename Node::Tag>
-  KOKKOS_FUNCTION
-      std::enable_if_t<std::is_same<Tag, NodeWithTwoChildrenTag>{}, int>
-      getRightChild(Node const *node) const
-  {
-    assert(!node->isLeaf());
-    return node->right_child;
-  }
-
-  template <typename Tag = typename Node::Tag>
-  KOKKOS_FUNCTION
-      std::enable_if_t<std::is_same<Tag, NodeWithLeftChildAndRopeTag>{}, int>
-      getRightChild(Node const *node) const
-  {
-    assert(!node->isLeaf());
-    return _bvh.getNodePtr(node->left_child)->rope;
-  }
-
   KOKKOS_FUNCTION void operator()(int queryIndex) const
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
     auto const k = getK(predicate);
     auto const distance = [geometry = getGeometry(predicate),
-                           bvh = _bvh](Node const *node) {
-      return Details::distance(geometry, bvh.getBoundingVolume(node));
+                           bvh = _bvh](int node_index) {
+      return Details::distance(geometry, bvh.getBoundingVolume(node_index));
     };
     auto const buffer = _buffer(queryIndex);
 
@@ -341,18 +325,20 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
                                                       buffer.size()));
 
-    Node const *stack[64];
+    int constexpr TERMINATION_INDEX = -1;
+
+    int stack[64];
     auto *stack_ptr = stack;
-    *stack_ptr++ = nullptr;
+    *stack_ptr++ = TERMINATION_INDEX;
 #if !defined(__CUDA_ARCH__)
     float stack_distance[64];
     auto *stack_distance_ptr = stack_distance;
     *stack_distance_ptr++ = 0.f;
 #endif
 
-    Node const *node = _bvh.getRoot();
-    Node const *child_left = nullptr;
-    Node const *child_right = nullptr;
+    auto node_index = _bvh.getRootIndex();
+    auto child_left_index = TERMINATION_INDEX;
+    auto child_right_index = TERMINATION_INDEX;
 
     float distance_left = 0.f;
     float distance_right = 0.f;
@@ -367,16 +353,16 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
       {
         // Insert children into the stack and make sure that the
         // closest one ends on top.
-        child_left = _bvh.getNodePtr(node->left_child);
-        child_right = _bvh.getNodePtr(getRightChild(node));
+        child_left_index = _bvh.getLeftChildIndex(node_index);
+        child_right_index = _bvh.getRightChildIndex(node_index);
 
-        distance_left = distance(child_left);
-        distance_right = distance(child_right);
+        distance_left = distance(child_left_index);
+        distance_right = distance(child_right_index);
 
-        if (distance_left < radius && child_left->isLeaf())
+        if (distance_left < radius && _bvh.isLeaf(child_left_index))
         {
           auto leaf_pair = Kokkos::make_pair(
-              child_left->getLeafPermutationIndex(), distance_left);
+              _bvh.getLeafPermutationIndex(child_left_index), distance_left);
           if ((int)heap.size() < k)
             heap.push(leaf_pair);
           else
@@ -386,10 +372,10 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         }
 
         // Note: radius may have been already updated here from the left child
-        if (distance_right < radius && child_right->isLeaf())
+        if (distance_right < radius && _bvh.isLeaf(child_right_index))
         {
           auto leaf_pair = Kokkos::make_pair(
-              child_right->getLeafPermutationIndex(), distance_right);
+              _bvh.getLeafPermutationIndex(child_right_index), distance_right);
           if ((int)heap.size() < k)
             heap.push(leaf_pair);
           else
@@ -398,20 +384,22 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
             radius = heap.top().second;
         }
 
-        traverse_left = (distance_left < radius && !child_left->isLeaf());
-        traverse_right = (distance_right < radius && !child_right->isLeaf());
+        traverse_left =
+            (distance_left < radius && !_bvh.isLeaf(child_left_index));
+        traverse_right =
+            (distance_right < radius && !_bvh.isLeaf(child_right_index));
       }
 
       if (!traverse_left && !traverse_right)
       {
-        node = *--stack_ptr;
+        node_index = *--stack_ptr;
 #if defined(__CUDA_ARCH__)
-        if (node != nullptr)
+        if (node != TERMINATION_INDEX)
         {
           // This is a theoretically unnecessary duplication of distance
           // calculation for stack nodes. However, for Cuda it's better than
           // than putting the distances in stack.
-          distance_node = distance(node);
+          distance_node = distance(node_index);
         }
 #else
         distance_node = *--stack_distance_ptr;
@@ -419,21 +407,23 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
       }
       else
       {
-        node = (traverse_left &&
-                (distance_left <= distance_right || !traverse_right))
-                   ? child_left
-                   : child_right;
-        distance_node = (node == child_left ? distance_left : distance_right);
+        node_index = (traverse_left &&
+                      (distance_left <= distance_right || !traverse_right))
+                         ? child_left_index
+                         : child_right_index;
+        distance_node =
+            (node_index == child_left_index ? distance_left : distance_right);
         if (traverse_left && traverse_right)
         {
-          *stack_ptr++ = (node == child_left ? child_right : child_left);
+          *stack_ptr++ = (node_index == child_left_index ? child_right_index
+                                                         : child_left_index);
 #if !defined(__CUDA_ARCH__)
           *stack_distance_ptr++ =
-              (node == child_left ? distance_right : distance_left);
+              (node_index == child_left_index ? distance_right : distance_left);
 #endif
         }
       }
-    } while (node != nullptr);
+    } while (node_index != TERMINATION_INDEX);
 
     // Sort the leaf nodes and output the results.
     // NOTE: Do not try this at home.  Messing with the underlying container

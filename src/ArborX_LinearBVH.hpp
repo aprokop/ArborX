@@ -106,6 +106,53 @@ private:
   using node_type = Details::NodeWithTwoChildren;
 #endif
 
+  KOKKOS_FUNCTION
+  bool isLeaf(int node_index) const
+  {
+    return (size_t)(node_index + 1) >= size();
+  }
+
+  KOKKOS_FUNCTION constexpr std::size_t
+  getLeafPermutationIndex(int node_index) const noexcept
+  {
+    assert(isLeaf(node_index));
+    return _internal_and_leaf_nodes(node_index).getLeafPermutationIndex();
+  }
+
+  KOKKOS_FUNCTION
+  int getLeftChildIndex(int node_index) const
+  {
+    assert(!isLeaf(node_index));
+    return _internal_and_leaf_nodes(node_index).left_child;
+  }
+
+  template <typename Tag = typename node_type::Tag>
+  KOKKOS_FUNCTION
+      std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{},
+                       int>
+      getRightChildIndex(int node_index) const
+  {
+    assert(!isLeaf(node_index));
+    return _internal_and_leaf_nodes(node_index).right_child;
+  }
+
+  template <typename Tag = typename node_type::Tag>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}, int>
+  getRightChildIndex(int node_index) const
+  {
+    assert(!isLeaf(node_index));
+    return _internal_and_leaf_nodes(getLeftChildIndex(node_index)).rope;
+  }
+
+  template <typename Tag = typename node_type::Tag>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}, int>
+  getRope(int node_index) const
+  {
+    return _internal_and_leaf_nodes(node_index).rope;
+  }
+
   Kokkos::View<node_type *, MemorySpace> getInternalNodes()
   {
     assert(!empty());
@@ -130,6 +177,9 @@ private:
   node_type const *getRoot() const { return _internal_and_leaf_nodes.data(); }
 
   KOKKOS_FUNCTION
+  int getRootIndex() const { return 0; }
+
+  KOKKOS_FUNCTION
   node_type *getRoot() { return _internal_and_leaf_nodes.data(); }
 
   KOKKOS_FUNCTION
@@ -148,6 +198,12 @@ private:
   bounding_volume_type &getBoundingVolume(node_type *node)
   {
     return node->bounding_box;
+  }
+
+  KOKKOS_FUNCTION
+  bounding_volume_type const &getBoundingVolume(int node_index) const
+  {
+    return _internal_and_leaf_nodes(node_index).bounding_box;
   }
 
   size_t _size;
