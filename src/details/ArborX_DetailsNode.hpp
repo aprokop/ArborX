@@ -23,30 +23,48 @@ namespace ArborX
 namespace Details
 {
 
+// ------------------------------------
 struct NodeWithTwoChildrenTag
 {
 };
-struct NodeWithLeftChildAndRopeTag
-{
-};
 
-struct NodeWithTwoChildren
+struct NodeWithTwoChildrenLeaf
 {
   using Tag = NodeWithTwoChildrenTag;
 
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr NodeWithTwoChildren() = default;
+  constexpr NodeWithTwoChildrenLeaf() = default;
 
-  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept
-  {
-    return left_child == -1;
-  }
+  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept { return true; }
 
   KOKKOS_INLINE_FUNCTION constexpr std::size_t getLeafPermutationIndex() const
       noexcept
   {
-    assert(isLeaf());
-    return right_child;
+    return permutation_index;
+  }
+
+  int permutation_index = -1;
+  int unused = -1;
+  Box bounding_box;
+};
+
+KOKKOS_INLINE_FUNCTION constexpr NodeWithTwoChildrenLeaf
+makeLeafNode(NodeWithTwoChildrenTag, std::size_t permutation_index,
+             Box box) noexcept
+{
+  return {static_cast<int>(permutation_index), -1, std::move(box)};
+}
+
+struct NodeWithTwoChildrenInternal
+{
+  using Tag = NodeWithTwoChildrenTag;
+
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr NodeWithTwoChildrenInternal() = default;
+
+  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept
+  {
+    return false;
   }
 
   int left_child = -1;
@@ -54,42 +72,30 @@ struct NodeWithTwoChildren
   Box bounding_box;
 };
 
-KOKKOS_INLINE_FUNCTION constexpr NodeWithTwoChildren
-makeLeafNode(NodeWithTwoChildrenTag, std::size_t permutation_index,
-             Box box) noexcept
+// ------------------------------------
+
+struct NodeWithLeftChildAndRopeTag
 {
-  return {-1, static_cast<int>(permutation_index), std::move(box)};
-} // namespace Details
+};
 
 int constexpr ROPE_SENTINEL = -1;
 
-struct NodeWithLeftChildAndRope
+struct NodeWithLeftChildAndRopeLeaf
 {
   using Tag = NodeWithLeftChildAndRopeTag;
 
   KOKKOS_DEFAULTED_FUNCTION
-  constexpr NodeWithLeftChildAndRope() = default;
+  constexpr NodeWithLeftChildAndRopeLeaf() = default;
 
-  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept
-  {
-    // Important: this check works only as long as the internal node with index
-    // 0 is at the root. If there is a need in the future, this can be changed
-    // to "< 0", but would require additional arithmetic (subtracting 1) in
-    // `getLeafPermutationIndex` and in `makeLeafNode`.
-    return left_child <= 0;
-  }
+  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept { return true; }
 
   KOKKOS_INLINE_FUNCTION constexpr std::size_t getLeafPermutationIndex() const
       noexcept
   {
-    assert(isLeaf());
-    return -left_child;
+    return permutation_index;
   }
 
-  // The meaning of the left child depends on whether the node is an internal
-  // node, or a leaf. For internal nodes, it is the child from the left
-  // subtree. For a leaf node, it is the negative of the permutation index.
-  int left_child = INT_MIN;
+  int permutation_index = -1;
 
   // An interesting property to remember: a right child is always the rope of
   // the left child.
@@ -98,12 +104,34 @@ struct NodeWithLeftChildAndRope
   Box bounding_box;
 };
 
-KOKKOS_INLINE_FUNCTION constexpr NodeWithLeftChildAndRope
+KOKKOS_INLINE_FUNCTION constexpr NodeWithLeftChildAndRopeLeaf
 makeLeafNode(NodeWithLeftChildAndRopeTag, std::size_t permutation_index,
              Box box) noexcept
 {
-  return {-static_cast<int>(permutation_index), ROPE_SENTINEL, std::move(box)};
+  return {static_cast<int>(permutation_index), ROPE_SENTINEL, std::move(box)};
 }
+
+struct NodeWithLeftChildAndRopeInternal
+{
+  using Tag = NodeWithLeftChildAndRopeTag;
+
+  KOKKOS_DEFAULTED_FUNCTION
+  constexpr NodeWithLeftChildAndRopeInternal() = default;
+
+  KOKKOS_INLINE_FUNCTION constexpr bool isLeaf() const noexcept
+  {
+    return false;
+  }
+
+  int left_child = -1;
+
+  // An interesting property to remember: a right child is always the rope of
+  // the left child.
+  int rope = ROPE_SENTINEL;
+
+  Box bounding_box;
+};
+
 } // namespace Details
 } // namespace ArborX
 

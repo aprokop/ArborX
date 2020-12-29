@@ -102,12 +102,22 @@ private:
                                       Kokkos::Experimental::HIPSpace
 #endif
                                       >{},
-                         Details::NodeWithLeftChildAndRope,
-                         Details::NodeWithTwoChildren>;
+                         Details::NodeWithLeftChildAndRopeInternal,
+                         Details::NodeWithTwoChildrenInternal>;
+  using leaf_node_type =
+      std::conditional_t<std::is_same<MemorySpace,
+#if defined(KOKKOS_ENABLE_CUDA)
+                                      Kokkos::CudaSpace
 #else
-  using internal_node_type = Details::NodeWithTwoChildren;
+                                      Kokkos::Experimental::HIPSpace
 #endif
-  using leaf_node_type = internal_node_type;
+                                      >{},
+                         Details::NodeWithLeftChildAndRopeLeaf,
+                         Details::NodeWithTwoChildrenLeaf>;
+#else
+  using internal_node_type = Details::NodeWithTwoChildrenInternal;
+  using leaf_node_type = Details::NodeWithTwoChildrenLeaf;
+#endif
 
   KOKKOS_FUNCTION
   bool isLeaf(int node_index) const
@@ -178,7 +188,6 @@ private:
     leaf_node.rope = rope_index;
   }
 
-  KOKKOS_FUNCTION
   template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION
       std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{}>
@@ -192,7 +201,6 @@ private:
     internal_node.bounding_box = box;
   }
 
-  KOKKOS_FUNCTION
   template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION std::enable_if_t<
       std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}>
