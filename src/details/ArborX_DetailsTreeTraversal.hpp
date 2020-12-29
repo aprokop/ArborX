@@ -38,7 +38,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   Callback _callback;
 
   using Access = AccessTraits<Predicates, PredicatesTag>;
-  using Node = typename BVH::node_type;
+  using Node = typename BVH::leaf_node_type;
 
   template <typename ExecutionSpace>
   TreeTraversal(ExecutionSpace const &space, BVH const &bvh,
@@ -184,7 +184,7 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
   Callback _callback;
 
   using Access = AccessTraits<Predicates, PredicatesTag>;
-  using Node = typename BVH::node_type;
+  using Node = typename BVH::leaf_node_type;
 
   using Buffer = Kokkos::View<Kokkos::pair<int, float> *, MemorySpace>;
   using Offset = Kokkos::View<int *, MemorySpace>;

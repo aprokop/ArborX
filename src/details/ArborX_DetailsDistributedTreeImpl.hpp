@@ -40,8 +40,7 @@ struct DistributedTreeNearestUtils
                              int leaf_index)
   {
     int const leaf_nodes_shift = bvh.size() - 1;
-    return bvh.getBoundingVolume(
-        bvh.getNodePtr(rev_permute(leaf_index) + leaf_nodes_shift));
+    return bvh.getBoundingVolume(rev_permute(leaf_index) + leaf_nodes_shift);
   }
 
   template <typename ExecutionSpace>

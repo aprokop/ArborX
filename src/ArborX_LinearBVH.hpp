@@ -92,19 +92,20 @@ private:
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
   // Ropes based traversal is only used for CUDA, as it was found to be slower
   // than regular one for Power9 on Summit.  It is also used with HIP.
-  using node_type = std::conditional_t<std::is_same<MemorySpace,
+  using internal_node_type =
+      std::conditional_t<std::is_same<MemorySpace,
 #if defined(KOKKOS_ENABLE_CUDA)
-                                                    Kokkos::CudaSpace
+                                      Kokkos::CudaSpace
 #else
-                                                    Kokkos::Experimental::
-                                                        HIPSpace
+                                      Kokkos::Experimental::HIPSpace
 #endif
-                                                    >{},
-                                       Details::NodeWithLeftChildAndRope,
-                                       Details::NodeWithTwoChildren>;
+                                      >{},
+                         Details::NodeWithLeftChildAndRope,
+                         Details::NodeWithTwoChildren>;
 #else
-  using node_type = Details::NodeWithTwoChildren;
+  using internal_node_type = Details::NodeWithTwoChildren;
 #endif
+  using leaf_node_type = internal_node_type;
 
   KOKKOS_FUNCTION
   bool isLeaf(int node_index) const
@@ -112,103 +113,90 @@ private:
     return (size_t)(node_index + 1) >= size();
   }
 
+  KOKKOS_FUNCTION
+  auto const &getInternalNode(int node_index) const
+  {
+    assert(!isLeaf(node_index));
+    return _internal_nodes(node_index);
+  }
+
+  KOKKOS_FUNCTION
+  auto const &getLeafNode(int node_index) const
+  {
+    assert(isLeaf(node_index));
+    return _leaf_nodes(node_index - (size() - 1));
+  }
+
   KOKKOS_FUNCTION constexpr std::size_t
   getLeafPermutationIndex(int node_index) const noexcept
   {
-    assert(isLeaf(node_index));
-    return _internal_and_leaf_nodes(node_index).getLeafPermutationIndex();
+    return getLeafNode(node_index).getLeafPermutationIndex();
   }
 
   KOKKOS_FUNCTION
   int getLeftChildIndex(int node_index) const
   {
-    assert(!isLeaf(node_index));
-    return _internal_and_leaf_nodes(node_index).left_child;
+    return getInternalNode(node_index).left_child;
   }
 
-  template <typename Tag = typename node_type::Tag>
+  template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION
       std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{},
                        int>
       getRightChildIndex(int node_index) const
   {
-    assert(!isLeaf(node_index));
-    return _internal_and_leaf_nodes(node_index).right_child;
+    return getInternalNode(node_index).right_child;
   }
 
-  template <typename Tag = typename node_type::Tag>
+  template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION std::enable_if_t<
       std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}, int>
   getRightChildIndex(int node_index) const
   {
-    assert(!isLeaf(node_index));
-    return _internal_and_leaf_nodes(getLeftChildIndex(node_index)).rope;
+    auto left_child_index = getLeftChildIndex(node_index);
+    return getRope(left_child_index);
   }
 
-  template <typename Tag = typename node_type::Tag>
+  template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION std::enable_if_t<
       std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}, int>
   getRope(int node_index) const
   {
-    return _internal_and_leaf_nodes(node_index).rope;
+    return (isLeaf(node_index) ? getLeafNode(node_index).rope
+                               : getInternalNode(node_index).rope);
   }
 
-  Kokkos::View<node_type *, MemorySpace> getInternalNodes()
+  Kokkos::View<internal_node_type *, MemorySpace> getInternalNodes()
   {
     assert(!empty());
-    return Kokkos::subview(_internal_and_leaf_nodes,
-                           std::make_pair(size_type{0}, size() - 1));
+    return _internal_nodes;
   }
 
-  Kokkos::View<node_type *, MemorySpace> getLeafNodes()
+  Kokkos::View<leaf_node_type *, MemorySpace> getLeafNodes()
   {
     assert(!empty());
-    return Kokkos::subview(_internal_and_leaf_nodes,
-                           std::make_pair(size() - 1, 2 * size() - 1));
+    return _leaf_nodes;
   }
-  Kokkos::View<node_type const *, MemorySpace> getLeafNodes() const
+  Kokkos::View<leaf_node_type const *, MemorySpace> getLeafNodes() const
   {
     assert(!empty());
-    return Kokkos::subview(_internal_and_leaf_nodes,
-                           std::make_pair(size() - 1, 2 * size() - 1));
+    return _leaf_nodes;
   }
-
-  KOKKOS_FUNCTION
-  node_type const *getRoot() const { return _internal_and_leaf_nodes.data(); }
 
   KOKKOS_FUNCTION
   int getRootIndex() const { return 0; }
 
   KOKKOS_FUNCTION
-  node_type *getRoot() { return _internal_and_leaf_nodes.data(); }
-
-  KOKKOS_FUNCTION
-  node_type const *getNodePtr(int i) const
-  {
-    return &_internal_and_leaf_nodes(i);
-  }
-
-  KOKKOS_FUNCTION
-  bounding_volume_type const &getBoundingVolume(node_type const *node) const
-  {
-    return node->bounding_box;
-  }
-
-  KOKKOS_FUNCTION
-  bounding_volume_type &getBoundingVolume(node_type *node)
-  {
-    return node->bounding_box;
-  }
-
-  KOKKOS_FUNCTION
   bounding_volume_type const &getBoundingVolume(int node_index) const
   {
-    return _internal_and_leaf_nodes(node_index).bounding_box;
+    return (isLeaf(node_index) ? getLeafNode(node_index).bounding_box
+                               : getInternalNode(node_index).bounding_box);
   }
 
   size_t _size;
   bounding_volume_type _bounds;
-  Kokkos::View<node_type *, MemorySpace> _internal_and_leaf_nodes;
+  Kokkos::View<internal_node_type *, MemorySpace> _internal_nodes;
+  Kokkos::View<leaf_node_type *, MemorySpace> _leaf_nodes;
 };
 
 template <typename DeviceType>
@@ -266,9 +254,13 @@ template <typename ExecutionSpace, typename Primitives>
 BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
     ExecutionSpace const &space, Primitives const &primitives)
     : _size(AccessTraits<Primitives, PrimitivesTag>::size(primitives))
-    , _internal_and_leaf_nodes(Kokkos::ViewAllocateWithoutInitializing(
-                                   "ArborX::BVH::internal_and_leaf_nodes"),
-                               _size > 0 ? 2 * _size - 1 : 0)
+    , _internal_nodes(Kokkos::ViewAllocateWithoutInitializing(
+                          "ArborX::BVH::internal_nodes"),
+                      _size > 0 ? _size - 1 : 0)
+
+    , _leaf_nodes(
+          Kokkos::ViewAllocateWithoutInitializing("ArborX::BVH::leaf_nodes"),
+          _size > 0 ? _size : 0)
 {
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH");
 
@@ -295,8 +287,8 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
 
   if (size() == 1)
   {
-    Details::TreeConstruction::initializeSingleLeafNode(
-        space, primitives, _internal_and_leaf_nodes);
+    Details::TreeConstruction::initializeSingleLeafNode(space, primitives,
+                                                        getLeafNodes());
     Kokkos::Profiling::popRegion();
     return;
   }
