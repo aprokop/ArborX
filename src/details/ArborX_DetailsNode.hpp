@@ -101,14 +101,14 @@ struct NodeWithLeftChildAndRopeLeaf
   // the left child.
   int rope = ROPE_SENTINEL;
 
-  Box bounding_box;
+  Point bounding_box;
 };
 
 KOKKOS_INLINE_FUNCTION constexpr NodeWithLeftChildAndRopeLeaf
 makeLeafNode(NodeWithLeftChildAndRopeTag, std::size_t permutation_index,
-             Box box) noexcept
+             Point point) noexcept
 {
-  return {static_cast<int>(permutation_index), ROPE_SENTINEL, std::move(box)};
+  return {static_cast<int>(permutation_index), ROPE_SENTINEL, std::move(point)};
 }
 
 struct NodeWithLeftChildAndRopeInternal

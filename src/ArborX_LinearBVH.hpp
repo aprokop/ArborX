@@ -179,12 +179,13 @@ private:
   template <typename Tag = typename leaf_node_type::Tag>
   KOKKOS_FUNCTION std::enable_if_t<
       std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}>
-  makeLeafNode(int i, int original_index, int rope_index, Box box) const
+  // makeLeafNode(int i, int original_index, int rope_index, Box box) const
+  makeLeafNode(int i, int original_index, int rope_index, Point point) const
   {
     assert(isLeaf(i));
     auto &leaf_node = _leaf_nodes(i - (size() - 1));
     leaf_node = Details::makeLeafNode(typename leaf_node_type::Tag{},
-                                      original_index, box);
+                                      original_index, point);
     leaf_node.rope = rope_index;
   }
 
@@ -265,15 +266,31 @@ private:
   KOKKOS_FUNCTION
   bounding_volume_type const &getBoundingVolume(int node_index) const
   {
-    return (isLeaf(node_index) ? getLeafNode(node_index).bounding_box
-                               : getInternalNode(node_index).bounding_box);
+    if (isLeaf(node_index))
+    {
+      auto &p = getLeafNode(node_index).bounding_box;
+      return {p, p};
+    }
+    else
+    {
+      return getInternalNode(node_index).bounding_box;
+    }
+  }
+
+  template <typename Predicate>
+  KOKKOS_FUNCTION bool intersects(Predicate const &predicate, int i) const
+  {
+    if (isLeaf(i))
+      return predicate(getLeafNode(i).bounding_box);
+    else
+      return predicate(getInternalNode(i).bounding_box);
   }
 
   KOKKOS_FUNCTION
   bounding_volume_type &getBoundingVolume(int node_index)
   {
-    return (isLeaf(node_index) ? getLeafNode(node_index).bounding_box
-                               : getInternalNode(node_index).bounding_box);
+    assert(!isLeaf(node_index));
+    return getInternalNode(node_index).bounding_box;
   }
 
   size_t _size;

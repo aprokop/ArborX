@@ -122,10 +122,10 @@ inline void initializeSingleLeafNode(ExecutionSpace const &space,
   Kokkos::parallel_for(
       "ArborX::TreeConstruction::initialize_single_leaf",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1), KOKKOS_LAMBDA(int) {
-        Box bbox{};
-        expand(bbox, Access::get(primitives, 0));
-        leaf_nodes(0) =
-            Details::makeLeafNode(typename Node::Tag{}, 0, std::move(bbox));
+        // Box bbox{};
+        // expand(bbox, Access::get(primitives, 0));
+        leaf_nodes(0) = Details::makeLeafNode(typename Node::Tag{}, 0,
+                                              Access::get(primitives, 0));
       });
 }
 
@@ -257,7 +257,7 @@ public:
 
     // Initialize leaf node
     _tree.makeLeafNode(i, original_index, ropeIndex(range_right, delta_right),
-                       bbox);
+                       Access::get(_primitives, original_index));
 
     // Walk toward the root and do process it even though technically its
     // bounding box has already been computed (bounding box of the scene)

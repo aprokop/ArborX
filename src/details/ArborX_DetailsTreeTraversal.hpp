@@ -150,7 +150,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     int node_index = _bvh.getRootIndex();
     do
     {
-      if (predicate(_bvh.getBoundingVolume(node_index)))
+      if (_bvh.intersects(predicate, node_index))
       {
         if (!_bvh.isLeaf(node_index))
         {
