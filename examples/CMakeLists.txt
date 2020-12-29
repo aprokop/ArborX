@@ -11,6 +11,6 @@ add_subdirectory(callback)
 
 find_package(Boost COMPONENTS program_options)
 if(Boost_FOUND)
-  add_subdirectory(viz)
+  # add_subdirectory(viz)
   add_subdirectory(dbscan)
 endif()
