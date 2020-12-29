@@ -102,8 +102,8 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     int node_index = _bvh.getRootIndex();
     do
     {
-      auto const child_left_index = _bvh.getLeftChildIndex(node_index);
-      auto const child_right_index = _bvh.getRightChildIndex(node_index);
+      auto const child_left_index = _bvh.leftChildIndex(node_index);
+      auto const child_right_index = _bvh.rightChildIndex(node_index);
 
       bool overlap_left = predicate(_bvh.getBoundingVolume(child_left_index));
       bool overlap_right = predicate(_bvh.getBoundingVolume(child_right_index));
@@ -154,7 +154,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       {
         if (!_bvh.isLeaf(node_index))
         {
-          node_index = _bvh.getLeftChildIndex(node_index);
+          node_index = _bvh.leftChildIndex(node_index);
         }
         else
         {
@@ -353,8 +353,8 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
       {
         // Insert children into the stack and make sure that the
         // closest one ends on top.
-        child_left_index = _bvh.getLeftChildIndex(node_index);
-        child_right_index = _bvh.getRightChildIndex(node_index);
+        child_left_index = _bvh.leftChildIndex(node_index);
+        child_right_index = _bvh.rightChildIndex(node_index);
 
         distance_left = distance(child_left_index);
         distance_right = distance(child_right_index);

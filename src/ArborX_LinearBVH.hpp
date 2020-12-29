@@ -84,6 +84,8 @@ private:
   template <typename BVH, typename Predicates, typename Callback,
             typename /*Enable*/>
   friend struct Details::TreeTraversal;
+  template <typename Tree, typename Primitives>
+  friend class Details::TreeConstruction::GenerateHierarchy;
   template <typename DeviceType>
   friend struct Details::TreeVisualization;
   template <typename BVH>
@@ -121,7 +123,21 @@ private:
   }
 
   KOKKOS_FUNCTION
+  auto &getInternalNode(int node_index)
+  {
+    assert(!isLeaf(node_index));
+    return _internal_nodes(node_index);
+  }
+
+  KOKKOS_FUNCTION
   auto const &getLeafNode(int node_index) const
+  {
+    assert(isLeaf(node_index));
+    return _leaf_nodes(node_index - (size() - 1));
+  }
+
+  KOKKOS_FUNCTION
+  auto &getLeafNode(int node_index)
   {
     assert(isLeaf(node_index));
     return _leaf_nodes(node_index - (size() - 1));
@@ -134,16 +150,67 @@ private:
   }
 
   KOKKOS_FUNCTION
-  int getLeftChildIndex(int node_index) const
+  int leftChildIndex(int node_index) const
   {
     return getInternalNode(node_index).left_child;
+  }
+
+  template <typename Tag = typename leaf_node_type::Tag>
+  KOKKOS_FUNCTION
+      std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{}>
+      makeLeafNode(int i, int original_index, int /*rope_index*/, Box box) const
+  {
+    assert(isLeaf(i));
+    auto &leaf_node = _leaf_nodes(i - (size() - 1));
+    leaf_node = Details::makeLeafNode(typename leaf_node_type::Tag{},
+                                      original_index, box);
+  }
+
+  template <typename Tag = typename leaf_node_type::Tag>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}>
+  makeLeafNode(int i, int original_index, int rope_index, Box box) const
+  {
+    assert(isLeaf(i));
+    auto &leaf_node = _leaf_nodes(i - (size() - 1));
+    leaf_node = Details::makeLeafNode(typename leaf_node_type::Tag{},
+                                      original_index, box);
+    leaf_node.rope = rope_index;
+  }
+
+  KOKKOS_FUNCTION
+  template <typename Tag = typename internal_node_type::Tag>
+  KOKKOS_FUNCTION
+      std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{}>
+      makeInternalNode(int i, int child_left_index, int child_right_index,
+                       int /*rope_index*/, Box box) const
+  {
+    assert(!isLeaf(i));
+    auto &internal_node = _internal_nodes(i);
+    internal_node.left_child = child_left_index;
+    internal_node.right_child = child_right_index;
+    internal_node.bounding_box = box;
+  }
+
+  KOKKOS_FUNCTION
+  template <typename Tag = typename internal_node_type::Tag>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}>
+  makeInternalNode(int i, int child_left_index, int /*child_right_index*/,
+                   int rope_index, Box box) const
+  {
+    assert(!isLeaf(i));
+    auto &internal_node = _internal_nodes(i);
+    internal_node.left_child = child_left_index;
+    internal_node.rope = rope_index;
+    internal_node.bounding_box = box;
   }
 
   template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION
       std::enable_if_t<std::is_same<Tag, Details::NodeWithTwoChildrenTag>{},
                        int>
-      getRightChildIndex(int node_index) const
+      rightChildIndex(int node_index) const
   {
     return getInternalNode(node_index).right_child;
   }
@@ -151,9 +218,9 @@ private:
   template <typename Tag = typename internal_node_type::Tag>
   KOKKOS_FUNCTION std::enable_if_t<
       std::is_same<Tag, Details::NodeWithLeftChildAndRopeTag>{}, int>
-  getRightChildIndex(int node_index) const
+  rightChildIndex(int node_index) const
   {
-    auto left_child_index = getLeftChildIndex(node_index);
+    auto left_child_index = leftChildIndex(node_index);
     return getRope(left_child_index);
   }
 
@@ -177,6 +244,7 @@ private:
     assert(!empty());
     return _leaf_nodes;
   }
+
   Kokkos::View<leaf_node_type const *, MemorySpace> getLeafNodes() const
   {
     assert(!empty());
@@ -188,6 +256,13 @@ private:
 
   KOKKOS_FUNCTION
   bounding_volume_type const &getBoundingVolume(int node_index) const
+  {
+    return (isLeaf(node_index) ? getLeafNode(node_index).bounding_box
+                               : getInternalNode(node_index).bounding_box);
+  }
+
+  KOKKOS_FUNCTION
+  bounding_volume_type &getBoundingVolume(int node_index)
   {
     return (isLeaf(node_index) ? getLeafNode(node_index).bounding_box
                                : getInternalNode(node_index).bounding_box);
@@ -312,9 +387,9 @@ BoundingVolumeHierarchy<MemorySpace, Enable>::BoundingVolumeHierarchy(
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // generate bounding volume hierarchy
+  auto &tree = *this;
   Details::TreeConstruction::generateHierarchy(
-      space, primitives, permutation_indices, morton_indices, getLeafNodes(),
-      getInternalNodes());
+      space, tree, primitives, permutation_indices, morton_indices);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::popRegion();
