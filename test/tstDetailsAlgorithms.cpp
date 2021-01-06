@@ -20,6 +20,7 @@
 using ArborX::Box;
 using ArborX::Point;
 using ArborX::Sphere;
+using ArborX::Details::AAPlane;
 
 BOOST_AUTO_TEST_CASE(distance)
 {
@@ -91,6 +92,32 @@ BOOST_AUTO_TEST_CASE(intersects)
   constexpr Sphere sphere{{{0., 0., 0.}}, 1.};
   BOOST_TEST(intersects(sphere, {{{0., 0., 0.}}, {{1., 1., 1.}}}));
   BOOST_TEST(!intersects(sphere, {{{1., 2., 3.}}, {{4., 5., 6.}}}));
+
+  // (box, half plane)
+  using HSI = ArborX::Details::HalfSpaceIntersection;
+  BOOST_TEST((intersects(box, AAPlane{0, 0.}) == HSI::BOTH));
+  BOOST_TEST((intersects(box, AAPlane{0, 0.5}) == HSI::BOTH));
+  BOOST_TEST((intersects(box, AAPlane{0, 1.}) == HSI::BOTH));
+  BOOST_TEST((intersects(box, AAPlane{0, -1.}) == HSI::RIGHT));
+  BOOST_TEST((intersects(box, AAPlane{0, 1.1}) == HSI::LEFT));
+  BOOST_TEST((intersects(box, AAPlane{1, 1.1}) == HSI::LEFT));
+  BOOST_TEST((intersects(box, AAPlane{1, 1.0}) == HSI::BOTH));
+  BOOST_TEST((intersects(box, AAPlane{2, -0.1}) == HSI::RIGHT));
+
+  // (sphere, half plane)
+  constexpr Sphere sphere1{{{1., 0., 0.}}, 1.};
+  BOOST_TEST((intersects(sphere1, AAPlane{0, 0.}) == HSI::BOTH));
+  BOOST_TEST((intersects(sphere1, AAPlane{0, 0.5}) == HSI::BOTH));
+  BOOST_TEST((intersects(sphere1, AAPlane{0, -0.1}) == HSI::RIGHT));
+  BOOST_TEST((intersects(sphere1, AAPlane{0, 2.1}) == HSI::LEFT));
+  BOOST_TEST((intersects(sphere1, AAPlane{1, 1.1}) == HSI::LEFT));
+  BOOST_TEST((intersects(sphere1, AAPlane{1, -1.1}) == HSI::RIGHT));
+  BOOST_TEST((intersects(sphere1, AAPlane{1, 0.}) == HSI::BOTH));
+  BOOST_TEST((intersects(sphere1, AAPlane{1, 1.}) == HSI::BOTH));
+  BOOST_TEST((intersects(sphere1, AAPlane{2, 1.1}) == HSI::LEFT));
+  BOOST_TEST((intersects(sphere1, AAPlane{2, -1.1}) == HSI::RIGHT));
+  BOOST_TEST((intersects(sphere1, AAPlane{2, 0.}) == HSI::BOTH));
+  BOOST_TEST((intersects(sphere1, AAPlane{2, 1.}) == HSI::BOTH));
 }
 
 BOOST_AUTO_TEST_CASE(equals)
@@ -173,4 +200,11 @@ BOOST_AUTO_TEST_CASE(is_valid)
   BOOST_TEST(!isValid(Sphere{{{0., 0., 0.}}, +infty}));
   BOOST_TEST(!isValid(Sphere{{{0., -infty, 0.}}, +1.}));
   BOOST_TEST(isValid(Sphere{}));
+
+  BOOST_TEST(isValid(AAPlane{0, 0.}));
+  BOOST_TEST(isValid(AAPlane{2, -1.}));
+  BOOST_TEST(!isValid(AAPlane{}));
+  BOOST_TEST(!isValid(AAPlane{-1, 4.}));
+  BOOST_TEST(!isValid(AAPlane{3, 2.}));
+  BOOST_TEST(!isValid(AAPlane{1, std::numeric_limits<float>::infinity()}));
 }

@@ -12,6 +12,7 @@
 #define ARBORX_DETAILS_ALGORITHMS_HPP
 
 #include <ArborX_Box.hpp>
+#include <ArborX_DetailsAAPlane.hpp>
 #include <ArborX_DetailsKokkosExt.hpp> // min, max, isFinite
 #include <ArborX_Point.hpp>
 #include <ArborX_Ray.hpp>
@@ -73,6 +74,13 @@ bool isValid(Sphere const &s)
 {
   using KokkosExt::isFinite;
   return isValid(s.centroid()) && isFinite(s.radius()) && (s.radius() >= 0.);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool isValid(Details::AAPlane const &p)
+{
+  using KokkosExt::isFinite;
+  return p.axis() >= 0 && p.axis() <= 2 && isFinite(p.location());
 }
 
 // distance point-point
@@ -169,6 +177,43 @@ KOKKOS_INLINE_FUNCTION
 bool intersects(Sphere const &sphere, Box const &box)
 {
   return distance(sphere.centroid(), box) <= sphere.radius();
+}
+
+enum class HalfSpaceIntersection
+{
+  LEFT = 0x1,
+  RIGHT = 0x2,
+  BOTH = 0x4
+};
+
+KOKKOS_INLINE_FUNCTION
+HalfSpaceIntersection intersects(Box const &box, AAPlane const &plane)
+{
+  auto const &min_corner = box.minCorner();
+  auto const &max_corner = box.maxCorner();
+  int d = plane.axis();
+  float loc = plane.location();
+
+  if (loc < min_corner[d])
+    return HalfSpaceIntersection::RIGHT;
+  else if (loc > max_corner[d])
+    return HalfSpaceIntersection::LEFT;
+  return HalfSpaceIntersection::BOTH;
+}
+
+KOKKOS_INLINE_FUNCTION
+HalfSpaceIntersection intersects(Sphere const &sphere, AAPlane const &plane)
+{
+  auto const &c = sphere.centroid();
+  float r = sphere.radius();
+  int d = plane.axis();
+  float loc = plane.location();
+
+  if (c[d] + r < loc)
+    return HalfSpaceIntersection::LEFT;
+  else if (c[d] - r > loc)
+    return HalfSpaceIntersection::RIGHT;
+  return HalfSpaceIntersection::BOTH;
 }
 
 // calculate the centroid of a box
