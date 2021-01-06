@@ -16,6 +16,7 @@
 #include <ArborX_DetailsDBSCANVerification.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_DetailsUtils.hpp>
+#include <ArborX_KDTree.hpp>
 #include <ArborX_LinearBVH.hpp>
 
 #include <chrono>
@@ -138,7 +139,8 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
   // Build the tree
   start = clock::now();
   Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
-  ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+  // ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+  ArborX::KDTree<MemorySpace> bvh(exec_space, primitives);
   Kokkos::Profiling::popRegion();
   elapsed_construction = clock::now() - start;
 
@@ -214,6 +216,7 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
   auto clusters = stat;
 
   elapsed_total += clock::now() - start_total;
+#if 0
   if (verify)
   {
     start = clock::now();
@@ -230,6 +233,7 @@ void dbscan(ExecutionSpace exec_space, Primitives const &primitives,
     Kokkos::Profiling::popRegion();
     elapsed_verify = clock::now() - start;
   }
+#endif
   start_total = clock::now();
 
   // find clusters
