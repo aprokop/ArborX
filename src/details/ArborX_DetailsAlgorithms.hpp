@@ -187,6 +187,20 @@ enum class HalfSpaceIntersection
 };
 
 KOKKOS_INLINE_FUNCTION
+bool intersects(Sphere const &sphere, Point const &point)
+{
+  return distance(sphere.centroid(), point) <= sphere.radius();
+}
+
+KOKKOS_INLINE_FUNCTION
+bool intersects(Box const &box, Point const &point)
+{
+  Box box1{};
+  expand(box1, point);
+  return intersects(box, box1);
+}
+
+KOKKOS_INLINE_FUNCTION
 HalfSpaceIntersection intersects(Box const &box, AAPlane const &plane)
 {
   auto const &min_corner = box.minCorner();

@@ -33,6 +33,18 @@ unsigned int expandBits(unsigned int v)
   return v;
 }
 
+KOKKOS_INLINE_FUNCTION
+unsigned int compactBits(unsigned int v)
+{
+  v &= 0x09249249u;
+  v = (v ^ (v >> 2)) & 0x030C30C3u;
+  v = (v ^ (v >> 4)) & 0x0300F00Fu;
+  v = (v ^ (v >> 8)) & 0xFF0000FFu;
+  v = (v ^ (v >> 16)) & 0x000003FFu;
+
+  return v;
+}
+
 // Calculates a 30-bit Morton code for the
 // given 3D point located within the unit cube [0,1].
 KOKKOS_INLINE_FUNCTION

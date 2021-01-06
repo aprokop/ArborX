@@ -57,7 +57,7 @@ struct Intersects
   }
 
   template <typename Other>
-  KOKKOS_INLINE_FUNCTION bool operator()(Other const &other) const
+  KOKKOS_INLINE_FUNCTION auto operator()(Other const &other) const
   {
     return Details::intersects(_geometry, other);
   }
