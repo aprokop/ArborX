@@ -89,11 +89,23 @@ target_compile_definitions(ArborX_LinearBVH.exe PRIVATE BOOST_TEST_DYN_LINK)
 target_include_directories(ArborX_LinearBVH.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 add_test(NAME ArborX_LinearBVH_Test COMMAND ./ArborX_LinearBVH.exe)
 
+add_executable(ArborX_KDTree.exe tstKDTree.cpp utf_main.cpp)
+target_link_libraries(ArborX_KDTree.exe PRIVATE ArborX Boost::unit_test_framework)
+target_compile_definitions(ArborX_KDTree.exe PRIVATE BOOST_TEST_DYN_LINK)
+target_include_directories(ArborX_KDTree.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME ArborX_KDTree_Test COMMAND ./ArborX_KDTree.exe)
+
 add_executable(ArborX_DetailsTreeConstruction.exe tstDetailsTreeConstruction.cpp utf_main.cpp)
 target_link_libraries(ArborX_DetailsTreeConstruction.exe PRIVATE ArborX Boost::unit_test_framework)
 target_compile_definitions(ArborX_DetailsTreeConstruction.exe PRIVATE BOOST_TEST_DYN_LINK)
 target_include_directories(ArborX_DetailsTreeConstruction.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME ArborX_DetailsTreeConstruction_Test COMMAND ./ArborX_DetailsTreeConstruction.exe)
+
+add_executable(ArborX_DetailsKDTreeConstruction.exe tstDetailsKDTreeConstruction.cpp utf_main.cpp)
+target_link_libraries(ArborX_DetailsKDTreeConstruction.exe PRIVATE ArborX Boost::unit_test_framework)
+target_compile_definitions(ArborX_DetailsKDTreeConstruction.exe PRIVATE BOOST_TEST_DYN_LINK)
+target_include_directories(ArborX_DetailsKDTreeConstruction.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME ArborX_DetailsKDTreeConstruction_Test COMMAND ./ArborX_DetailsKDTreeConstruction.exe)
 
 add_executable(ArborX_DetailsContainers.exe tstSequenceContainers.cpp tstContainerAdaptors.cpp tstHeapOperations.cpp)
 target_link_libraries(ArborX_DetailsContainers.exe PRIVATE ArborX Boost::unit_test_framework)
