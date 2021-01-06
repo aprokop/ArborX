@@ -24,6 +24,7 @@
 #include <ArborX_DetailsPermutedData.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_DetailsTreeConstruction.hpp>
+#include <ArborX_TraversalPolicy.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -54,7 +55,9 @@ public:
 
   template <typename ExecutionSpace, typename Predicates, typename Callback>
   void query(ExecutionSpace const &space, Predicates const &predicates,
-             Callback const &callback) const;
+             Callback const &callback,
+             Experimental::TraversalPolicy const &policy =
+                 Experimental::TraversalPolicy()) const;
 
 private:
   template <typename Tree, typename Predicates, typename Callback, typename Tag>
@@ -169,31 +172,40 @@ KDTree<MemorySpace>::KDTree(ExecutionSpace const &space,
 
 template <typename MemorySpace>
 template <typename ExecutionSpace, typename Predicates, typename Callback>
-void KDTree<MemorySpace>::query(ExecutionSpace const &space,
-                                Predicates const &predicates,
-                                Callback const &callback) const
+void KDTree<MemorySpace>::query(
+    ExecutionSpace const &space, Predicates const &predicates,
+    Callback const &callback, Experimental::TraversalPolicy const &policy) const
 {
   Details::check_valid_access_traits(PredicatesTag{}, predicates);
-  using Access = AccessTraits<Predicates, PredicatesTag>;
-  static_assert(KokkosExt::is_accessible_from<typename Access::memory_space,
-                                              ExecutionSpace>::value,
-                "Predicates must be accessible from the execution space");
 
-  Details::check_valid_callback(callback, predicates);
+  using Access = AccessTraits<Predicates, Traits::PredicatesTag>;
+  using Tag = typename Details::AccessTraitsHelper<Access>::tag;
 
-  Kokkos::Profiling::pushRegion("ArborX::KDTree::query");
+  auto profiling_prefix =
+      std::string("ArborX::BVH::query::") +
+      (std::is_same<Tag, Details::SpatialPredicateTag>{} ? "spatial"
+                                                         : "nearest");
 
-  Kokkos::Profiling::pushRegion("ArborX::KDTree::query::compute_permutation");
-  using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
-  auto permute =
-      Details::BatchedQueries<DeviceType>::sortQueriesAlongZOrderCurve(
-          space, bounds(), predicates);
-  Kokkos::Profiling::popRegion();
+  Kokkos::Profiling::pushRegion(profiling_prefix);
 
-  using PermutedPredicates =
-      Details::PermutedData<Predicates, decltype(permute)>;
-  Details::KDtraverse(space, *this, PermutedPredicates{predicates, permute},
-                      callback);
+  if (policy._sort_predicates)
+  {
+    Kokkos::Profiling::pushRegion(profiling_prefix + "::compute_permutation");
+    using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
+    auto permute =
+        Details::BatchedQueries<DeviceType>::sortQueriesAlongZOrderCurve(
+            space, bounds(), predicates);
+    Kokkos::Profiling::popRegion();
+
+    using PermutedPredicates =
+        Details::PermutedData<Predicates, decltype(permute)>;
+    Details::KDtraverse(space, *this, PermutedPredicates{predicates, permute},
+                        callback);
+  }
+  else
+  {
+    Details::KDtraverse(space, *this, predicates, callback);
+  }
 
   Kokkos::Profiling::popRegion();
 }
