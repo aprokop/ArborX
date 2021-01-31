@@ -176,6 +176,12 @@ void BM_construction(benchmark::State &state, Spec const &spec)
     std::chrono::duration<double> elapsed_seconds = end - start;
     state.SetIterationTime(elapsed_seconds.count());
   }
+  // In Benchmark 1.5.0, it could be rewritten as
+  //   state.counters["rate"] = benchmark::Counter(
+  //     spec.n_values, benchmark::Counter::kIsIterationInvariantRate);
+  // Benchmark 1.4 does not support kIsIterationInvariantRate, however.
+  state.counters["rate"] = benchmark::Counter(
+      spec.n_values * state.iterations(), benchmark::Counter::kIsRate);
 }
 
 template <class TreeType>
@@ -201,6 +207,8 @@ void BM_knn_search(benchmark::State &state, Spec const &spec)
     std::chrono::duration<double> elapsed_seconds = end - start;
     state.SetIterationTime(elapsed_seconds.count());
   }
+  state.counters["rate"] = benchmark::Counter(
+      spec.n_values * state.iterations(), benchmark::Counter::kIsRate);
 }
 
 template <class TreeType>
@@ -227,6 +235,8 @@ void BM_radius_search(benchmark::State &state, Spec const &spec)
     std::chrono::duration<double> elapsed_seconds = end - start;
     state.SetIterationTime(elapsed_seconds.count());
   }
+  state.counters["rate"] = benchmark::Counter(
+      spec.n_values * state.iterations(), benchmark::Counter::kIsRate);
 }
 
 class KokkosScopeGuard
