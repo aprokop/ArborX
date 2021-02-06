@@ -299,6 +299,46 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     return _bvh.getNodePtr(node->left_child)->rope;
   }
 
+  template <typename T, typename Compare = Less<T>>
+  struct StaticPriorityQueue
+  {
+    T *_c;
+    Compare _compare;
+    int _k;
+    int _size = 0;
+
+    KOKKOS_FUNCTION
+    void push(T const &key)
+    {
+      assert(_size < _k);
+      _c[_size] = key;
+      ++_size;
+      sort();
+    }
+    KOKKOS_FUNCTION int size() const { return _size; }
+    KOKKOS_FUNCTION T *data() { return _c; }
+    KOKKOS_FUNCTION
+    void popPush(T const &key)
+    {
+      _c[0] = key;
+      sort();
+    }
+
+    KOKKOS_FUNCTION T &top() { return _c[0]; }
+
+    KOKKOS_FUNCTION void sort()
+    {
+      for (int i = 0; i < _size - 1; ++i)
+      {
+        if (_compare(_c[i], _c[i + 1]))
+          break;
+        auto tmp = _c[i];
+        _c[i] = _c[i + 1];
+        _c[i + 1] = tmp;
+      }
+    }
+  };
+
   KOKKOS_FUNCTION void operator()(int queryIndex) const
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
@@ -333,15 +373,14 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         return lhs.second < rhs.second;
       }
     };
+
     // Use a priority queue for convenience to store the results and
     // preserve the heap structure internally at all time.  There is no
     // memory allocation, elements are stored in the buffer passed as an
     // argument. The farthest leaf node is on top.
     assert(k == (int)buffer.size());
-    PriorityQueue<PairIndexDistance, CompareDistance,
-                  UnmanagedStaticVector<PairIndexDistance>>
-        heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
-                                                      buffer.size()));
+    StaticPriorityQueue<PairIndexDistance, CompareDistance> heap{
+        buffer.data(), k, CompareDistance{}};
 
     Node const *stack[64];
     auto *stack_ptr = stack;
@@ -440,7 +479,7 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     // Sort the leaf nodes and output the results.
     // NOTE: Do not try this at home.  Messing with the underlying container
     // invalidates the state of the PriorityQueue.
-    sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
+    // sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
     for (decltype(heap.size()) i = 0; i < heap.size(); ++i)
     {
       int const leaf_index = (heap.data() + i)->first;
