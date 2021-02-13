@@ -13,7 +13,6 @@
 #define ARBORX_DBSCAN_HPP
 
 #include <ArborX_DetailsDBSCANCallback.hpp>
-#include <ArborX_DetailsDBSCANVerification.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_DetailsUtils.hpp>
 #include <ArborX_LinearBVH.hpp>
@@ -89,14 +88,29 @@ struct DBSCANCorePoints
   }
 };
 
+enum class Algorithm
+{
+  DBSCAN,
+  DBSCANStar
+};
+
 struct Parameters
 {
   // Print timers to standard output
   bool _print_timers = false;
 
+  // DBSCAN algorithm
+  Algorithm _dbscan_algorithm = Algorithm::DBSCAN;
+
   Parameters &setPrintTimers(bool print_timers)
   {
     _print_timers = print_timers;
+    return *this;
+  }
+
+  Parameters &setAlgorithm(Algorithm dbscan_algorithm)
+  {
+    _dbscan_algorithm = dbscan_algorithm;
     return *this;
   }
 };
@@ -158,7 +172,8 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     Kokkos::Profiling::pushRegion("ArborX::dbscan::clusters::query");
     bvh.query(
         exec_space, predicates,
-        Details::DBSCANCallback<MemorySpace, CorePoints>{labels, core_points});
+        Details::DBSCANCallback<MemorySpace, CorePoints, Details::DBSCANTag>{
+            labels, core_points});
     Kokkos::Profiling::popRegion();
   }
   else
@@ -180,9 +195,16 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     // Perform the queries and build clusters through callback
     timer_start(timer_local);
     Kokkos::Profiling::pushRegion("ArborX::dbscan::clusters:query");
-    bvh.query(exec_space, predicates,
-              Details::DBSCANCallback<MemorySpace, CorePoints>{
-                  labels, CorePoints{num_neigh, core_min_size}});
+    if (parameters._dbscan_algorithm == DBSCAN::Algorithm::DBSCAN)
+      bvh.query(
+          exec_space, predicates,
+          Details::DBSCANCallback<MemorySpace, CorePoints, Details::DBSCANTag>{
+              labels, CorePoints{num_neigh, core_min_size}});
+    if (parameters._dbscan_algorithm == DBSCAN::Algorithm::DBSCANStar)
+      bvh.query(exec_space, predicates,
+                Details::DBSCANCallback<MemorySpace, CorePoints,
+                                        Details::DBSCANStarTag>{
+                    labels, CorePoints{num_neigh, core_min_size}});
     Kokkos::Profiling::popRegion();
     elapsed["query"] = timer_seconds(timer_local);
   }

@@ -10,6 +10,7 @@
  ****************************************************************************/
 
 #include <ArborX_DBSCAN.hpp>
+#include <ArborX_DetailsDBSCANVerification.hpp>
 #include <ArborX_DetailsHeap.hpp>
 #include <ArborX_DetailsOperatorFunctionObjects.hpp> // Less
 #include <ArborX_Version.hpp>
@@ -290,6 +291,7 @@ int main(int argc, char *argv[])
   namespace bpo = boost::program_options;
 
   std::string filename;
+  std::string algorithm_str;
   bool binary;
   bool verify;
   bool print_dbscan_timers;
@@ -303,6 +305,7 @@ int main(int argc, char *argv[])
   // clang-format off
   desc.add_options()
       ( "help", "help message" )
+      ( "algorithm", bpo::value<std::string>(&algorithm_str)->default_value("dbscan"), "DBSCAN algorithm ('dbscan' or 'dbscan_star')")
       ( "filename", bpo::value<std::string>(&filename), "filename containing data" )
       ( "binary", bpo::bool_switch(&binary)->default_value(false), "binary file indicator")
       ( "max-num-points", bpo::value<int>(&max_num_points)->default_value(-1), "max number of points to read in")
@@ -324,15 +327,24 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  ARBORX_ASSERT(algorithm_str == "dbscan" || algorithm_str == "dbscan_star");
+
   // Print out the runtime parameters
   printf("eps               : %f\n", eps);
   printf("minpts            : %d\n", core_min_size);
   printf("cluster min size  : %d\n", cluster_min_size);
+  printf("algorithm         : %s\n", algorithm_str.c_cstr());
   printf("filename          : %s [%s, max_pts = %d]\n", filename.c_str(),
          (binary ? "binary" : "text"), max_num_points);
   printf("verify            : %s\n", (verify ? "true" : "false"));
   printf("print timers      : %s\n", (print_dbscan_timers ? "true" : "false"));
   printf("output centers    : %s\n", (print_sizes_centers ? "true" : "false"));
+
+  ArborX::DBSCAN::Algorithm algorithm;
+  if (algorithm_str == "dbscan")
+    algorithm = ArborX::DBSCAN::Algorithm::DBSCAN;
+  else
+    algorithm = ArborX::DBSCAN::Algorithm::DBSCANStar;
 
   // read in data
   auto const primitives = vec2view<MemorySpace>(
@@ -358,9 +370,10 @@ int main(int argc, char *argv[])
 
   timer_start(timer_total);
 
-  auto labels = ArborX::dbscan(
-      exec_space, primitives, eps, core_min_size,
-      ArborX::DBSCAN::Parameters().setPrintTimers(print_dbscan_timers));
+  auto labels = ArborX::dbscan(exec_space, primitives, eps, core_min_size,
+                               ArborX::DBSCAN::Parameters()
+                                   .setPrintTimers(print_dbscan_timers)
+                                   .setAlgorithm(algorithm));
 
   timer_start(timer);
   Kokkos::View<int *, MemorySpace> cluster_indices("Testing::cluster_indices",
@@ -376,8 +389,8 @@ int main(int argc, char *argv[])
 
   if (verify)
   {
-    auto passed = ArborX::Details::verifyDBSCAN(exec_space, primitives, eps,
-                                                core_min_size, labels);
+    auto passed = ArborX::Details::verifyDBSCAN(
+        exec_space, primitives, eps, core_min_size, algorithm, labels);
     printf("Verification %s\n", (passed ? "passed" : "failed"));
   }
 

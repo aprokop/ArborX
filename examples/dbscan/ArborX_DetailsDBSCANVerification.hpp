@@ -12,6 +12,7 @@
 #ifndef ARBORX_DETAILSDBSCANVERIFICATION_HPP
 #define ARBORX_DETAILSDBSCANVERIFICATION_HPP
 
+#include <ArborX_DBSCAN.hpp>
 #include <ArborX_DetailsUtils.hpp>
 #include <ArborX_LinearBVH.hpp>
 
@@ -31,7 +32,8 @@ template <typename ExecutionSpace, typename IndicesView, typename OffsetView,
           typename LabelsView>
 bool verifyConnectedCorePointsShareIndex(ExecutionSpace const &exec_space,
                                          IndicesView indices, OffsetView offset,
-                                         LabelsView labels, int core_min_size)
+                                         int core_min_size, DBSCAN::Algorithm,
+                                         LabelsView labels)
 {
   int n = labels.size();
 
@@ -71,9 +73,13 @@ template <typename ExecutionSpace, typename IndicesView, typename OffsetView,
           typename LabelsView>
 bool verifyBoundaryAndNoisePoints(ExecutionSpace const &exec_space,
                                   IndicesView indices, OffsetView offset,
-                                  LabelsView labels, int core_min_size)
+                                  int core_min_size,
+                                  DBSCAN::Algorithm algorithm,
+                                  LabelsView labels)
 {
   int n = labels.size();
+
+  bool boundary_points_are_noise = (algorithm == DBSCAN::Algorithm::DBSCANStar);
 
   int num_incorrect = 0;
   Kokkos::parallel_reduce(
@@ -81,44 +87,44 @@ bool verifyBoundaryAndNoisePoints(ExecutionSpace const &exec_space,
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
       KOKKOS_LAMBDA(int i, int &update) {
         bool self_is_core_point = (offset(i + 1) - offset(i) >= core_min_size);
-        if (!self_is_core_point)
-        {
-          bool is_boundary = false;
-          bool have_shared_core = false;
-          for (int jj = offset(i); jj < offset(i + 1); ++jj)
-          {
-            int j = indices(jj);
-            bool neigh_is_core_point =
-                (offset(j + 1) - offset(j) >= core_min_size);
+        if (self_is_core_point)
+          return;
 
-            if (neigh_is_core_point)
+        bool is_boundary = false;
+        bool have_shared_core = false;
+        for (int jj = offset(i); jj < offset(i + 1); ++jj)
+        {
+          int j = indices(jj);
+          bool neigh_is_core_point =
+              (offset(j + 1) - offset(j) >= core_min_size);
+
+          if (neigh_is_core_point)
+          {
+            is_boundary = true;
+            if (labels(i) == labels(j))
             {
-              is_boundary = true;
-              if (labels(i) == labels(j))
-              {
-                have_shared_core = true;
-                break;
-              }
+              have_shared_core = true;
+              break;
             }
           }
+        }
 
-          // Boundary point must be connected to a core point
-          if (is_boundary && !have_shared_core)
-          {
+        // Boundary point must be connected to a core point
+        if (is_boundary && !boundary_points_are_noise && !have_shared_core)
+        {
 #ifndef __SYCL_DEVICE_ONLY__
-            printf("Boundary point does not belong to a cluster: %d [%d]\n", i,
-                   labels(i));
+          printf("Boundary point does not belong to a cluster: %d [%d]\n", i,
+                 labels(i));
 #endif
-            update++;
-          }
-          // Noise points must have index -1
-          if (!is_boundary && labels(i) != -1)
-          {
+          update++;
+        }
+        // Noise points must have index -1
+        if ((!is_boundary || boundary_points_are_noise) && labels(i) != -1)
+        {
 #ifndef __SYCL_DEVICE_ONLY__
-            printf("Noise point does have index -1: %d [%d]\n", i, labels(i));
+          printf("Noise point does have index -1: %d [%d]\n", i, labels(i));
 #endif
-            update++;
-          }
+          update++;
         }
       },
       num_incorrect);
@@ -130,7 +136,8 @@ template <typename ExecutionSpace, typename IndicesView, typename OffsetView,
           typename LabelsView>
 bool verifyClustersAreUnique(ExecutionSpace const &exec_space,
                              IndicesView indices, OffsetView offset,
-                             LabelsView labels, int core_min_size)
+                             int core_min_size, DBSCAN::Algorithm,
+                             LabelsView labels)
 {
   int n = labels.size();
 
@@ -231,21 +238,22 @@ bool verifyClustersAreUnique(ExecutionSpace const &exec_space,
 template <typename ExecutionSpace, typename IndicesView, typename OffsetView,
           typename LabelsView>
 bool verifyClusters(ExecutionSpace const &exec_space, IndicesView indices,
-                    OffsetView offset, LabelsView labels, int core_min_size)
+                    OffsetView offset, int core_min_size,
+                    DBSCAN::Algorithm algorithm, LabelsView labels)
 {
   int n = labels.size();
   if ((int)offset.size() != n + 1 ||
       ArborX::lastElement(offset) != (int)indices.size())
     return false;
 
-  using Verify = bool (*)(ExecutionSpace const &, IndicesView, OffsetView,
-                          LabelsView, int);
+  using Verify = bool (*)(ExecutionSpace const &, IndicesView, OffsetView, int,
+                          DBSCAN::Algorithm, LabelsView);
 
   for (auto verify : {static_cast<Verify>(verifyConnectedCorePointsShareIndex),
                       static_cast<Verify>(verifyBoundaryAndNoisePoints),
                       static_cast<Verify>(verifyClustersAreUnique)})
   {
-    if (!verify(exec_space, indices, offset, labels, core_min_size))
+    if (!verify(exec_space, indices, offset, core_min_size, algorithm, labels))
       return false;
   }
 
@@ -254,7 +262,8 @@ bool verifyClusters(ExecutionSpace const &exec_space, IndicesView indices,
 
 template <typename ExecutionSpace, typename Primitives, typename LabelsView>
 bool verifyDBSCAN(ExecutionSpace exec_space, Primitives const &primitives,
-                  float eps, int core_min_size, LabelsView const &labels)
+                  float eps, int core_min_size, DBSCAN::Algorithm algorithm,
+                  LabelsView const &labels)
 {
   Kokkos::Profiling::pushRegion("ArborX::DBSCAN::verify");
 
@@ -277,8 +286,8 @@ bool verifyDBSCAN(ExecutionSpace exec_space, Primitives const &primitives,
   Kokkos::View<int *, MemorySpace> offset("ArborX::DBSCAN::offset", 0);
   ArborX::query(bvh, exec_space, predicates, indices, offset);
 
-  auto passed = Details::verifyClusters(exec_space, indices, offset, labels,
-                                        core_min_size);
+  auto passed = Details::verifyClusters(exec_space, indices, offset,
+                                        core_min_size, algorithm, labels);
   Kokkos::Profiling::popRegion();
 
   return passed;

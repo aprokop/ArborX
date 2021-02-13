@@ -74,7 +74,14 @@ namespace ArborX
 namespace Details
 {
 
-template <typename MemorySpace, typename CorePointsType>
+struct DBSCANTag
+{
+};
+struct DBSCANStarTag
+{
+};
+
+template <typename MemorySpace, typename CorePointsType, typename Tag>
 struct DBSCANCallback
 {
   Kokkos::View<int *, MemorySpace> labels_;
@@ -181,6 +188,27 @@ struct DBSCANCallback
 
   template <typename Query>
   KOKKOS_FUNCTION void operator()(Query const &query, int j) const
+  {
+    (*this)(Tag{}, query, j);
+  }
+
+  template <typename Query>
+  KOKKOS_FUNCTION void operator()(DBSCANStarTag, Query const &query,
+                                  int j) const
+  {
+    int const i = ArborX::getData(query);
+
+    if (!is_core_point_(i) || !is_core_point_(j))
+      return;
+
+    // For a core point that is connected to another core point, do the
+    // standard CCS algorithm
+    if (i > j)
+      combine_trees(i, j);
+  }
+
+  template <typename Query>
+  KOKKOS_FUNCTION void operator()(DBSCANTag, Query const &query, int j) const
   {
     int const i = ArborX::getData(query);
 
