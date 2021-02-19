@@ -20,9 +20,8 @@
 
 #include <fstream>
 
-std::vector<ArborX::Point> parsePoints(std::string const &filename,
-                                       bool binary = false,
-                                       int max_num_points = -1)
+std::vector<ArborX::Point> loadData(std::string const &filename,
+                                    bool binary = true)
 {
   std::cout << "Reading in \"" << filename << "\" in "
             << (binary ? "binary" : "text") << " mode...";
@@ -35,51 +34,34 @@ std::vector<ArborX::Point> parsePoints(std::string const &filename,
     input.open(filename, std::ifstream::binary);
   ARBORX_ASSERT(input.good());
 
+  std::vector<ArborX::Point> v;
+
   int num_points = 0;
-  std::vector<float> x;
-  std::vector<float> y;
-  std::vector<float> z;
   if (!binary)
   {
     input >> num_points;
 
-    x.reserve(num_points);
-    y.reserve(num_points);
-    z.reserve(num_points);
+    v.reserve(num_points);
 
-    auto read_float = [&input]() {
-      return *(std::istream_iterator<float>(input));
+    auto read_point = [&input]() {
+      auto it = std::istream_iterator<float>(input);
+      auto x = *it++;
+      auto y = *it++;
+      auto z = *it;
+      return ArborX::Point{x, y, z};
     };
-    std::generate_n(std::back_inserter(x), num_points, read_float);
-    std::generate_n(std::back_inserter(y), num_points, read_float);
-    std::generate_n(std::back_inserter(z), num_points, read_float);
+    std::generate_n(std::back_inserter(v), num_points, read_point);
   }
   else
   {
     input.read(reinterpret_cast<char *>(&num_points), sizeof(int));
 
-    x.resize(num_points);
-    y.resize(num_points);
-    z.resize(num_points);
-    input.read(reinterpret_cast<char *>(x.data()), num_points * sizeof(float));
-    input.read(reinterpret_cast<char *>(y.data()), num_points * sizeof(float));
-    input.read(reinterpret_cast<char *>(z.data()), num_points * sizeof(float));
+    v.resize(num_points);
+    input.read(reinterpret_cast<char *>(v.data()),
+               num_points * sizeof(ArborX::Point));
   }
   input.close();
-  if (max_num_points != -1)
-  {
-    num_points = std::min(num_points, max_num_points);
-    x.resize(num_points);
-    y.resize(num_points);
-    z.resize(num_points);
-  }
   std::cout << "done\nRead in " << num_points << " points" << std::endl;
-
-  std::vector<ArborX::Point> v(num_points);
-  for (int i = 0; i < num_points; i++)
-  {
-    v[i] = {x[i], y[i], z[i]};
-  }
 
   return v;
 }
@@ -297,7 +279,6 @@ int main(int argc, char *argv[])
   float eps;
   int cluster_min_size;
   int core_min_size;
-  int max_num_points;
 
   bpo::options_description desc("Allowed options");
   // clang-format off
@@ -305,7 +286,6 @@ int main(int argc, char *argv[])
       ( "help", "help message" )
       ( "filename", bpo::value<std::string>(&filename), "filename containing data" )
       ( "binary", bpo::bool_switch(&binary)->default_value(false), "binary file indicator")
-      ( "max-num-points", bpo::value<int>(&max_num_points)->default_value(-1), "max number of points to read in")
       ( "eps", bpo::value<float>(&eps), "DBSCAN eps" )
       ( "cluster-min-size", bpo::value<int>(&cluster_min_size)->default_value(2), "minimum cluster size")
       ( "core-min-size", bpo::value<int>(&core_min_size)->default_value(2), "DBSCAN min_pts")
@@ -328,15 +308,15 @@ int main(int argc, char *argv[])
   printf("eps               : %f\n", eps);
   printf("minpts            : %d\n", core_min_size);
   printf("cluster min size  : %d\n", cluster_min_size);
-  printf("filename          : %s [%s, max_pts = %d]\n", filename.c_str(),
-         (binary ? "binary" : "text"), max_num_points);
+  printf("filename          : %s [%s]\n", filename.c_str(),
+         (binary ? "binary" : "text"));
   printf("verify            : %s\n", (verify ? "true" : "false"));
   printf("print timers      : %s\n", (print_dbscan_timers ? "true" : "false"));
   printf("output centers    : %s\n", (print_sizes_centers ? "true" : "false"));
 
   // read in data
-  auto const primitives = vec2view<MemorySpace>(
-      parsePoints(filename, binary, max_num_points), "primitives");
+  auto const primitives =
+      vec2view<MemorySpace>(loadData(filename, binary), "primitives");
 
   ExecutionSpace exec_space;
 
