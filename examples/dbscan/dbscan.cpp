@@ -279,6 +279,7 @@ int main(int argc, char *argv[])
   float eps;
   int cluster_min_size;
   int core_min_size;
+  int num_samples;
 
   bpo::options_description desc("Allowed options");
   // clang-format off
@@ -290,6 +291,7 @@ int main(int argc, char *argv[])
       ( "cluster-min-size", bpo::value<int>(&cluster_min_size)->default_value(2), "minimum cluster size")
       ( "core-min-size", bpo::value<int>(&core_min_size)->default_value(2), "DBSCAN min_pts")
       ( "verify", bpo::bool_switch(&verify)->default_value(false), "verify connected components")
+      ( "samples", bpo::value<int>(&num_samples)->default_value(-1), "number of samples" )
       ( "print-dbscan-timers", bpo::bool_switch(&print_dbscan_timers)->default_value(false), "print dbscan timers")
       ( "output-sizes-and-centers", bpo::bool_switch(&print_sizes_centers)->default_value(false), "print cluster sizes and centers")
       ;
@@ -308,6 +310,7 @@ int main(int argc, char *argv[])
   printf("eps               : %f\n", eps);
   printf("minpts            : %d\n", core_min_size);
   printf("cluster min size  : %d\n", cluster_min_size);
+  printf("samples           : %d\n", num_samples);
   printf("filename          : %s [%s]\n", filename.c_str(),
          (binary ? "binary" : "text"));
   printf("verify            : %s\n", (verify ? "true" : "false"));
@@ -315,8 +318,24 @@ int main(int argc, char *argv[])
   printf("output centers    : %s\n", (print_sizes_centers ? "true" : "false"));
 
   // read in data
-  auto const primitives =
-      vec2view<MemorySpace>(loadData(filename, binary), "primitives");
+  std::vector<ArborX::Point> data = loadData(filename, binary);
+  if (num_samples > 0 && num_samples < (int)data.size())
+  {
+    std::vector<ArborX::Point> sampled_data(num_samples);
+
+    // Knuth algorithm
+    auto const N = (int)data.size();
+    auto const M = num_samples;
+    for (int in = 0, im = 0; in < N && im < M; ++in)
+    {
+      int rn = N - in;
+      int rm = M - im;
+      if (rand() % rn < rm)
+        sampled_data[im++] = data[in + 1];
+    }
+    data = sampled_data;
+  }
+  auto const primitives = vec2view<MemorySpace>(data, "primitives");
 
   ExecutionSpace exec_space;
 
