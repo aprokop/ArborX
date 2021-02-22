@@ -62,6 +62,13 @@ std::vector<Point> loadHACCData(std::string const &filename)
   return v;
 }
 
+// The data can be found at
+// https://catalog.data.gov/dataset/next-generation-simulation-ngsim-vehicle-trajectories-and-supporting-data
+// resp.
+// https://data.transportation.gov/api/views/8ect-6jqj/rows.csv?accessType=DOWNLOAD
+// The code here is different from the one in the Mustafa2019 code since they
+// seem to have a filtered file that only contains the global coordinates and
+// not all the other data fields.
 std::vector<Point> loadNGSIMData(std::string const &filename)
 {
   std::cout << "Assuming NGSIM data.\n";
@@ -104,6 +111,10 @@ std::vector<Point> loadNGSIMData(std::string const &filename)
   return v;
 }
 
+// The data can be found at
+// https://archive.ics.uci.edu/ml/datasets/Taxi+Service+Trajectory+-+Prediction+Challenge,+ECML+PKDD+2015
+// resp.
+// https://archive.ics.uci.edu/ml/machine-learning-databases/00339/train.csv.zip
 std::vector<Point> loadTaxiPortoData(std::string const &filename)
 {
   std::cout << "Assuming TaxiPorto data.\n";
@@ -134,7 +145,6 @@ std::vector<Point> loadTaxiPortoData(std::string const &filename)
   float thisWord;
   while (fgets(line, sizeof(line), fp_data))
   {
-    // std::cout << line << std::endl;
     if (lineNo > -1)
     {
       char *pch;
@@ -205,6 +215,10 @@ std::vector<Point> loadTaxiPortoData(std::string const &filename)
   return v;
 }
 
+// The data can be found at
+// https://archive.ics.uci.edu/ml/datasets/3D+Road+Network+(North+Jutland,+Denmark)
+// resp.
+// https://archive.ics.uci.edu/ml/machine-learning-databases/00246/3D_spatial_network.txt
 std::vector<Point> load3DRoadNetworkData(std::string const &filename)
 {
   std::cout << "Assuming 3DRoadNetwork data.\n";
@@ -228,7 +242,8 @@ std::vector<Point> load3DRoadNetworkData(std::string const &filename)
     float latitude = stof(thisWord);
     v.emplace_back(longitude, latitude, 0.f);
   }
-  // really?????
+  // In Mustafa2019 they discarded the last item read but it's not quite clear
+  // if/why this was necessary.
   // lon_ptr.pop_back();
   // lat_ptr.pop_back();
   std::cout << "done\nRead in " << v.size() << " points" << std::endl;
