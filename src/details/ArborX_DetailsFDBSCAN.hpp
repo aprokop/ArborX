@@ -46,6 +46,7 @@ struct CountUpToN
 template <typename MemorySpace, typename CorePointsType>
 struct FDBSCANCallback
 {
+  using TreeTraversalControl = ::ArborX::Experimental::TreeTraversalQuick;
   UnionFind<MemorySpace> union_find_;
   CorePointsType is_core_point_;
 
@@ -59,17 +60,18 @@ struct FDBSCANCallback
   template <typename Query>
   KOKKOS_FUNCTION void operator()(Query const &query, int j) const
   {
-    int const i = ArborX::getData(query);
-
-    // NOTE: for halo finder/ccs algorithm (in which is_core_point(i) is always
-    // true), the algorithm below will be simplified to
-    //   if (i > j)
+    int i = ArborX::getData(query);
 
     if (!is_core_point_(j))
     {
-      // The neighbor is not a core point, do nothing
-      return;
+      if (!is_core_point_(i))
+        return;
+      int t = j;
+      j = i;
+      i = t;
     }
+
+    // j is now guaranteed to be a core point
 
     bool is_border_point =
         !is_core_point_(i); // is_core_point_(j) is aready true
@@ -87,7 +89,7 @@ struct FDBSCANCallback
       // be combined with a different cluster later forming a bridge.
       union_find_.merge_into(i, j);
     }
-    else if (!is_border_point && i > j)
+    else if (!is_border_point)
     {
       // For a core point that is connected to another core point, do the
       // standard CCS algorithm
