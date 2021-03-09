@@ -23,8 +23,6 @@
 #include <ArborX_Exception.hpp>
 #include <ArborX_Predicates.hpp>
 
-#include <type_traits>
-
 namespace ArborX
 {
 namespace Details
@@ -107,31 +105,46 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     Node const *node = HappyTreeFriends::getRoot(_bvh);
     do
     {
+      int left_child_index = node->left_child;
+      int right_child_index = node->right_child;
+
       Node const *child_left =
-          HappyTreeFriends::getNodePtr(_bvh, node->left_child);
+          HappyTreeFriends::getNodePtr(_bvh, left_child_index);
       Node const *child_right =
-          HappyTreeFriends::getNodePtr(_bvh, node->right_child);
+          HappyTreeFriends::getNodePtr(_bvh, right_child_index);
+
+      bool left_child_is_leaf = child_left->isLeaf();
+      bool right_child_is_leaf = child_right->isLeaf();
+
+      bool prune_left =
+          (left_child_is_leaf && pruneLeaf(queryIndex, left_child_index)) ||
+          (!left_child_is_leaf &&
+           pruneLeftSubtree(queryIndex, left_child_index));
+      bool prune_right =
+          (right_child_is_leaf && pruneLeaf(queryIndex, right_child_index));
 
       bool overlap_left =
+          !prune_left &&
           predicate(HappyTreeFriends::getBoundingVolume(_bvh, child_left));
       bool overlap_right =
+          !prune_right &&
           predicate(HappyTreeFriends::getBoundingVolume(_bvh, child_right));
 
-      if (overlap_left && child_left->isLeaf())
+      if (overlap_left && left_child_is_leaf)
       {
         if (invoke_callback_and_check_early_exit(
                 _callback, predicate, child_left->getLeafPermutationIndex()))
           return;
       }
-      if (overlap_right && child_right->isLeaf())
+      if (overlap_right && right_child_is_leaf)
       {
         if (invoke_callback_and_check_early_exit(
                 _callback, predicate, child_right->getLeafPermutationIndex()))
           return;
       }
 
-      bool traverse_left = (overlap_left && !child_left->isLeaf());
-      bool traverse_right = (overlap_right && !child_right->isLeaf());
+      bool traverse_left = (overlap_left && !left_child_is_leaf);
+      bool traverse_right = (overlap_right && !right_child_is_leaf);
 
       if (!traverse_left && !traverse_right)
       {
@@ -171,8 +184,9 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
           }
           else
           {
-            Node const *left_child_node = _bvh.getNodePtr(left_child_index);
-            int const right_child_index = left_child_node->rope;
+            Node const *child_left =
+                HappyTreeFriends::getNodePtr(_bvh, node->left_child);
+            int const right_child_index = child_left->rope;
             next = right_child_index;
           }
         }
