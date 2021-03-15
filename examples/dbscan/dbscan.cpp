@@ -13,6 +13,7 @@
 #include <ArborX_DBSCANVerification.hpp>
 #include <ArborX_DetailsHeap.hpp>
 #include <ArborX_DetailsOperatorFunctionObjects.hpp> // Less
+#include <ArborX_HDBSCAN.hpp>
 #include <ArborX_Version.hpp>
 
 #include <Kokkos_Core.hpp>
@@ -310,6 +311,7 @@ int main(int argc, char *argv[])
   namespace bpo = boost::program_options;
 
   std::string filename;
+  std::string algorithm;
   bool binary;
   bool verify;
   bool print_dbscan_timers;
@@ -325,6 +327,7 @@ int main(int argc, char *argv[])
   // clang-format off
   desc.add_options()
       ( "help", "help message" )
+      ( "algorithm", bpo::value<std::string>(&algorithm)->default_value("hdbscan"), "algorithm (dbscan | hdbscan)" )
       ( "filename", bpo::value<std::string>(&filename), "filename containing data" )
       ( "binary", bpo::bool_switch(&binary)->default_value(false), "binary file indicator")
       ( "max-num-points", bpo::value<int>(&max_num_points)->default_value(-1), "max number of points to read in")
@@ -386,9 +389,15 @@ int main(int argc, char *argv[])
 
   timer_start(timer_total);
 
-  auto labels = ArborX::dbscan(
-      exec_space, primitives, eps, core_min_size,
-      ArborX::DBSCAN::Parameters().setPrintTimers(print_dbscan_timers));
+  Kokkos::View<int *, MemorySpace> labels("Testing::labels", 0);
+  if (algorithm == "dbscan")
+    labels = ArborX::dbscan(
+        exec_space, primitives, eps, core_min_size,
+        ArborX::DBSCAN::Parameters().setPrintTimers(print_dbscan_timers));
+  else
+    labels = ArborX::hdbscan(
+        exec_space, primitives, core_min_size,
+        ArborX::HDBSCAN::Parameters().setPrintTimers(print_dbscan_timers));
 
   timer_start(timer);
   Kokkos::View<int *, MemorySpace> cluster_indices("Testing::cluster_indices",
