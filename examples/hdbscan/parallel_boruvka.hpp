@@ -24,8 +24,6 @@ class parallelBoruvka_t
 
   // vertex-wise variables
   std::vector<int> m_C; // my component
-  std::vector<int> m_nextEdge;
-  std::vector<double> m_nextEdgeLen; // for each vertex
 
   // component wise variables
   std::vector<int> m_xC;    // next component
@@ -45,9 +43,11 @@ public:
   parallelBoruvka_t(const std::vector<std::vector<double>> &points);
   int numComponents() { return m_numComponents; }
   // void updateComponent(std::vector<edge_t> &candidateEdges);
-  void computeCandidateEdges();
-  void updateComponents();
-  void updateMST();
+  void computeCandidateEdges(std::vector<int> &nextEdge,
+                             std::vector<double> &nextEdgeLen);
+  void updateComponents(std::vector<int> &nextEdge,
+                        std::vector<double> &nextEdgeLen);
+  void updateMST(std::vector<int> &nextEdge);
 
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
