@@ -26,7 +26,6 @@ class parallelBoruvka_t
   std::vector<int> m_C; // my component
 
   // component wise variables
-  std::vector<int> m_xC;    // next component
   std::vector<int> m_listC; // list of components
 
   // std::vector<int> m_edgeIdx;          // next component
@@ -45,9 +44,9 @@ public:
   // void updateComponent(std::vector<edge_t> &candidateEdges);
   void computeCandidateEdges(std::vector<int> &nextEdge,
                              std::vector<double> &nextEdgeLen);
-  void updateComponents(std::vector<int> &nextEdge,
+  void updateComponents(std::vector<int> &xC, std::vector<int> &nextEdge,
                         std::vector<double> &nextEdgeLen);
-  void updateMST(std::vector<int> &nextEdge);
+  void updateMST(std::vector<int> &xC, std::vector<int> &nextEdge);
 
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
