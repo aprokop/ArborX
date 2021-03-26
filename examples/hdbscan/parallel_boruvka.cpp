@@ -3,6 +3,8 @@
 #include <iostream>
 #include <utility> // pair
 
+#include "utility.hpp"
+
 parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     : m_points(points)
 {
@@ -155,42 +157,16 @@ void parallelBoruvka_t::updateComponents()
   std::cout << "\n";
 }
 
-double distanceSquared(Point const &p1, Point const &p2)
-{
-  // FIXME
-  int const dim = p1.size();
-
-  double dist = 0.0;
-  for (int d = 0; d < dim; d++)
-    dist += (p1[d] - p2[d]) * (p1[d] - p2[d]);
-
-  return dist;
-}
-
-void parallelBoruvka_t::computeNextNeighbour(int pt)
-{
-  // m_nextEdge[pt] = ?;
-  // m_nextEdgeLen[pt] = ?;
-
-  m_nextEdgeLen[pt] = INFTY;
-  // linear search
-  for (int i = 0; i < m_npts; i++)
-  {
-    if (m_C[i] != m_C[pt] &&
-        distanceSquared(m_points[pt], m_points[i]) < m_nextEdgeLen[pt])
-    {
-      m_nextEdgeLen[pt] = distanceSquared(m_points[pt], m_points[i]);
-      m_nextEdge[pt] = i;
-    }
-  }
-}
-
 void parallelBoruvka_t::computeCandidateEdges()
 {
   // find potential new edges
   for (int pt = 0; pt < m_npts; pt++)
     if (m_C[m_nextEdge[pt]] == m_C[pt])
-      computeNextNeighbour(pt);
+    {
+      auto r = findClosestPointWithDifferentLabel(m_points, m_C, pt);
+      m_nextEdge[pt] = r.first;
+      m_nextEdgeLen[pt] = r.second;
+    }
 
   for (int cc = 0; cc < m_numComponents; cc++)
   {

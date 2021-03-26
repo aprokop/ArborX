@@ -4,10 +4,10 @@
 #include <limits>
 #include <vector>
 
+#include "point.hpp"
+
 typedef std::pair<int, int> edge_t;
 typedef std::pair<edge_t, double> wtEdge_t;
-
-using Point = std::vector<double>;
 
 const double INFTY = std::numeric_limits<double>::infinity();
 
@@ -47,8 +47,6 @@ public:
   // void updateComponent(std::vector<edge_t> &candidateEdges);
   void computeCandidateEdges();
   void updateComponents();
-  void computeNextNeighbour(
-      int pt); // finds nearest point to pt, not in this component
   void updateMST();
 
   void writeMST(std::ofstream &ofileName);
