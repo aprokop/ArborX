@@ -42,7 +42,8 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   std::iota(nextEdge.begin(), nextEdge.end(), 0);
   while (m_numComponents > 1)
   {
-    computeCandidateEdges(nextEdge, nextEdgeLen);
+    updateCandidateEdges(nextEdge, nextEdgeLen);
+    determineComponentEdges(nextEdge, nextEdgeLen);
     updateComponents(xC, nextEdge, nextEdgeLen);
   }
 }
@@ -147,12 +148,12 @@ void parallelBoruvka_t::updateComponents(std::vector<int> &xC,
   std::cout << "\n";
 }
 
-void parallelBoruvka_t::computeCandidateEdges(std::vector<int> &nextEdge,
-                                              std::vector<double> &nextEdgeLen)
+void parallelBoruvka_t::updateCandidateEdges(std::vector<int> &nextEdge,
+                                             std::vector<double> &nextEdgeLen)
 {
   auto const num_points = m_points.size();
 
-  // find potential new edges
+  // find and store potential new edges
   for (int pt = 0; pt < num_points; pt++)
     if (m_C[nextEdge[pt]] == m_C[pt])
     {
@@ -160,11 +161,15 @@ void parallelBoruvka_t::computeCandidateEdges(std::vector<int> &nextEdge,
       nextEdge[pt] = r.first;
       nextEdgeLen[pt] = r.second;
     }
+}
+
+void parallelBoruvka_t::determineComponentEdges(
+    std::vector<int> &nextEdge, std::vector<double> &nextEdgeLen)
+{
+  auto const num_points = m_points.size();
 
   for (int cc = 0; cc < m_numComponents; cc++)
-  {
     m_componentEdgeLen[m_listC[cc]] = INFTY;
-  }
 
   // for each component find the edge with minimum edge len
   for (int pt = 0; pt < num_points; pt++)
