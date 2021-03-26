@@ -1,9 +1,9 @@
 #include "parallel_boruvka.hpp"
 
 #include <iostream>
+#include <utility> // pair
 
-parallelBoruvka_t::parallelBoruvka_t(
-    const std::vector<std::vector<double>> &points)
+parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     : m_points(points)
 {
   // initialization
@@ -155,16 +155,16 @@ void parallelBoruvka_t::updateComponents()
   std::cout << "\n";
 }
 
-double parallelBoruvka_t::distSqEuclidean(int v1, int v2)
+double distanceSquared(Point const &p1, Point const &p2)
 {
-  double out = 0;
-  int dim = m_points[0].size();
-  for (int i = 0; i < dim; i++)
-  {
-    double diff = (m_points[v1][i] - m_points[v2][i]);
-    out += diff * diff;
-  }
-  return out;
+  // FIXME
+  int const dim = p1.size();
+
+  double dist = 0.0;
+  for (int d = 0; d < dim; d++)
+    dist += (p1[d] - p2[d]) * (p1[d] - p2[d]);
+
+  return dist;
 }
 
 void parallelBoruvka_t::computeNextNeighbour(int pt)
@@ -176,9 +176,10 @@ void parallelBoruvka_t::computeNextNeighbour(int pt)
   // linear search
   for (int i = 0; i < m_npts; i++)
   {
-    if (m_C[i] != m_C[pt] && distSqEuclidean(pt, i) < m_nextEdgeLen[pt])
+    if (m_C[i] != m_C[pt] &&
+        distanceSquared(m_points[pt], m_points[i]) < m_nextEdgeLen[pt])
     {
-      m_nextEdgeLen[pt] = distSqEuclidean(pt, i);
+      m_nextEdgeLen[pt] = distanceSquared(m_points[pt], m_points[i]);
       m_nextEdge[pt] = i;
     }
   }
@@ -220,7 +221,8 @@ std::vector<wtEdge_t> parallelBoruvka_t::weightedMST()
   std::vector<wtEdge_t> wtmst;
   for (auto edge : m_MST)
   {
-    wtEdge_t wte(edge, distSqEuclidean(edge.first, edge.second));
+    wtEdge_t wte(edge,
+                 distanceSquared(m_points[edge.first], m_points[edge.second]));
     wtmst.push_back(wte);
   }
   return wtmst;

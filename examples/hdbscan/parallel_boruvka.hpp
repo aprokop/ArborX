@@ -7,14 +7,17 @@
 typedef std::pair<int, int> edge_t;
 typedef std::pair<edge_t, double> wtEdge_t;
 
+using Point = std::vector<double>;
+
 const double INFTY = std::numeric_limits<double>::infinity();
 
 class parallelBoruvka_t
 {
   int m_npts;
   int m_numComponents;
+
   // input
-  const std::vector<std::vector<double>> &m_points; // list of points
+  const std::vector<Point> &m_points; // list of points
 
   // output
   std::vector<edge_t> m_MST;
@@ -47,7 +50,6 @@ public:
   void computeNextNeighbour(
       int pt); // finds nearest point to pt, not in this component
   void updateMST();
-  double distSqEuclidean(int v1, int v2);
 
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
