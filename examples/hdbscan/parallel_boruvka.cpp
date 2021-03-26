@@ -8,23 +8,24 @@
 parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     : m_points(points)
 {
+  auto const num_points = points.size();
+
   // initialization
-  m_npts = points.size();
-  m_numComponents = m_npts; // number of components;
-  m_C.resize(m_npts);
-  m_listC.resize(m_npts);
-  m_MST.resize(m_npts - 1);
-  m_pfxsum.resize(m_npts + 1);
+  m_numComponents = num_points; // number of components;
+  m_C.resize(num_points);
+  m_listC.resize(num_points);
+  m_MST.resize(num_points - 1);
+  m_pfxsum.resize(num_points + 1);
 
   m_componentEdgeLen.resize(
-      m_npts); // edgeLength of candidate edge of the component
+      num_points); // edgeLength of candidate edge of the component
   m_componentEdgeSrc.resize(
-      m_npts); // starting vertex of component's candidate edge
+      num_points); // starting vertex of component's candidate edge
 
-  m_parent.resize(m_npts);
+  m_parent.resize(num_points);
 
   // initialization
-  for (int i = 0; i < m_npts; i++)
+  for (int i = 0; i < num_points; i++)
   {
     m_C[i] = i;     // component of vertex i
     m_listC[i] = i; // list of components
@@ -33,9 +34,9 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     // m_parent[i] =i;
   }
 
-  std::vector<int> xC(m_npts); // next component
-  std::vector<int> nextEdge(m_npts);
-  std::vector<double> nextEdgeLen(m_npts);
+  std::vector<int> xC(num_points); // next component
+  std::vector<int> nextEdge(num_points);
+  std::vector<double> nextEdgeLen(num_points);
 
   std::iota(xC.begin(), xC.end(), 0);
   std::iota(nextEdge.begin(), nextEdge.end(), 0);
@@ -46,27 +47,12 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   }
 }
 
-void prefixSumExclusive(int n, int *A)
-{
-  // int tmp = A[0];
-  // A[0] =0;
-  for (int i = 1; i < n; i++)
-  {
-    A[i] = A[i] + A[i - 1];
-  }
-
-  // shift right
-  for (int i = n; i > 0; i--)
-  {
-    A[i] = A[i - 1];
-  }
-  A[0] = 0;
-}
-
 void parallelBoruvka_t::updateMST(std::vector<int> &xC,
                                   std::vector<int> &nextEdge)
 {
-  int numEdgesMST = m_npts - m_numComponents;
+  auto const num_points = m_points.size();
+
+  int numEdgesMST = num_points - m_numComponents;
   for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
   {
     int cc = m_listC[c_idx];
@@ -147,7 +133,8 @@ void parallelBoruvka_t::updateComponents(std::vector<int> &xC,
   updateMST(xC, nextEdge);
 
   // Update component Labels
-  for (int pt = 0; pt < m_npts; pt++)
+  auto const num_points = m_points.size();
+  for (int pt = 0; pt < num_points; pt++)
   {
     m_C[pt] = xC[m_C[pt]];
   }
@@ -163,8 +150,10 @@ void parallelBoruvka_t::updateComponents(std::vector<int> &xC,
 void parallelBoruvka_t::computeCandidateEdges(std::vector<int> &nextEdge,
                                               std::vector<double> &nextEdgeLen)
 {
+  auto const num_points = m_points.size();
+
   // find potential new edges
-  for (int pt = 0; pt < m_npts; pt++)
+  for (int pt = 0; pt < num_points; pt++)
     if (m_C[nextEdge[pt]] == m_C[pt])
     {
       auto r = findClosestPointWithDifferentLabel(m_points, m_C, pt);
@@ -178,7 +167,7 @@ void parallelBoruvka_t::computeCandidateEdges(std::vector<int> &nextEdge,
   }
 
   // for each component find the edge with minimum edge len
-  for (int pt = 0; pt < m_npts; pt++)
+  for (int pt = 0; pt < num_points; pt++)
   {
     if (nextEdgeLen[pt] < m_componentEdgeLen[m_C[pt]])
     {

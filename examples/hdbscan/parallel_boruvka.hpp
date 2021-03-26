@@ -13,7 +13,6 @@ const double INFTY = std::numeric_limits<double>::infinity();
 
 class parallelBoruvka_t
 {
-  int m_npts;
   int m_numComponents;
 
   // input
@@ -51,4 +50,3 @@ public:
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
 };
-
