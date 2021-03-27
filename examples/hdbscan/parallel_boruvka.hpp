@@ -30,25 +30,22 @@ class parallelBoruvka_t
   // std::vector<int> m_edgeIdx;          // next component
   std::vector<int>
       m_pfxsum; // used for computing next address, length should be n_pts+1
-  std::vector<double>
-      m_componentEdgeLen; // edgeLength of candidate edge of the component
-  std::vector<int>
-      m_componentEdgeSrc; // starting vertex of component's candidate edge
 
   std::vector<edge_t> m_parent; // parent Edge
 
 public:
   parallelBoruvka_t(const std::vector<std::vector<double>> &points);
   int numComponents() { return m_numComponents; }
-  // void updateComponent(std::vector<edge_t> &candidateEdges);
-  void updateCandidateEdges(std::vector<int> &nextEdge,
-                            std::vector<double> &nextEdgeLen);
-  void determineComponentEdges(std::vector<int> &nextEdge,
-                               std::vector<double> &nextEdgeLen);
+  void updateCandidateEdges(std::vector<int> &next_edge,
+                            std::vector<double> &next_edge_len);
+  void determineComponentEdges(std::vector<int> const &next_edge,
+                               std::vector<double> const &next_edge_len,
+                               std::vector<int> &component_edge_src);
 
-  void updateComponents(std::vector<int> &xC, std::vector<int> &nextEdge,
-                        std::vector<double> &nextEdgeLen);
-  void updateMST(std::vector<int> &xC, std::vector<int> &nextEdge);
+  void updateComponents(std::vector<int> &xC, std::vector<int> const &next_edge,
+                        std::vector<int> const &component_edge_src);
+  void updateMST(std::vector<int> &xC, std::vector<int> const &next_edge,
+                 std::vector<int> const &component_edge_src);
 
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
