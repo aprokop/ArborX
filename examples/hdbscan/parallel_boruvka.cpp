@@ -50,29 +50,28 @@ void parallelBoruvka_t::updateMST(std::vector<int> const &labels,
                                   std::vector<int> const &xC,
                                   std::vector<int> const &next_edge,
                                   std::vector<int> const &component_edge_src,
-                                  std::vector<int> &listC)
+                                  std::vector<int> &listC,
+                                  std::vector<int> const &offsets)
 {
-  auto const num_points = m_points.size();
+  auto const n = m_points.size();
+  auto const num_components = listC.size();
 
-  int numEdgesMST = num_points - m_numComponents;
-  for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
+  int numEdgesMST = n - num_components;
+  for (int c_idx = 0; c_idx < num_components; c_idx++)
   {
     int cc = listC[c_idx];
     if (labels[cc] != xC[cc]) // add its edge
     {
       int cc_SrcVertex = component_edge_src[cc];
       int cc_DstVertex = next_edge[cc_SrcVertex];
-      // m_MST[numEdgesMST + m_pfxsum[c_idx]] = std::make_pair(cc_SrcVertex,
-      // cc_DstVertex); std::cout << "Adding (" << cc_SrcVertex << " " <<
-      // cc_DstVertex << ") at " << numEdgesMST + m_pfxsum[c_idx] << "\n";
-      m_MST[numEdgesMST + m_pfxsum[c_idx]] = m_parent[cc];
+      m_MST[numEdgesMST + offsets[c_idx]] = m_parent[cc];
       std::cout << "Adding (" << m_parent[cc].first << " "
                 << m_parent[cc].second << ") at "
-                << numEdgesMST + m_pfxsum[c_idx] << "\n";
+                << numEdgesMST + offsets[c_idx] << "\n";
     }
     else
     {
-      listC[c_idx - m_pfxsum[c_idx]] = cc;
+      listC[c_idx - offsets[c_idx]] = cc;
     }
   }
 }
@@ -87,9 +86,8 @@ void parallelBoruvka_t::updateComponents(
   do
   {
     is_updated = false;
-    for (int k = 0; k < m_numComponents; k++)
+    for (int src_label : listC)
     {
-      int src_label = listC[k];
       int src = component_edge_src[src_label];
       int dst = next_edge[src];
       int dst_label = labels[dst];
@@ -109,46 +107,47 @@ void parallelBoruvka_t::updateComponents(
     }
   } while (is_updated);
 
+  int num_components = listC.size();
+
   // exclusive prefix sum
-  m_pfxsum[0] = 0;
-  for (int k = 0; k < m_numComponents; k++)
+  std::vector<int> offsets(num_components + 1);
+  for (int k = 0; k < num_components; ++k)
   {
     int label = listC[k];
-    m_pfxsum[k + 1] = m_pfxsum[k] + (labels[label] == xC[label] ? 0 : 1);
+    offsets[k + 1] = offsets[k] + (labels[label] == xC[label] ? 0 : 1);
   }
+
+  // last element
+  int num_removed_components = offsets.back();
 
   // Update MST
-  updateMST(labels, xC, next_edge, component_edge_src, listC);
+  updateMST(labels, xC, next_edge, component_edge_src, listC, offsets);
 
   // Update component Labels
-  auto const num_points = m_points.size();
-  for (int pt = 0; pt < num_points; pt++)
-  {
-    labels[pt] = xC[labels[pt]];
-  }
+  auto const n = m_points.size();
+  for (int i = 0; i < n; i++)
+    labels[i] = xC[labels[i]];
 
   // update number of components
-  m_numComponents -= m_pfxsum[m_numComponents];
+  listC.resize(num_components - num_removed_components);
 }
 
 parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     : m_points(points)
 {
-  auto const num_points = points.size();
+  auto const n = points.size();
 
   // initialization
-  m_numComponents = num_points; // number of components;
-  m_MST.resize(num_points - 1);
-  m_pfxsum.resize(num_points + 1);
+  m_MST.resize(n - 1);
 
-  m_parent.resize(num_points);
+  m_parent.resize(n);
 
-  std::vector<int> xC(num_points); // next component
-  std::vector<int> component_edge_src(num_points);
-  std::vector<int> next_edge(num_points);
-  std::vector<double> next_edge_len(num_points);
-  std::vector<int> labels(num_points);
-  std::vector<int> listC(num_points); // list of components
+  std::vector<int> xC(n); // next component
+  std::vector<int> component_edge_src(n);
+  std::vector<int> next_edge(n);
+  std::vector<double> next_edge_len(n);
+  std::vector<int> labels(n);
+  std::vector<int> listC(n); // list of components
 
   std::iota(xC.begin(), xC.end(), 0);
   std::iota(component_edge_src.begin(), component_edge_src.end(), 0);
@@ -156,16 +155,16 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   std::iota(labels.begin(), labels.end(), 0);
   std::iota(listC.begin(), listC.end(), 0);
 
-  while (m_numComponents > 1)
+  while (listC.size() > 1)
   {
     updateCandidateEdges(m_points, labels, next_edge, next_edge_len);
     determineComponentEdges(labels, next_edge, next_edge_len,
                             component_edge_src);
     updateComponents(labels, xC, next_edge, component_edge_src, listC);
 
-    std::cout << "Number of components is " << m_numComponents << "\n";
-    for (int i = 0; i < m_numComponents; i++)
-      std::cout << listC[i] << " ";
+    std::cout << "Number of components is " << listC.size() << "\n";
+    for (int label : listC)
+      std::cout << label << " ";
     std::cout << "\n";
   }
 }
