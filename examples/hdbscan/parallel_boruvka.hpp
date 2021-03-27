@@ -38,9 +38,11 @@ public:
   int numComponents() { return m_numComponents; }
 
   void updateComponents(std::vector<int> &xC, std::vector<int> const &next_edge,
-                        std::vector<int> const &component_edge_src);
-  void updateMST(std::vector<int> &xC, std::vector<int> const &next_edge,
-                 std::vector<int> const &component_edge_src);
+                        std::vector<int> const &component_edge_src,
+                        std::vector<int> &listC);
+  void updateMST(std::vector<int> const &xC, std::vector<int> const &next_edge,
+                 std::vector<int> const &component_edge_src,
+                 std::vector<int> &listC);
 
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
