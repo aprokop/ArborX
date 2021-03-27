@@ -46,7 +46,8 @@ void determineComponentEdges(std::vector<int> const &labels,
   }
 }
 
-void parallelBoruvka_t::updateMST(std::vector<int> const &xC,
+void parallelBoruvka_t::updateMST(std::vector<int> const &labels,
+                                  std::vector<int> const &xC,
                                   std::vector<int> const &next_edge,
                                   std::vector<int> const &component_edge_src,
                                   std::vector<int> &listC)
@@ -57,7 +58,7 @@ void parallelBoruvka_t::updateMST(std::vector<int> const &xC,
   for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
   {
     int cc = listC[c_idx];
-    if (m_C[cc] != xC[cc]) // add its edge
+    if (labels[cc] != xC[cc]) // add its edge
     {
       int cc_SrcVertex = component_edge_src[cc];
       int cc_DstVertex = next_edge[cc_SrcVertex];
@@ -77,7 +78,8 @@ void parallelBoruvka_t::updateMST(std::vector<int> const &xC,
 }
 
 void parallelBoruvka_t::updateComponents(
-    std::vector<int> &xC, std::vector<int> const &next_edge,
+    std::vector<int> &labels, std::vector<int> &xC,
+    std::vector<int> const &next_edge,
     std::vector<int> const &component_edge_src, std::vector<int> &listC)
 {
   // parallel label propagation
@@ -90,7 +92,7 @@ void parallelBoruvka_t::updateComponents(
       int cc = listC[c_idx];
       int cc_SrcVertex = component_edge_src[cc];
       int cc_DstVertex = next_edge[cc_SrcVertex];
-      int cc_next = m_C[cc_DstVertex];
+      int cc_next = labels[cc_DstVertex];
 
       if (xC[cc] > xC[cc_next])
       {
@@ -113,7 +115,7 @@ void parallelBoruvka_t::updateComponents(
   for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
   {
     int cc = listC[c_idx];
-    if (m_C[cc] == xC[cc])
+    if (labels[cc] == xC[cc])
       m_pfxsum[c_idx] = 0;
     else
       m_pfxsum[c_idx] = 1;
@@ -122,13 +124,13 @@ void parallelBoruvka_t::updateComponents(
   prefixSumExclusive(m_numComponents, m_pfxsum.data());
 
   // Update MST
-  updateMST(xC, next_edge, component_edge_src, listC);
+  updateMST(labels, xC, next_edge, component_edge_src, listC);
 
   // Update component Labels
   auto const num_points = m_points.size();
   for (int pt = 0; pt < num_points; pt++)
   {
-    m_C[pt] = xC[m_C[pt]];
+    labels[pt] = xC[labels[pt]];
   }
 
   // update number of components
@@ -142,7 +144,6 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
 
   // initialization
   m_numComponents = num_points; // number of components;
-  m_C.resize(num_points);
   m_listC.resize(num_points);
   m_MST.resize(num_points - 1);
   m_pfxsum.resize(num_points + 1);
@@ -152,7 +153,6 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   // initialization
   for (int i = 0; i < num_points; i++)
   {
-    m_C[i] = i;     // component of vertex i
     m_listC[i] = i; // list of components
     // m_parent[i] =i;
   }
@@ -161,17 +161,20 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   std::vector<int> component_edge_src(num_points);
   std::vector<int> next_edge(num_points);
   std::vector<double> next_edge_len(num_points);
+  std::vector<int> labels(num_points);
   std::vector<int> listC(num_points); // list of components
 
   std::iota(xC.begin(), xC.end(), 0);
   std::iota(component_edge_src.begin(), component_edge_src.end(), 0);
   std::iota(next_edge.begin(), next_edge.end(), 0);
+  std::iota(labels.begin(), labels.end(), 0);
   std::iota(listC.begin(), listC.end(), 0);
   while (m_numComponents > 1)
   {
-    updateCandidateEdges(m_points, m_C, next_edge, next_edge_len);
-    determineComponentEdges(m_C, next_edge, next_edge_len, component_edge_src);
-    updateComponents(xC, next_edge, component_edge_src, listC);
+    updateCandidateEdges(m_points, labels, next_edge, next_edge_len);
+    determineComponentEdges(labels, next_edge, next_edge_len,
+                            component_edge_src);
+    updateComponents(labels, xC, next_edge, component_edge_src, listC);
 
     std::cout << "Number of components is " << m_numComponents << "\n";
     for (int i = 0; i < m_numComponents; i++)

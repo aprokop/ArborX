@@ -21,9 +21,6 @@ class parallelBoruvka_t
   // output
   std::vector<edge_t> m_MST;
 
-  // vertex-wise variables
-  std::vector<int> m_C; // my component
-
   // component wise variables
   std::vector<int> m_listC; // list of components
 
@@ -37,10 +34,12 @@ public:
   parallelBoruvka_t(const std::vector<std::vector<double>> &points);
   int numComponents() { return m_numComponents; }
 
-  void updateComponents(std::vector<int> &xC, std::vector<int> const &next_edge,
+  void updateComponents(std::vector<int> &labels, std::vector<int> &xC,
+                        std::vector<int> const &next_edge,
                         std::vector<int> const &component_edge_src,
                         std::vector<int> &listC);
-  void updateMST(std::vector<int> const &xC, std::vector<int> const &next_edge,
+  void updateMST(std::vector<int> const &labels, std::vector<int> const &xC,
+                 std::vector<int> const &next_edge,
                  std::vector<int> const &component_edge_src,
                  std::vector<int> &listC);
 
