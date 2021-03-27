@@ -32,20 +32,3 @@ findClosestPointWithDifferentLabel(std::vector<Point> const &points,
     }
   return std::make_pair(min_index, min_distance);
 }
-
-void prefixSumExclusive(int n, int *A)
-{
-  // int tmp = A[0];
-  // A[0] =0;
-  for (int i = 1; i < n; i++)
-  {
-    A[i] = A[i] + A[i - 1];
-  }
-
-  // shift right
-  for (int i = n; i > 0; i--)
-  {
-    A[i] = A[i - 1];
-  }
-  A[0] = 0;
-}

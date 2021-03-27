@@ -109,17 +109,13 @@ void parallelBoruvka_t::updateComponents(
     }
   } while (is_updated);
 
-  // adding edges
-  for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
+  // exclusive prefix sum
+  m_pfxsum[0] = 0;
+  for (int k = 0; k < m_numComponents; k++)
   {
-    int cc = listC[c_idx];
-    if (labels[cc] == xC[cc])
-      m_pfxsum[c_idx] = 0;
-    else
-      m_pfxsum[c_idx] = 1;
+    int label = listC[k];
+    m_pfxsum[k + 1] = m_pfxsum[k] + (labels[label] == xC[label] ? 0 : 1);
   }
-  // compute inclusive prefix sum
-  prefixSumExclusive(m_numComponents, m_pfxsum.data());
 
   // Update MST
   updateMST(labels, xC, next_edge, component_edge_src, listC);
