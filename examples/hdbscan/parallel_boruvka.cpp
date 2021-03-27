@@ -83,33 +83,31 @@ void parallelBoruvka_t::updateComponents(
     std::vector<int> const &component_edge_src, std::vector<int> &listC)
 {
   // parallel label propagation
-  int numChanges = 1;
-  while (numChanges > 0)
+  bool is_updated;
+  do
   {
-    numChanges = 0;
-    for (int c_idx = 0; c_idx < m_numComponents; c_idx++)
+    is_updated = false;
+    for (int k = 0; k < m_numComponents; k++)
     {
-      int cc = listC[c_idx];
-      int cc_SrcVertex = component_edge_src[cc];
-      int cc_DstVertex = next_edge[cc_SrcVertex];
-      int cc_next = labels[cc_DstVertex];
+      int src_label = listC[k];
+      int src = component_edge_src[src_label];
+      int dst = next_edge[src];
+      int dst_label = labels[dst];
 
-      if (xC[cc] > xC[cc_next])
+      if (xC[src_label] > xC[dst_label])
       {
-        // int min_cc = std::min(xC[cc], xC[cc_next]);
-        xC[cc] = xC[cc_next];
-        m_parent[cc] = std::make_pair(cc_SrcVertex, cc_DstVertex);
-        // xC[cc_next] = min_cc;
-        numChanges++;
+        xC[src_label] = xC[dst_label];
+        m_parent[src_label] = std::make_pair(src, dst);
+        is_updated = true;
       }
-      else if (xC[cc] < xC[cc_next])
+      else if (xC[src_label] < xC[dst_label])
       {
-        xC[cc_next] = xC[cc];
-        m_parent[cc_next] = std::make_pair(cc_SrcVertex, cc_DstVertex);
-        numChanges++;
+        xC[dst_label] = xC[src_label];
+        m_parent[dst_label] = std::make_pair(src, dst);
+        is_updated = true;
       }
     }
-  }
+  } while (is_updated);
 
   // adding edges
   for (int c_idx = 0; c_idx < m_numComponents; c_idx++)

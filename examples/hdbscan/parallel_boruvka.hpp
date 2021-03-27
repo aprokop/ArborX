@@ -9,8 +9,6 @@
 typedef std::pair<int, int> edge_t;
 typedef std::pair<edge_t, double> wtEdge_t;
 
-const double INFTY = std::numeric_limits<double>::infinity();
-
 class parallelBoruvka_t
 {
   int m_numComponents;
