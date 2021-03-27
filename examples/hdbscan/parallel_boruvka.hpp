@@ -15,16 +15,10 @@ class parallelBoruvka_t
 {
   int m_numComponents;
 
-  // input
   const std::vector<Point> &m_points; // list of points
 
-  // output
   std::vector<edge_t> m_MST;
 
-  // component wise variables
-  std::vector<int> m_listC; // list of components
-
-  // std::vector<int> m_edgeIdx;          // next component
   std::vector<int>
       m_pfxsum; // used for computing next address, length should be n_pts+1
 

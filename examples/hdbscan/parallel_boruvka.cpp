@@ -144,18 +144,10 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
 
   // initialization
   m_numComponents = num_points; // number of components;
-  m_listC.resize(num_points);
   m_MST.resize(num_points - 1);
   m_pfxsum.resize(num_points + 1);
 
   m_parent.resize(num_points);
-
-  // initialization
-  for (int i = 0; i < num_points; i++)
-  {
-    m_listC[i] = i; // list of components
-    // m_parent[i] =i;
-  }
 
   std::vector<int> xC(num_points); // next component
   std::vector<int> component_edge_src(num_points);
@@ -169,6 +161,7 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   std::iota(next_edge.begin(), next_edge.end(), 0);
   std::iota(labels.begin(), labels.end(), 0);
   std::iota(listC.begin(), listC.end(), 0);
+
   while (m_numComponents > 1)
   {
     updateCandidateEdges(m_points, labels, next_edge, next_edge_len);
