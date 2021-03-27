@@ -12,16 +12,16 @@ double distanceSquared(Point const &p1, Point const &p2)
   return dist;
 }
 
-std::pair<int, double>
-findClosestPointWithDifferentLabel(std::vector<Point> const &points,
-                                   std::vector<int> const &labels, int index)
+std::pair<int, double> kNNWithFilter(std::vector<Point> const &points,
+                                     std::vector<int> const &components,
+                                     int index)
 {
   int const num_points = points.size();
 
   int min_index = -1;
   auto min_distance = std::numeric_limits<double>::infinity();
   for (int i = 0; i < num_points; ++i)
-    if (labels[i] != labels[index])
+    if (components[i] != components[index])
     {
       auto d = distanceSquared(points[i], points[index]);
       if (d < min_distance)
