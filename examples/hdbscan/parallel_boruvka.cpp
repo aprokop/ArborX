@@ -5,41 +5,44 @@
 
 #include "utility.hpp"
 
-parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
-    : m_points(points)
+void updateCandidateEdges(std::vector<Point> const &points,
+                          std::vector<int> const &labels,
+                          std::vector<int> &next_edge,
+                          std::vector<double> &next_edge_len)
 {
-  auto const num_points = points.size();
+  auto const n = points.size();
 
-  // initialization
-  m_numComponents = num_points; // number of components;
-  m_C.resize(num_points);
-  m_listC.resize(num_points);
-  m_MST.resize(num_points - 1);
-  m_pfxsum.resize(num_points + 1);
-
-  m_parent.resize(num_points);
-
-  // initialization
-  for (int i = 0; i < num_points; i++)
+  for (int i = 0; i < n; i++)
   {
-    m_C[i] = i;     // component of vertex i
-    m_listC[i] = i; // list of components
-    // m_parent[i] =i;
+    bool const update_required = (labels[next_edge[i]] == labels[i]);
+    if (update_required)
+    {
+      auto r = findClosestPointWithDifferentLabel(points, labels, i);
+      next_edge[i] = r.first;
+      next_edge_len[i] = r.second;
+    }
   }
+}
 
-  std::vector<int> xC(num_points); // next component
-  std::vector<int> component_edge_src(num_points);
-  std::vector<int> next_edge(num_points);
-  std::vector<double> next_edge_len(num_points);
+void determineComponentEdges(std::vector<int> const &labels,
+                             std::vector<int> const &next_edge,
+                             std::vector<double> const &next_edge_len,
+                             std::vector<int> &component_edge_src)
+{
+  auto const n = labels.size();
 
-  std::iota(xC.begin(), xC.end(), 0);
-  std::iota(component_edge_src.begin(), component_edge_src.end(), 0);
-  std::iota(next_edge.begin(), next_edge.end(), 0);
-  while (m_numComponents > 1)
+  const double infty = std::numeric_limits<double>::infinity();
+
+  // for each component find the edge with minimum edge len
+  std::vector<double> component_edge_len(n, infty);
+  for (int i = 0; i < n; i++)
   {
-    updateCandidateEdges(next_edge, next_edge_len);
-    determineComponentEdges(next_edge, next_edge_len, component_edge_src);
-    updateComponents(xC, next_edge, component_edge_src);
+    int const label = labels[i];
+    if (next_edge_len[i] < component_edge_len[label])
+    {
+      component_edge_len[label] = next_edge_len[i];
+      component_edge_src[label] = i;
+    }
   }
 }
 
@@ -135,39 +138,41 @@ void parallelBoruvka_t::updateComponents(
   std::cout << "\n";
 }
 
-void parallelBoruvka_t::updateCandidateEdges(std::vector<int> &next_edge,
-                                             std::vector<double> &next_edge_len)
+parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
+    : m_points(points)
 {
-  auto const num_points = m_points.size();
+  auto const num_points = points.size();
 
-  // find and store potential new edges
-  for (int pt = 0; pt < num_points; pt++)
-    if (m_C[next_edge[pt]] == m_C[pt])
-    {
-      auto r = findClosestPointWithDifferentLabel(m_points, m_C, pt);
-      next_edge[pt] = r.first;
-      next_edge_len[pt] = r.second;
-    }
-}
+  // initialization
+  m_numComponents = num_points; // number of components;
+  m_C.resize(num_points);
+  m_listC.resize(num_points);
+  m_MST.resize(num_points - 1);
+  m_pfxsum.resize(num_points + 1);
 
-void parallelBoruvka_t::determineComponentEdges(
-    std::vector<int> const &next_edge, std::vector<double> const &next_edge_len,
-    std::vector<int> &component_edge_src)
-{
-  auto const num_points = m_points.size();
+  m_parent.resize(num_points);
 
-  const double infty = std::numeric_limits<double>::infinity();
-
-  // for each component find the edge with minimum edge len
-  std::vector<double> component_edge_len(num_points, infty);
+  // initialization
   for (int i = 0; i < num_points; i++)
   {
-    int const label = m_C[i];
-    if (next_edge_len[i] < component_edge_len[label])
-    {
-      component_edge_len[label] = next_edge_len[i];
-      component_edge_src[label] = i;
-    }
+    m_C[i] = i;     // component of vertex i
+    m_listC[i] = i; // list of components
+    // m_parent[i] =i;
+  }
+
+  std::vector<int> xC(num_points); // next component
+  std::vector<int> component_edge_src(num_points);
+  std::vector<int> next_edge(num_points);
+  std::vector<double> next_edge_len(num_points);
+
+  std::iota(xC.begin(), xC.end(), 0);
+  std::iota(component_edge_src.begin(), component_edge_src.end(), 0);
+  std::iota(next_edge.begin(), next_edge.end(), 0);
+  while (m_numComponents > 1)
+  {
+    updateCandidateEdges(m_points, m_C, next_edge, next_edge_len);
+    determineComponentEdges(m_C, next_edge, next_edge_len, component_edge_src);
+    updateComponents(xC, next_edge, component_edge_src);
   }
 }
 

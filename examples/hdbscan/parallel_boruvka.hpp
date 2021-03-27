@@ -36,11 +36,6 @@ class parallelBoruvka_t
 public:
   parallelBoruvka_t(const std::vector<std::vector<double>> &points);
   int numComponents() { return m_numComponents; }
-  void updateCandidateEdges(std::vector<int> &next_edge,
-                            std::vector<double> &next_edge_len);
-  void determineComponentEdges(std::vector<int> const &next_edge,
-                               std::vector<double> const &next_edge_len,
-                               std::vector<int> &component_edge_src);
 
   void updateComponents(std::vector<int> &xC, std::vector<int> const &next_edge,
                         std::vector<int> const &component_edge_src);
