@@ -6,6 +6,8 @@
 
 #include "utility.hpp"
 
+#define VERBOSE
+
 void determineComponentEdges(
     std::vector<Point> const &points, std::vector<int> const &labels,
     std::vector<int> &cached_closest_neighbors,
@@ -66,22 +68,10 @@ void computeComponentsRemapping(
 
   for (auto component : components)
   {
-    int next_component = compute_next(component);
-
-    if (next_component == component)
-    {
-      // The edge is bidirectional. To not count it twice, we don't put it into
-      // MST in this situation.
-      components_remapping[component] = component;
-      continue;
-    }
-
-    int prev_component;
-    do
-    {
+    int prev_component = component;
+    int next_component;
+    while ((next_component = compute_next(prev_component)) != prev_component)
       prev_component = next_component;
-      next_component = compute_next(prev_component);
-    } while (next_component != prev_component);
 
     components_remapping[component] = next_component;
   }
@@ -140,6 +130,7 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   {
     determineComponentEdges(_points, labels, cached_closest_neighbors,
                             component_out_edges);
+#ifdef VERBOSE
     for (auto component : components)
     {
       auto edge_out = component_out_edges[component];
@@ -147,6 +138,7 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
              edge_out.first, edge_out.second);
     }
     std::cout << std::endl;
+#endif
 
     computeComponentsRemapping(component_out_edges, components, labels,
                                components_remapping);
@@ -154,10 +146,12 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
 
     updateComponentsAndLabels(components_remapping, components, labels);
 
+#ifdef VERBOSE
     std::cout << "Components (#" << components.size() << "): [ ";
     for (int component : components)
       std::cout << component << " ";
     std::cout << "]\n";
+#endif
   }
 }
 
