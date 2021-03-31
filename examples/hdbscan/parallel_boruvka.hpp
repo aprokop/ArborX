@@ -18,10 +18,6 @@ class parallelBoruvka_t
 public:
   parallelBoruvka_t(const std::vector<std::vector<double>> &points);
 
-  void
-  updateComponents(std::vector<std::pair<int, int>> const &component_out_edges,
-                   std::vector<int> &components, std::vector<int> &labels);
-
   void writeMST(std::ofstream &ofileName);
   std::vector<wtEdge_t> weightedMST();
 };

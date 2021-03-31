@@ -43,11 +43,12 @@ void determineComponentEdges(
   }
 }
 
-void parallelBoruvka_t::updateComponents(
+void computeComponentsRemapping(
     std::vector<std::pair<int, int>> const &component_out_edges,
-    std::vector<int> &components, std::vector<int> &labels)
+    std::vector<int> &components, std::vector<int> &labels,
+    std::vector<int> &components_remapping)
 {
-  int const n = _points.size();
+  int const n = labels.size();
 
   auto compute_next = [&component_out_edges, &labels](int component) {
     int next_component = labels[component_out_edges[component].second];
@@ -63,10 +64,6 @@ void parallelBoruvka_t::updateComponents(
     return std::min(component, next_component);
   };
 
-  int num_components = components.size();
-  std::vector<int> final_component(n);
-  int num_edges = n - num_components;
-
   for (auto component : components)
   {
     int next_component = compute_next(component);
@@ -75,11 +72,9 @@ void parallelBoruvka_t::updateComponents(
     {
       // The edge is bidirectional. To not count it twice, we don't put it into
       // MST in this situation.
-      final_component[component] = component;
+      components_remapping[component] = component;
       continue;
     }
-
-    _mst[num_edges++] = component_out_edges[component];
 
     int prev_component;
     do
@@ -88,22 +83,39 @@ void parallelBoruvka_t::updateComponents(
       next_component = compute_next(prev_component);
     } while (next_component != prev_component);
 
-    final_component[component] = next_component;
+    components_remapping[component] = next_component;
   }
+}
 
+void updateMST(int n,
+               std::vector<std::pair<int, int>> const &component_out_edges,
+               std::vector<int> const &components,
+               std::vector<int> const &components_remapping,
+               std::vector<edge_t> &mst)
+{
+  int const num_components = components.size();
+
+  int num_edges = n - num_components;
+  for (auto component : components)
+    if (component != components_remapping[component])
+      mst[num_edges++] = component_out_edges[component];
+}
+
+void updateComponentsAndLabels(std::vector<int> const &components_remapping,
+                               std::vector<int> &components,
+                               std::vector<int> &labels)
+{
   // parallel_scan
   int offset = 0;
-  for (int i = 0; i < num_components; ++i)
-  {
-    auto component = components[i];
-    if (component == final_component[component])
+  for (auto component : components)
+    if (component == components_remapping[component])
       components[offset++] = component;
-  }
   components.resize(offset);
 
   // Update component Labels
+  int const n = labels.size();
   for (int i = 0; i < n; i++)
-    labels[i] = final_component[labels[i]];
+    labels[i] = components_remapping[labels[i]];
 }
 
 parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
@@ -118,6 +130,7 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
   std::vector<int> cached_closest_neighbors(n);
   std::vector<int> labels(n);
   std::vector<int> components(n);
+  std::vector<int> components_remapping(n);
 
   std::iota(components.begin(), components.end(), 0);
   labels = components;
@@ -135,7 +148,11 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
     }
     std::cout << std::endl;
 
-    updateComponents(component_out_edges, components, labels);
+    computeComponentsRemapping(component_out_edges, components, labels,
+                               components_remapping);
+    updateMST(n, component_out_edges, components, components_remapping, _mst);
+
+    updateComponentsAndLabels(components_remapping, components, labels);
 
     std::cout << "Components (#" << components.size() << "): [ ";
     for (int component : components)
