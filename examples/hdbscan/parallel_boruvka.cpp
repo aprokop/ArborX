@@ -1,182 +1,143 @@
 #include "parallel_boruvka.hpp"
 
 #include <iostream>
+#include <limits>
 #include <numeric> // iota
 
 #include "utility.hpp"
 
-void updateCandidateEdges(std::vector<Point> const &points,
-                          std::vector<int> const &components,
-                          std::vector<int> &closest_neighbor,
-                          std::vector<double> &closest_neighbor_dist)
+void determineComponentEdges(
+    std::vector<Point> const &points, std::vector<int> const &labels,
+    std::vector<int> &cached_closest_neighbors,
+    std::vector<std::pair<int, int>> &component_out_edges)
 {
   auto const n = points.size();
 
+  // Update closest neighbors if necessary
   for (int i = 0; i < n; i++)
   {
     bool const update_required =
-        (components[closest_neighbor[i]] == components[i]);
+        (labels[cached_closest_neighbors[i]] == labels[i]);
     if (update_required)
-    {
-      auto r = kNNWithFilter(points, components, i);
-
-      closest_neighbor[i] = r.first;
-      closest_neighbor_dist[i] = r.second;
-    }
+      cached_closest_neighbors[i] = kNNWithFilter(points, labels, i);
   }
-}
-
-void determineComponentEdges(std::vector<int> const &components,
-                             std::vector<int> const &closest_neighbor,
-                             std::vector<double> const &closest_neighbor_dist,
-                             std::vector<int> &component_origin)
-{
-  auto const n = components.size();
 
   const double infty = std::numeric_limits<double>::infinity();
 
-  // for each component find the edge with minimum edge len
+  // Find outgoing edge for each component
   std::vector<double> closest_component_dist(n, infty);
   for (int i = 0; i < n; i++)
   {
-    int const component = components[i];
-    if (closest_neighbor_dist[i] < closest_component_dist[component])
-    {
-      component_origin[component] = i;
-      closest_component_dist[component] = closest_neighbor_dist[i];
-    }
-  }
-}
+    int const component = labels[i];
+    auto &component_out_edge = component_out_edges[component];
 
-void parallelBoruvka_t::updateMST(std::vector<int> const &components,
-                                  std::vector<int> const &xC,
-                                  std::vector<int> const &closest_neighbor,
-                                  std::vector<int> const &component_origin,
-                                  std::vector<int> &listC,
-                                  std::vector<int> const &offsets)
-{
-  auto const n = m_points.size();
-  auto const num_components = listC.size();
-
-  int numEdgesMST = n - num_components;
-  for (int c_idx = 0; c_idx < num_components; c_idx++)
-  {
-    int cc = listC[c_idx];
-    if (components[cc] != xC[cc]) // add its edge
+    auto dist = distance(points[i], points[cached_closest_neighbors[i]]);
+    if (compare_edges_less(
+            std::make_tuple(i, cached_closest_neighbors[i], dist),
+            std::make_tuple(component_out_edge.first, component_out_edge.second,
+                            closest_component_dist[component])))
     {
-      int cc_SrcVertex = component_origin[cc];
-      int cc_DstVertex = closest_neighbor[cc_SrcVertex];
-      m_MST[numEdgesMST + offsets[c_idx]] = m_parent[cc];
-      std::cout << "Adding (" << m_parent[cc].first << " "
-                << m_parent[cc].second << ") at "
-                << numEdgesMST + offsets[c_idx] << "\n";
-    }
-    else
-    {
-      listC[c_idx - offsets[c_idx]] = cc;
+      component_out_edge = std::make_pair(i, cached_closest_neighbors[i]);
+      closest_component_dist[component] = dist;
     }
   }
 }
 
 void parallelBoruvka_t::updateComponents(
-    std::vector<int> &components, std::vector<int> &xC,
-    std::vector<int> const &closest_neighbor,
-    std::vector<int> const &component_origin, std::vector<int> &listC)
+    std::vector<std::pair<int, int>> const &component_out_edges,
+    std::vector<int> &components, std::vector<int> &labels)
 {
-  // parallel component propagation
-  bool is_updated;
-  do
-  {
-    is_updated = false;
-    for (int src_component : listC)
+  int const n = _points.size();
+
+  auto compute_next = [&component_out_edges, &labels](int component) {
+    int next_component = labels[component_out_edges[component].second];
+    int next_next_component =
+        labels[component_out_edges[next_component].second];
+
+    if (next_next_component != component)
     {
-      // FIXME: ???
-      int src = component_origin[src_component];
-      int dst = closest_neighbor[src];
-      int dst_component = components[dst];
-
-      if (xC[src_component] > xC[dst_component])
-      {
-        xC[src_component] = xC[dst_component];
-        m_parent[src_component] = std::make_pair(src, dst);
-        is_updated = true;
-      }
-      else if (xC[src_component] < xC[dst_component])
-      {
-        xC[dst_component] = xC[src_component];
-        m_parent[dst_component] = std::make_pair(src, dst);
-        is_updated = true;
-      }
+      // The component's edge is unidirectional
+      return next_component;
     }
-  } while (is_updated);
+    // The component's edge is bidirectional, uniquely resolve the bidirectional
+    // edge
+    return std::min(component, next_component);
+  };
 
-  int num_components = listC.size();
+  std::vector<int> final_component(n);
+  int num_edges = n - components.size();
 
-  // exclusive prefix sum
-  std::vector<int> offsets(num_components + 1);
-  for (int k = 0; k < num_components; ++k)
+  int num_components = 0;
+  for (auto component : components)
   {
-    int component = listC[k];
-    offsets[k + 1] =
-        offsets[k] + (components[component] == xC[component] ? 0 : 1);
+    int next_component = compute_next(component);
+
+    if (next_component == component)
+    {
+      final_component[component] = component;
+      components[num_components++] = component;
+      continue;
+    }
+
+    _mst[num_edges++] = component_out_edges[component];
+
+    int prev_component;
+    do
+    {
+      prev_component = next_component;
+      next_component = compute_next(prev_component);
+    } while (next_component != prev_component);
+
+    final_component[component] = next_component;
   }
-
-  // last element
-  int num_removed_components = offsets.back();
-
-  // Update MST
-  updateMST(components, xC, closest_neighbor, component_origin, listC, offsets);
+  components.resize(num_components);
 
   // Update component Labels
-  auto const n = m_points.size();
   for (int i = 0; i < n; i++)
-    components[i] = xC[components[i]];
-
-  // update number of components
-  listC.resize(num_components - num_removed_components);
+    labels[i] = final_component[labels[i]];
 }
 
 parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
-    : m_points(points)
+    : _points(points)
 {
   auto const n = points.size();
 
   // initialization
-  m_MST.resize(n - 1);
+  _mst.resize(n - 1);
 
-  m_parent.resize(n);
-
-  std::vector<int> xC(n); // next component
-  std::vector<int> component_origin(n);
-  std::vector<int> closest_neighbor(n);
-  std::vector<double> closest_neighbor_dist(n);
+  std::vector<std::pair<int, int>> component_out_edges(n);
+  std::vector<int> cached_closest_neighbors(n);
+  std::vector<int> labels(n);
   std::vector<int> components(n);
-  std::vector<int> listC(n); // list of components
 
-  std::iota(xC.begin(), xC.end(), 0);
-  std::iota(component_origin.begin(), component_origin.end(), 0);
-  std::iota(closest_neighbor.begin(), closest_neighbor.end(), 0);
   std::iota(components.begin(), components.end(), 0);
-  std::iota(listC.begin(), listC.end(), 0);
+  labels = components;
+  cached_closest_neighbors = labels;
 
-  while (listC.size() > 1)
+  while (components.size() > 1)
   {
-    updateCandidateEdges(m_points, components, closest_neighbor,
-                         closest_neighbor_dist);
-    determineComponentEdges(components, closest_neighbor, closest_neighbor_dist,
-                            component_origin);
-    updateComponents(components, xC, closest_neighbor, component_origin, listC);
+    determineComponentEdges(_points, labels, cached_closest_neighbors,
+                            component_out_edges);
+    for (auto component : components)
+    {
+      auto edge_out = component_out_edges[component];
+      printf("%d -> %d [%d, %d]\n", component, labels[edge_out.second],
+             edge_out.first, edge_out.second);
+    }
+    std::cout << std::endl;
 
-    std::cout << "Number of components is " << listC.size() << "\n";
-    for (int component : listC)
+    updateComponents(component_out_edges, components, labels);
+
+    std::cout << "Components (#" << components.size() << "): [ ";
+    for (int component : components)
       std::cout << component << " ";
-    std::cout << "\n";
+    std::cout << "]\n";
   }
 }
 
 void parallelBoruvka_t::writeMST(std::ofstream &outfile)
 {
-  for (auto edge : m_MST)
+  for (auto edge : _mst)
   {
     outfile << edge.first << " " << edge.second << "\n";
   }
@@ -185,10 +146,9 @@ void parallelBoruvka_t::writeMST(std::ofstream &outfile)
 std::vector<wtEdge_t> parallelBoruvka_t::weightedMST()
 {
   std::vector<wtEdge_t> wtmst;
-  for (auto edge : m_MST)
+  for (auto edge : _mst)
   {
-    wtEdge_t wte(edge,
-                 distanceSquared(m_points[edge.first], m_points[edge.second]));
+    wtEdge_t wte(edge, distance(_points[edge.first], _points[edge.second]));
     wtmst.push_back(wte);
   }
   return wtmst;
