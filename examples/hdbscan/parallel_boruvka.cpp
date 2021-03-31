@@ -59,23 +59,23 @@ void parallelBoruvka_t::updateComponents(
       // The component's edge is unidirectional
       return next_component;
     }
-    // The component's edge is bidirectional, uniquely resolve the bidirectional
-    // edge
+    // The component's edge is bidirectional, resolve uniquely through min
     return std::min(component, next_component);
   };
 
+  int num_components = components.size();
   std::vector<int> final_component(n);
-  int num_edges = n - components.size();
+  int num_edges = n - num_components;
 
-  int num_components = 0;
   for (auto component : components)
   {
     int next_component = compute_next(component);
 
     if (next_component == component)
     {
+      // The edge is bidirectional. To not count it twice, we don't put it into
+      // MST in this situation.
       final_component[component] = component;
-      components[num_components++] = component;
       continue;
     }
 
@@ -90,7 +90,16 @@ void parallelBoruvka_t::updateComponents(
 
     final_component[component] = next_component;
   }
-  components.resize(num_components);
+
+  // parallel_scan
+  int offset = 0;
+  for (int i = 0; i < num_components; ++i)
+  {
+    auto component = components[i];
+    if (component == final_component[component])
+      components[offset++] = component;
+  }
+  components.resize(offset);
 
   // Update component Labels
   for (int i = 0; i < n; i++)
@@ -137,10 +146,8 @@ parallelBoruvka_t::parallelBoruvka_t(const std::vector<Point> &points)
 
 void parallelBoruvka_t::writeMST(std::ofstream &outfile)
 {
-  for (auto edge : _mst)
-  {
+  for (auto const &edge : _mst)
     outfile << edge.first << " " << edge.second << "\n";
-  }
 }
 
 std::vector<wtEdge_t> parallelBoruvka_t::weightedMST()
