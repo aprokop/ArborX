@@ -70,6 +70,7 @@ int main(int argc, char *argv[])
   int max_num_points;
   float a;
   float b;
+  float delta;
   float eps;
 
   bpo::options_description desc("Allowed options");
@@ -78,6 +79,7 @@ int main(int argc, char *argv[])
       ( "help", "help message" )
       ( "a", bpo::value<float>(&a)->default_value(0.01f), "a")
       ( "b", bpo::value<float>(&b)->default_value(0.02f), "b")
+      ( "delta", bpo::value<float>(&delta)->default_value(1e-2f), "delta")
       ( "eps", bpo::value<float>(&eps)->default_value(1e-2f), "eps")
       ( "filename", bpo::value<std::string>(&filename), "filename containing data" )
       ( "max-num-points", bpo::value<int>(&max_num_points)->default_value(-1), "max number of points to read in")
@@ -97,6 +99,7 @@ int main(int argc, char *argv[])
   printf("filename          : %s [max_pts = %d]\n", filename.c_str(),
          max_num_points);
   printf("matcher           : [%.3f, %.3f]\n", a, b);
+  printf("delta             : %.3f\n", delta);
   printf("eps               : %.1e\n", eps);
 
   // read in data
@@ -120,15 +123,18 @@ int main(int argc, char *argv[])
   int num_exact = countExact(exec_space, points, a, b);
   elapsed["exact"] = timer_seconds(timer);
 
-  // timer_start(timer);
-  // int num_randmoized = countRandomized(bvh, a, b, eps);
-  // elapsed["randomized"] = timer_seconds(timer);
+  timer_start(timer);
+  int num_randomized = countRandomized(exec_space, points, a, b, eps, delta);
+  elapsed["randomized"] = timer_seconds(timer);
 
-  printf("#exact     : %d\n", num_exact);
+  printf("#exact      : %d\n", num_exact);
+  printf("#randomized : %d\n", num_randomized);
+  printf("error       : %.5f\n",
+         (float)std::abs(num_randomized - num_exact) / num_exact);
 
   printf("\nTimers:\n");
   printf("exact      : %10.3f\n", elapsed["exact"]);
-  // printf("randomized : %10.3f\n", elapsed["randomized"]);
+  printf("randomized : %10.3f\n", elapsed["randomized"]);
 
   return EXIT_SUCCESS;
 }
