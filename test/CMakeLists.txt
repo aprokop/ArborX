@@ -102,6 +102,7 @@ add_executable(ArborX_QueryTree.exe
 target_link_libraries(ArborX_QueryTree.exe PRIVATE ArborX Boost::unit_test_framework)
 target_compile_definitions(ArborX_QueryTree.exe PRIVATE BOOST_TEST_DYN_LINK)
 target_include_directories(ArborX_QueryTree.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+set(ArborX_QueryTree_Test_split "boost")
 add_test(NAME ArborX_QueryTree_Test COMMAND ./ArborX_QueryTree.exe)
 
 add_executable(ArborX_DetailsTreeConstruction.exe tstDetailsTreeConstruction.cpp utf_main.cpp)
@@ -143,7 +144,9 @@ if(ARBORX_ENABLE_MPI)
   target_link_libraries(ArborX_DistributedTree.exe PRIVATE ArborX Boost::unit_test_framework)
   target_compile_definitions(ArborX_DistributedTree.exe PRIVATE BOOST_TEST_DYN_LINK ARBORX_MPI_UNIT_TEST)
   target_include_directories(ArborX_DistributedTree.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-  add_test(NAME ArborX_DistributedTree_Test COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ./ArborX_DistributedTree.exe ${MPIEXEC_POSTFLAGS})
+  set(ArborX_DistributedTree_Test_split "KokkosToolsDistributedAnnotations/*")
+  add_test(NAME ArborX_DistributedTree_Annotations_Test COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ./ArborX_DistributedTree.exe --run_test=${ArborX_DistributedTree_Test_split} ${MPIEXEC_POSTFLAGS})
+  add_test(NAME ArborX_DistributedTree_Test COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ./ArborX_DistributedTree.exe --run_test=!${ArborX_DistributedTree_Test_split} ${MPIEXEC_POSTFLAGS})
 
   add_executable(ArborX_DetailsDistributedTreeImpl.exe tstDetailsDistributedTreeImpl.cpp utf_main.cpp)
   target_link_libraries(ArborX_DetailsDistributedTreeImpl.exe PRIVATE ArborX Boost::unit_test_framework)
