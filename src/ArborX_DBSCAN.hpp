@@ -41,8 +41,10 @@ struct Iota
 template <typename Primitives>
 auto buildPredicates(Primitives const &v, double r)
 {
-  return PrimitivesWithRadius<Primitives, Iota>{v, Iota{(size_t)v.extent(0)},
-                                                r};
+  using Access = AccessTraits<Primitives, PrimitivesTag>;
+
+  return PrimitivesWithRadius<Primitives, Iota>{
+      v, Iota{(size_t)Access::size(v)}, r};
 }
 
 template <typename Primitives, typename FilterAndPermuter>
@@ -262,8 +264,6 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   else if (parameters._implementation ==
            DBSCAN::Implementation::FDBSCAN_DenseBox)
   {
-    auto const predicates = buildPredicates(primitives, eps);
-
     // Find dense boxes
     timer_start(timer);
     Kokkos::Profiling::pushRegion("ArborX::dbscan::dense_cells");
@@ -344,6 +344,9 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       // Perform the queries and build clusters through callback
       using CorePoints = DBSCAN::CCSCorePoints;
       Kokkos::Profiling::pushRegion("ArborX::dbscan::clusters::query");
+
+      auto const predicates = buildPredicates(primitives, eps);
+
       bvh.query(
           exec_space, predicates,
           Details::FDBSCANDenseBoxCallback<MemorySpace, CorePoints, Primitives,
@@ -379,7 +382,8 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
                                              decltype(permute)>(
                     num_neigh, primitives, dense_cell_offsets, permute,
                     core_min_size, eps));
-#if 0
+
+#if 1
       if (verbose)
       {
         int num_core_points = 0;
@@ -391,7 +395,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
                 ++update;
             },
             num_core_points);
-        printf("#core points       : %10d [%.2f%%]\n", num_core_points,
+        printf("#core points        : %10d [%.2f%%]\n", num_core_points,
                (100.f * num_core_points) / n);
       }
 #endif
@@ -399,17 +403,60 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       elapsed["neigh"] = timer_seconds(timer_local);
 
       using CorePoints = DBSCAN::DBSCANCorePoints<MemorySpace>;
+      CorePoints is_core_point{num_neigh, core_min_size};
+
+      // Reorder sparse points so that the core sparse points go before
+      // non-core sparse points
+      int num_sparse_core_points = 0;
+      Kokkos::parallel_reduce("ArborX::dbscan::count_sparse_core_point",
+                              Kokkos::RangePolicy<ExecutionSpace>(
+                                  exec_space, num_points_in_dense_cells, n),
+                              KOKKOS_LAMBDA(int i, int &update) {
+                                if (is_core_point(permute(i)))
+                                  ++update;
+                              },
+                              num_sparse_core_points);
+      int num_core_points = num_points_in_dense_cells + num_sparse_core_points;
+      printf("#sparse core points : %10d\n", num_sparse_core_points);
+      printf("#total core points  : %10d\n",
+             num_points_in_dense_cells + num_sparse_core_points);
+      std::cout << std::flush;
+
+      Kokkos::View<int, MemorySpace> sparse_core_offset(
+          "ArborX::dbscan::sparse_core_offset");
+      Kokkos::View<int, MemorySpace> sparse_noncore_offset(
+          "ArborX::dbscan::sparse_core_offset");
+
+      Kokkos::deep_copy(sparse_core_offset, num_points_in_dense_cells);
+      Kokkos::deep_copy(sparse_noncore_offset, num_core_points);
+      auto new_permute = ArborX::clone(permute);
+      Kokkos::parallel_for(
+          "ArborX::dbscan::reorder_sparse_points",
+          Kokkos::RangePolicy<ExecutionSpace>(exec_space,
+                                              num_points_in_dense_cells, n),
+          KOKKOS_LAMBDA(int i) {
+            int real_i = permute(i);
+            int pos = Kokkos::atomic_fetch_add((is_core_point(real_i)
+                                                    ? &sparse_core_offset()
+                                                    : &sparse_noncore_offset()),
+                                               1);
+            new_permute(pos) = real_i;
+          });
+
+      auto const core_predicates = buildPredicates(
+          primitives, eps,
+          Kokkos::subview(new_permute, Kokkos::make_pair(0, num_core_points)));
 
       // Perform the queries and build clusters through callback
       timer_start(timer_local);
       Kokkos::Profiling::pushRegion("ArborX::dbscan::clusters:query");
       bvh.query(
-          exec_space, predicates,
+          exec_space, core_predicates,
           Details::FDBSCANDenseBoxCallback<MemorySpace, CorePoints, Primitives,
                                            decltype(dense_cell_offsets),
                                            decltype(permute)>{
-              labels, CorePoints{num_neigh, core_min_size}, primitives,
-              dense_cell_offsets, permute, eps});
+              labels, is_core_point, primitives, dense_cell_offsets, permute,
+              eps});
       Kokkos::Profiling::popRegion();
       elapsed["query"] = timer_seconds(timer_local);
     }
