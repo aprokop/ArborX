@@ -229,6 +229,9 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
   int const n = Access::size(primitives);
 
+  Kokkos::View<int *, MemorySpace> num_neigh("ArborX::dbscan::num_neighbors",
+                                             0);
+
   Kokkos::View<int *, MemorySpace> labels(
       Kokkos::ViewAllocateWithoutInitializing("ArborX::DBSCAN::labels"), n);
   ArborX::iota(exec_space, labels);
@@ -263,8 +266,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       Kokkos::Timer timer_local;
       timer_start(timer_local);
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::num_neigh");
-      Kokkos::View<int *, MemorySpace> num_neigh(
-          "ArborX::DBSCAN::num_neighbors", n);
+      Kokkos::resize(num_neigh, n);
       bvh.query(exec_space, predicates,
                 Details::CountUpToN<MemorySpace>{num_neigh, core_min_size});
       Kokkos::Profiling::popRegion();
@@ -380,8 +382,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       Kokkos::Timer timer_local;
       timer_start(timer_local);
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::num_neigh");
-      Kokkos::View<int *, MemorySpace> num_neigh(
-          "ArborX::DBSCAN::num_neighbors", n);
+      Kokkos::resize(num_neigh, n);
       // Set num neighbors for points in dense cells to max, so that they are
       // automatically core points
       Kokkos::parallel_for(
@@ -449,12 +450,26 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
                          Kokkos::atomic_fetch_add(&cluster_sizes(labels(i)), 1);
                        });
-  Kokkos::parallel_for("ArborX::DBSCAN::mark_noise",
-                       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-                       KOKKOS_LAMBDA(int const i) {
-                         if (cluster_sizes(labels(i)) == 1)
-                           labels(i) = -1;
-                       });
+  if (is_special_case)
+  {
+    // Cannot use CCSCore as it always returns true
+    Kokkos::parallel_for("ArborX::dbscan::mark_noise",
+                         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+                         KOKKOS_LAMBDA(int const i) {
+                           if (cluster_sizes(labels(i)) == 1)
+                             labels(i) = -1;
+                         });
+  }
+  else
+  {
+    Details::DBSCANCorePoints<MemorySpace> is_core{num_neigh, core_min_size};
+    Kokkos::parallel_for("ArborX::dbscan::mark_noise",
+                         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+                         KOKKOS_LAMBDA(int const i) {
+                           if (cluster_sizes(labels(i)) == 1 && !is_core(i))
+                             labels(i) = -1;
+                         });
+  }
   Kokkos::Profiling::popRegion();
   elapsed["query+cluster"] = timer_seconds(timer);
 
