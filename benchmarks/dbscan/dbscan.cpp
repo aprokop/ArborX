@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
   // clang-format off
   desc.add_options()
       ( "help", "help message" )
-      ( "algorithm", bpo::value<std::string>(&params.algorithm)->default_value("dbscan"), "algorithm (dbscan | mst)" )
+      ( "algorithm", bpo::value<std::string>(&params.algorithm)->default_value("dbscan"), "algorithm (dbscan | hdbscan | mst)" )
       ( "filename", bpo::value<std::string>(&params.filename), "filename containing data" )
       ( "binary", bpo::bool_switch(&params.binary)->default_value(false), "binary file indicator")
       ( "max-num-points", bpo::value<int>(&params.max_num_points)->default_value(-1), "max number of points to read in")
@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
       ( "labels", bpo::value<std::string>(&params.filename_labels)->default_value(""), "clutering results output" )
       ( "print-dbscan-timers", bpo::bool_switch(&params.print_dbscan_timers)->default_value(false), "print dbscan timers")
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), R"(implementation ("fdbscan" or "fdbscan-densebox"))")
+      ( "print-mst", bpo::bool_switch(&params.print_mst)->default_value(false), "print MST")
+      ( "dendrogram", bpo::value<std::string>(&params.dendrogram)->default_value("none"), R"(dendrogram (none | alpha | bfs | union-find | bottom-up))")
       ;
   // clang-format on
   bpo::variables_map vm;
@@ -108,6 +110,10 @@ int main(int argc, char *argv[])
     printf("cluster min size  : %d\n", params.cluster_min_size);
     printf("implementation    : %s\n", ss.str().c_str());
     printf("verify            : %s\n", (params.verify ? "true" : "false"));
+  }
+  if (params.algorithm == "hdbscan")
+  {
+    printf("dendrogram        : %s\n", params.dendrogram.c_str());
   }
   printf("minpts            : %d\n", params.core_min_size);
   printf("filename          : %s [%s, max_pts = %d]\n", params.filename.c_str(),

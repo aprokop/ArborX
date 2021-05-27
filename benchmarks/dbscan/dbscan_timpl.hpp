@@ -11,6 +11,7 @@
 
 #include <ArborX_DBSCAN.hpp>
 #include <ArborX_DBSCANVerification.hpp>
+#include <ArborX_HDBSCAN.hpp>
 #include <ArborX_MinimumSpanningTree.hpp>
 
 #include <Kokkos_Core.hpp>
@@ -259,15 +260,15 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
 
   using Primitives = decltype(primitives);
 
-  using ArborX::DBSCAN::Implementation;
-  Implementation implementation = Implementation::FDBSCAN;
-  if (params.implementation == "fdbscan-densebox")
-    implementation = Implementation::FDBSCAN_DenseBox;
-
   Kokkos::View<int *, MemorySpace> labels("Example::labels", 0);
   bool success = true;
   if (params.algorithm == "dbscan")
   {
+    using ArborX::DBSCAN::Implementation;
+    Implementation implementation = Implementation::FDBSCAN;
+    if (params.implementation == "fdbscan-densebox")
+      implementation = Implementation::FDBSCAN_DenseBox;
+
     ArborX::DBSCAN::Parameters dbscan_params;
     dbscan_params.setPrintTimers(params.print_dbscan_timers)
         .setImplementation(implementation);
@@ -331,6 +332,77 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
           exec_space, primitives, params.eps, params.core_min_size, labels);
       printf("Verification %s\n", (success ? "passed" : "failed"));
     }
+  }
+  else if (params.algorithm == "hdbscan")
+  {
+    using ArborX::HDBSCAN::Dendrogram;
+    Dendrogram dendrogram = Dendrogram::NONE;
+    if (params.dendrogram == "none")
+      dendrogram = Dendrogram::NONE;
+    else if (params.dendrogram == "bfs")
+      dendrogram = Dendrogram::BFS;
+    else if (params.dendrogram == "union-find")
+      dendrogram = Dendrogram::UNION_FIND;
+    else if (params.dendrogram == "bottom-up")
+      dendrogram = Dendrogram::BOTTOM_UP;
+    else if (params.dendrogram == "alpha")
+      dendrogram = Dendrogram::ALPHA;
+
+    ArborX::HDBSCAN::Parameters hdbscan_params;
+    hdbscan_params.setPrintTimers(params.print_dbscan_timers)
+        .setPrintMST(params.print_mst)
+        .setDendrogram(dendrogram);
+
+    Kokkos::Profiling::ProfilingSection profile_total("ArborX::HDBSCAN::total");
+    profile_total.start();
+    labels = ArborX::hdbscan(exec_space, primitives, params.core_min_size,
+                             hdbscan_params);
+
+    Kokkos::Profiling::ProfilingSection profile_postprocess(
+        "ArborX::HDBSCAN::postprocess");
+    profile_postprocess.start();
+    Kokkos::View<int *, MemorySpace> cluster_indices("Testing::cluster_indices",
+                                                     0);
+    Kokkos::View<int *, MemorySpace> cluster_offset("Testing::cluster_offset",
+                                                    0);
+    sortAndFilterClusters(exec_space, labels, cluster_indices, cluster_offset,
+                          params.cluster_min_size);
+    profile_postprocess.stop();
+    profile_total.stop();
+
+    if (params.print_dbscan_timers)
+    {
+      printf("-- mst              : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::mst"));
+      printf("-- edge sort        : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::edge_sort"));
+      printf("-- dendrogram       : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
+      if (params.dendrogram == "alpha")
+      {
+        printf("---- euler tour     : %10.3f\n",
+               arborx_dbscan_example_get_time("ArborX::HDBSCAN::euler_tour"));
+        printf("---- alpha edges    : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::HDBSCAN::compute_alpha_edges"));
+      }
+      printf("-- dendrogram       : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
+      printf("-- postprocess      : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));
+      printf("total time          : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::total"));
+    }
+
+    int num_points = primitives.extent_int(0);
+    int num_clusters = cluster_offset.size() - 1;
+    int num_cluster_points = cluster_indices.size();
+    printf("\n#clusters       : %d\n", num_clusters);
+    printf("#cluster points : %d [%.2f%%]\n", num_cluster_points,
+           (100.f * num_cluster_points / num_points));
+    int num_noise_points = num_points - num_cluster_points;
+    printf("#noise   points : %d [%.2f%%]\n", num_noise_points,
+           (100.f * num_noise_points / num_points));
   }
   else if (params.algorithm == "mst")
   {
