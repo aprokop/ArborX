@@ -242,7 +242,10 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     // Build the tree
     timer_start(timer);
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
-    ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+    ArborX::BVH<MemorySpace> bvh(
+        exec_space, primitives,
+        Experimental::ConstructionPolicy().setAlgorithm(
+            Details::ConstructionAlgorithm::PLOC));
     Kokkos::Profiling::popRegion();
     elapsed["construction"] = timer_seconds(timer);
 
@@ -353,7 +356,9 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
         Details::MixedBoxPrimitives<Primitives, decltype(dense_cell_offsets),
                                     decltype(cell_indices), decltype(permute)>{
             primitives, grid, dense_cell_offsets, num_points_in_dense_cells,
-            sorted_cell_indices, permute});
+            sorted_cell_indices, permute},
+        Experimental::ConstructionPolicy().setAlgorithm(
+            Details::ConstructionAlgorithm::PLOC));
 
     Kokkos::Profiling::popRegion();
     elapsed["construction"] = timer_seconds(timer);
