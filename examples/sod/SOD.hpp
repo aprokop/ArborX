@@ -163,6 +163,10 @@ void sod(ExecutionSpace const &exec_space, Points points,
   int const n = points.extent(0);
   int const num_halos = fof_halo_centers.extent(0);
 
+  // Do not sort for now, so as to not allocate additional memory, which would
+  // take 8*n bytes (4 for Morton index, 4 for permutation index)
+  bool const sort_predicates = false;
+
   // Step 1: construct the search index based on spheres (FOF centers with
   // R_max)
   timer_start(timer);
@@ -179,7 +183,9 @@ void sod(ExecutionSpace const &exec_space, Points points,
   bvh.query(exec_space, PointsWrapper<Points>{points},
             BinAccumulator<MemorySpace, Points>{
                 points, masses, sod_halo_bin_masses, sod_halo_bin_counts,
-                fof_halo_centers, r_min, r_max});
+                fof_halo_centers, r_min, r_max},
+            ArborX::Experimental::TraversalPolicy().setPredicateSorting(
+                sort_predicates));
   elapsed["binning"] = timer_seconds(timer);
 
   // Step 3: recompute R_max based on sod_halo_bin_masses
@@ -214,7 +220,9 @@ void sod(ExecutionSpace const &exec_space, Points points,
   Kokkos::View<int *, MemorySpace> counts("counts", n);
   bvh.query(exec_space, PointsWrapper<Points>{points},
             OverlapCount<MemorySpace, Points>{points, counts, fof_halo_centers,
-                                              r_max});
+                                              r_max},
+            ArborX::Experimental::TraversalPolicy().setPredicateSorting(
+                sort_predicates));
   elapsed["query"] = timer_seconds(timer);
 
   printf("-- construction     : %10.3f\n", elapsed["construction"]);
