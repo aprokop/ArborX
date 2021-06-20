@@ -189,27 +189,33 @@ void sod(ExecutionSpace const &exec_space, Points points,
   elapsed["binning"] = timer_seconds(timer);
 
   // Step 3: recompute R_max based on sod_halo_bin_masses
-  float const threshold = 200;
+  float const DELTA = 200;
   Kokkos::parallel_for(
       "recompute_R_max",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
       KOKKOS_LAMBDA(int halo_index) {
         float r_delta = rDelta(r_min, r_max(halo_index));
 
-        float accumulated_mass = 0.f;
-        for (int bin_id = 0; bin_id < NUM_BINS; ++bin_id)
+        float accumulated_mass = sod_halo_bin_masses(halo_index, 0);
+        for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
         {
           accumulated_mass += sod_halo_bin_masses(halo_index, bin_id);
 
+          float bin_inner_radius = pow(10.0, ((bin_id - 1) * r_delta)) * r_min;
           float bin_outer_radius = pow(10.0, (bin_id * r_delta)) * r_min;
-          float volume = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
+          float volume_inner = 4.f / 3 * M_PI * pow(bin_inner_radius, 3);
+          float volume_outer = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
 
-          float density_lower_bound = accumulated_mass / rho_c / volume;
-          if (density_lower_bound >= threshold)
+          float density_lower_bound = accumulated_mass / rho_c / volume_outer;
+          float density_upper_bound = accumulated_mass / rho_c / volume_inner;
+          if (density_upper_bound < DELTA)
           {
-            printf("[%d]: density %d -> %f (%f / %f)\n", halo_index, bin_id,
-                   density_lower_bound, accumulated_mass / rho_c, volume);
-            r_max(halo_index) = bin_outer_radius;
+            int critical_bin_id = bin_id - 1;
+            printf(
+                "[%d]: critical bin %d (next bin's density is in [%f, %f])\n",
+                halo_index, critical_bin_id, density_lower_bound,
+                density_upper_bound);
+            r_max(halo_index) = bin_inner_radius;
             break;
           }
         }
