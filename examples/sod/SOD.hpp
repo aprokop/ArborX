@@ -14,7 +14,7 @@
 
 #include <ArborX.hpp>
 
-int constexpr NUM_BINS = 20;
+int constexpr NUM_BINS = 20 + 1;
 
 template <typename MemorySpace>
 struct Spheres
@@ -202,19 +202,21 @@ void sod(ExecutionSpace const &exec_space, Points points,
           accumulated_mass += sod_halo_bin_masses(halo_index, bin_id);
 
           float bin_inner_radius = pow(10.0, ((bin_id - 1) * r_delta)) * r_min;
-          float bin_outer_radius = pow(10.0, (bin_id * r_delta)) * r_min;
           float volume_inner = 4.f / 3 * M_PI * pow(bin_inner_radius, 3);
-          float volume_outer = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
 
-          float density_lower_bound = accumulated_mass / rho_c / volume_outer;
           float density_upper_bound = accumulated_mass / rho_c / volume_inner;
           if (density_upper_bound < DELTA)
           {
+#if 0
+            float bin_outer_radius = pow(10.0, (bin_id * r_delta)) * r_min;
+            float volume_outer = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
+            float density_lower_bound = accumulated_mass / rho_c / volume_outer;
             int critical_bin_id = bin_id - 1;
             printf(
                 "[%d]: critical bin %d (next bin's density is in [%f, %f])\n",
                 halo_index, critical_bin_id, density_lower_bound,
                 density_upper_bound);
+#endif
             r_max(halo_index) = bin_inner_radius;
             break;
           }

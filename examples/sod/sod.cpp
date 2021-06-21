@@ -22,16 +22,61 @@
 
 struct Data
 {
-  std::vector<ArborX::Point> particles;
-  std::vector<float> particle_masses;
+  template <typename T>
+  using View = Kokkos::View<T *, Kokkos::HostSpace>;
 
-  std::vector<int64_t> fof_halo_tags;
-  std::vector<int> fof_halo_sizes;
-  std::vector<float> fof_halo_masses;
-  std::vector<ArborX::Point> fof_halo_centers;
-  std::vector<float> sod_halo_masses;
-  std::vector<int64_t> sod_halo_sizes;
-  std::vector<float> sod_halo_rdeltas;
+  View<ArborX::Point> particles;
+  View<float> particle_masses;
+
+  View<int64_t> fof_halo_tags;
+  View<int> fof_halo_sizes;
+  View<float> fof_halo_masses;
+  View<ArborX::Point> fof_halo_centers;
+  View<float> sod_halo_masses;
+  View<int64_t> sod_halo_sizes;
+  View<float> sod_halo_rdeltas;
+
+  Data()
+      : particles("particles", 0)
+      , particle_masses("particle_masses", 0)
+      , fof_halo_tags("fof_halo_tags", 0)
+      , fof_halo_sizes("fof_halo_sizes", 0)
+      , fof_halo_masses("fof_halo_masses", 0)
+      , fof_halo_centers("fof_halo_centers", 0)
+      , sod_halo_masses("sod_halo_masses", 0)
+      , sod_halo_sizes("sod_halo_sizes", 0)
+      , sod_halo_rdeltas("sod_halo_rdeltas", 0)
+  {
+  }
+};
+
+struct ProfilesData
+{
+  template <typename T>
+  using View = Kokkos::View<T *, Kokkos::HostSpace>;
+  template <typename T>
+  using BinView = Kokkos::View<T * [NUM_BINS - 1], Kokkos::HostSpace>;
+
+  View<int64_t> fof_halo_tags;
+  BinView<int> sod_halo_bin_ids;
+  BinView<int> sod_halo_bin_counts;
+  BinView<float> sod_halo_bin_masses;
+  BinView<float> sod_halo_bin_outer_radii;
+  BinView<float> sod_halo_bin_rhos;
+  BinView<float> sod_halo_bin_rho_ratios;
+  BinView<float> sod_halo_bin_radial_velocities;
+
+  ProfilesData()
+      : fof_halo_tags("fof_halo_tags", 0)
+      , sod_halo_bin_ids("sod_halo_bin_ids", 0)
+      , sod_halo_bin_counts("sod_halo_bin_counts", 0)
+      , sod_halo_bin_masses("sod_halo_bin_masses", 0)
+      , sod_halo_bin_outer_radii("sod_halo_bin_outer_radii", 0)
+      , sod_halo_bin_rhos("sod_halo_bin_rhos", 0)
+      , sod_halo_bin_rho_ratios("sod_halo_bin_rho_ratios", 0)
+      , sod_halo_bin_radial_velocities("sod_hlo_bin_radial_velocities", 0)
+  {
+  }
 };
 
 void loadParticlesData(std::string const &filename, Data &data,
@@ -50,8 +95,8 @@ void loadParticlesData(std::string const &filename, Data &data,
   if (max_num_points > 0 && max_num_points < N)
     n = max_num_points;
 
-  data.particles.resize(n);
-  data.particle_masses.resize(n);
+  Kokkos::resize(Kokkos::WithoutInitializing, data.particles, n);
+  Kokkos::resize(Kokkos::WithoutInitializing, data.particle_masses, n);
 
   for (int d = 0; d < 3; ++d)
   {
@@ -60,26 +105,16 @@ void loadParticlesData(std::string const &filename, Data &data,
     input.ignore((N - n) * sizeof(float));
 
     for (int i = 0; i < n; ++i)
-      data.particles[i][d] = tmp[i];
+      data.particles(i)[d] = tmp[i];
   }
   input.read(reinterpret_cast<char *>(data.particle_masses.data()),
              n * sizeof(float));
   input.ignore((N - n) * sizeof(float));
 
-#if 0
-  for (int i = 0; i < n; ++i)
-    printf("%d: (%f, %f, %f), %f\n", i, data.particles[i][0],
-           data.particles[i][1], data.particles[i][2], data.particle_masses[i]);
-#endif
-
   std::cout << "done\nRead in " << n << " particles" << std::endl;
 
   input.close();
 }
-
-#define READ_ARRAY(array, n)                                                   \
-  array.resize((n));                                                           \
-  input.read(reinterpret_cast<char *>(array.data()), (n) * sizeof(array[0]))
 
 void loadHalosData(std::string const &filename, Data &data)
 {
@@ -92,32 +127,43 @@ void loadHalosData(std::string const &filename, Data &data)
   int num_halos;
   input.read(reinterpret_cast<char *>(&num_halos), 4);
 
-  READ_ARRAY(data.fof_halo_tags, num_halos);
-  READ_ARRAY(data.fof_halo_sizes, num_halos);
-  READ_ARRAY(data.fof_halo_masses, num_halos);
+  auto read_vector = [&input](auto &v, int n) {
+    v.resize(n);
+    input.read(reinterpret_cast<char *>(v.data()), n * sizeof(v[0]));
+  };
+  auto read_view = [&input](auto &view, int n) {
+    Kokkos::resize(Kokkos::WithoutInitializing, view, n);
+    input.read(reinterpret_cast<char *>(view.data()),
+               n * sizeof(typename std::decay_t<decltype(view)>::value_type));
+  };
+
+  read_view(data.fof_halo_tags, num_halos);
+  read_view(data.fof_halo_sizes, num_halos);
+  read_view(data.fof_halo_masses, num_halos);
   {
     std::vector<float> x, y, z;
-    READ_ARRAY(x, num_halos);
-    READ_ARRAY(y, num_halos);
-    READ_ARRAY(z, num_halos);
+    read_vector(x, num_halos);
+    read_vector(y, num_halos);
+    read_vector(z, num_halos);
 
-    data.fof_halo_centers.resize(num_halos);
+    Kokkos::resize(Kokkos::WithoutInitializing, data.fof_halo_centers,
+                   num_halos);
     for (int i = 0; i < num_halos; i++)
-      data.fof_halo_centers[i] = {x[i], y[i], z[i]};
+      data.fof_halo_centers(i) = {x[i], y[i], z[i]};
   }
-  READ_ARRAY(data.sod_halo_masses, num_halos);
-  READ_ARRAY(data.sod_halo_sizes, num_halos);
-  READ_ARRAY(data.sod_halo_rdeltas, num_halos);
+  read_view(data.sod_halo_masses, num_halos);
+  read_view(data.sod_halo_sizes, num_halos);
+  read_view(data.sod_halo_rdeltas, num_halos);
 
   // Filter out
   // - small halos (FOF halo size < 500)
   // - invalid halos (SOD count size = -101)
-  auto SWAP = [](auto &v, int i, int j) { std::swap(v[i], v[j]); };
+  auto swap = [](auto &view, int i, int j) { std::swap(view(i), view(j)); };
   int i = 0;
   int num_filtered = 0;
   do
   {
-    if (data.fof_halo_sizes[i] < 500 || data.sod_halo_sizes[i] < 0)
+    if (data.fof_halo_sizes(i) < 500 || data.sod_halo_sizes(i) < 0)
     {
       // printf("Filtering out halo tag %ld: fof size = %d, sod size = %ld\n",
       // data.fof_halo_tags[i], data.fof_halo_sizes[i],
@@ -129,13 +175,13 @@ void loadHalosData(std::string const &filename, Data &data)
       int j = num_halos - num_filtered;
       if (i < j)
       {
-        SWAP(data.fof_halo_tags, i, j);
-        SWAP(data.fof_halo_sizes, i, j);
-        SWAP(data.fof_halo_masses, i, j);
-        SWAP(data.fof_halo_centers, i, j);
-        SWAP(data.sod_halo_masses, i, j);
-        SWAP(data.sod_halo_sizes, i, j);
-        SWAP(data.sod_halo_rdeltas, i, j);
+        swap(data.fof_halo_tags, i, j);
+        swap(data.fof_halo_sizes, i, j);
+        swap(data.fof_halo_masses, i, j);
+        swap(data.fof_halo_centers, i, j);
+        swap(data.sod_halo_masses, i, j);
+        swap(data.sod_halo_sizes, i, j);
+        swap(data.sod_halo_rdeltas, i, j);
       }
     }
     else
@@ -147,13 +193,13 @@ void loadHalosData(std::string const &filename, Data &data)
   if (num_filtered > 0)
   {
     num_halos -= num_filtered;
-    data.fof_halo_tags.resize(num_halos);
-    data.fof_halo_sizes.resize(num_halos);
-    data.fof_halo_masses.resize(num_halos);
-    data.fof_halo_centers.resize(num_halos);
-    data.sod_halo_masses.resize(num_halos);
-    data.sod_halo_sizes.resize(num_halos);
-    data.sod_halo_rdeltas.resize(num_halos);
+    Kokkos::resize(data.fof_halo_tags, num_halos);
+    Kokkos::resize(data.fof_halo_sizes, num_halos);
+    Kokkos::resize(data.fof_halo_masses, num_halos);
+    Kokkos::resize(data.fof_halo_centers, num_halos);
+    Kokkos::resize(data.sod_halo_masses, num_halos);
+    Kokkos::resize(data.sod_halo_sizes, num_halos);
+    Kokkos::resize(data.sod_halo_rdeltas, num_halos);
   }
 
   printf("done\nRead in %d halos [%d total, %d filtered]\n", num_halos,
@@ -161,17 +207,46 @@ void loadHalosData(std::string const &filename, Data &data)
 
   input.close();
 }
-#undef READ_FIELD
 
-template <typename... P, typename T>
-auto vec2view(std::vector<T> const &in, std::string const &label = "")
+void loadProfilesData(std::string const &filename, ProfilesData &data)
 {
-  Kokkos::View<T *, P...> out(
-      Kokkos::view_alloc(label, Kokkos::WithoutInitializing), in.size());
-  Kokkos::deep_copy(out, Kokkos::View<T const *, Kokkos::HostSpace,
-                                      Kokkos::MemoryTraits<Kokkos::Unmanaged>>{
-                             in.data(), in.size()});
-  return out;
+  std::cout << "Reading in \"" << filename << "\" in binary mode...";
+  std::cout.flush();
+
+  std::ifstream input(filename, std::ifstream::binary);
+  ARBORX_ASSERT(input.good());
+
+  // The profile file does not contain first bin with < R_min)
+  int constexpr num_bins_in_input = 20;
+  assert(num_bins_in_input == NUM_BINS - 1);
+
+  int num_records;
+  input.read(reinterpret_cast<char *>(&num_records), 4);
+  int num_halos = num_records / num_bins_in_input;
+
+  auto read_view = [&input](auto &view, int n, int s = 1) {
+    Kokkos::resize(Kokkos::WithoutInitializing, view, n / s);
+    input.read(reinterpret_cast<char *>(view.data()),
+               n * sizeof(typename std::decay_t<decltype(view)>::value_type));
+  };
+
+  read_view(data.fof_halo_tags, num_records);
+  for (int i = 1; i < num_halos; ++i)
+    data.fof_halo_tags(i) = data.fof_halo_tags(i * num_bins_in_input);
+  Kokkos::resize(data.fof_halo_tags, num_halos);
+
+  read_view(data.sod_halo_bin_ids, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_counts, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_masses, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_outer_radii, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_rhos, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_rho_ratios, num_records, num_bins_in_input);
+  read_view(data.sod_halo_bin_radial_velocities, num_records,
+            num_bins_in_input);
+
+  printf("done\nRead in %d halos\n", num_halos);
+
+  input.close();
 }
 
 int main(int argc, char *argv[])
@@ -222,13 +297,19 @@ int main(int argc, char *argv[])
   loadParticlesData(filename_particles, data, max_num_points);
   loadHalosData(filename_halos, data);
 
-  auto const particles = vec2view<MemorySpace>(data.particles, "particles");
+  ProfilesData profiles_data;
+  loadProfilesData(filename_profiles, profiles_data);
+
+  ExecutionSpace exec_space;
+
+  auto const particles =
+      Kokkos::create_mirror_view_and_copy(exec_space, data.particles);
   auto const particle_masses =
-      vec2view<MemorySpace>(data.particle_masses, "particle_masses");
+      Kokkos::create_mirror_view_and_copy(exec_space, data.particle_masses);
   auto const fof_halo_centers =
-      vec2view<MemorySpace>(data.fof_halo_centers, "fof_halo_centers");
+      Kokkos::create_mirror_view_and_copy(exec_space, data.fof_halo_centers);
   auto const fof_halo_masses =
-      vec2view<MemorySpace>(data.fof_halo_masses, "fof_halo_masses");
+      Kokkos::create_mirror_view_and_copy(exec_space, data.fof_halo_masses);
 
   auto const num_halos = fof_halo_centers.extent(0);
 
@@ -256,7 +337,6 @@ int main(int argc, char *argv[])
       KOKKOS_LAMBDA(int i) {
         float R_init = std::cbrt(fof_halo_masses(i) / SOD_MASS);
         r_max(i) = MAX_FACTOR * R_init;
-        // printf("r_max(%d) = %f\n", i, r_max(i));
       });
 
   sod(ExecutionSpace{}, particles, particle_masses, fof_halo_centers, r_min,
