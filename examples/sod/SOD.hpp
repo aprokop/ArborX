@@ -195,12 +195,42 @@ struct OverlapCount
       ArborX::AccessTraits<Particles, ArborX::PrimitivesTag>;
 
   template <typename Query>
-  KOKKOS_FUNCTION auto operator()(Query const &query, int j) const
+  KOKKOS_FUNCTION auto operator()(Query const &query, int halo_index) const
   {
     auto i = getData(query);
 
     ArborX::Point const &point = ParticlesAccess::get(_particles, i);
-    if (ArborX::Details::distance(point, _centers(j)) <= _radii(j))
+    if (ArborX::Details::distance(point, _centers(halo_index)) <=
+        _radii(halo_index))
+      ++_counts(i);
+  }
+};
+
+template <typename MemorySpace, typename Particles>
+struct CriticalBinParticles
+{
+  Particles _particles;
+  Kokkos::View<int *, MemorySpace> _offsets;
+  Kokkos::View<int *, MemorySpace> _indices;
+  Kokkos::View<int *, MemorySpace> _critical_bin_ids;
+  Kokkos::View<ArborX::Point *, MemorySpace> _centers;
+  float _r_min;
+  Kokkos::View<float *, MemorySpace> _r_max;
+
+  using ParticlesAccess =
+      ArborX::AccessTraits<Particles, ArborX::PrimitivesTag>;
+
+  template <typename Query>
+  KOKKOS_FUNCTION auto operator()(Query const &query, int halo_index) const
+  {
+    auto i = getData(query);
+
+    int const bin_id = _critical_bin_ids(bin_id);
+
+    ArborX::Point const &particle = ParticlesAccess::get(_particles, i);
+    float r =
+        ArborX::Details::distance(particle, _fof_halo_centers(halo_index));
+    if (binID(_r_min, _r
       ++_counts(i);
   }
 };
@@ -286,7 +316,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
         sod_halo_bin_outer_radii(halo_index, 0) = r_min;
         for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
           sod_halo_bin_outer_radii(halo_index, bin_id) =
-              pow(10.0, (bin_id * r_delta)) * r_min;
+              pow(10.0, bin_id * r_delta) * r_min;
       });
   auto sod_halo_bin_outer_radii_host =
       Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_outer_radii);
@@ -318,6 +348,9 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
 
   // Step 3: recompute R_max based on sod_halo_bin_masses
   float const DELTA = 200;
+  Kokkos::View<int *, MemorySpace> critical_bin_ids(
+      Kokkos::ViewAllocateWithoutInitializing("critical_bin_ids"), num_halos);
+  Kokkos::deep_copy(critical_bin_ids, -1);
   Kokkos::parallel_for(
       "recompute_R_max",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
@@ -335,29 +368,30 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           float density_upper_bound = accumulated_mass / rho_c / volume_inner;
           if (density_upper_bound < DELTA)
           {
+            critical_bin_ids(halo_index) = bin_id - 1;
+            r_max(halo_index) = bin_inner_radius;
 #if 1
             float bin_outer_radius = pow(10.0, (bin_id * r_delta)) * r_min;
             float volume_outer = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
             float density_lower_bound = accumulated_mass / rho_c / volume_outer;
-            int critical_bin_id = bin_id - 1;
             printf(
                 "[%d]: critical bin %d (next bin's density is in [%f, %f])\n",
-                halo_index, critical_bin_id, density_lower_bound,
+                halo_index, critical_bin_ids(halo_index), density_lower_bound,
                 density_upper_bound);
 #endif
-            r_max(halo_index) = bin_inner_radius;
             break;
           }
         }
       });
 
+#if 0
   // Step 4: compute overlap counts
   timer_start(timer);
   auto const n = in.particles.extent_int(0);
   Kokkos::View<int *, MemorySpace> counts("counts", n);
   bvh.query(exec_space, ParticlesWrapper<Particles>{particles},
-            OverlapCount<MemorySpace, Particles>{particles, counts, fof_halo_centers,
-                                              r_max},
+            OverlapCount<MemorySpace, Particles>{particles, counts,
+                                                 fof_halo_centers, r_max},
             ArborX::Experimental::TraversalPolicy().setPredicateSorting(
                 sort_predicates));
   elapsed["query"] = timer_seconds(timer);
@@ -403,6 +437,32 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
     if (num_inside_multiple > 0)
       printf("  max number of owners: %d\n", max_multiple);
   }
+#else
+  timer_start(timer);
+  Kokkos::View<int *, MemorySpace> critical_bin_offsets("critical_bin_offsets",
+                                                        num_halos + 1);
+  Kokkos::parallel_for(
+      "compute_critical_bin_counts",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
+      KOKKOS_LAMBDA(int halo_index) {
+        critical_bin_offsets(halo_index) =
+            sod_halo_bin_counts(halo_index, critical_bin_ids(halo_index));
+      });
+  ArborX::exclusivePrefixSum(exec_space, critical_bin_offsets);
+
+  auto const n = in.particles.extent_int(0);
+  Kokkos::View<int *, MemorySpace> critical_bin_indices(
+      Kokkos::ViewAllocateWithoutInitializing("critical_bin_indices"),
+      ArborX::lastElement(critical_bin_offsets));
+  auto offsets = ArborX::clone(critical_bin_offsets);
+  bvh.query(exec_space, ParticlesWrapper<Particles>{particles},
+            CriticalBinParticles<MemorySpace, Particles>{
+                particles, offsets, critical_bin_indices, critical_bin_ids,
+                fof_halo_centers, r_min, r_max},
+            ArborX::Experimental::TraversalPolicy().setPredicateSorting(
+                sort_predicates));
+  elapsed["query"] = timer_seconds(timer);
+#endif
 }
 
 #endif
