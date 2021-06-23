@@ -151,8 +151,8 @@ template <typename MemorySpace, typename Particles>
 struct BinAccumulator
 {
   Particles _particles;
-  Kokkos::View<float *, MemorySpace> _masses;
-  Kokkos::View<float * [NUM_BINS], MemorySpace> _sod_halo_bin_masses;
+  Kokkos::View<float *, MemorySpace> _particle_masses;
+  Kokkos::View<float * [NUM_BINS], MemorySpace> _sod_halo_bin_particle_masses;
   Kokkos::View<int * [NUM_BINS], MemorySpace> _sod_halo_bin_counts;
   Kokkos::View<ArborX::Point *, MemorySpace> _fof_halo_centers;
   float _r_min;
@@ -178,8 +178,8 @@ struct BinAccumulator
 
     int bin_id = binID(_r_min, _r_max(halo_index), dist);
     Kokkos::atomic_fetch_add(&_sod_halo_bin_counts(halo_index, bin_id), 1);
-    Kokkos::atomic_fetch_add(&_sod_halo_bin_masses(halo_index, bin_id),
-                             _masses(particle_index));
+    Kokkos::atomic_fetch_add(&_sod_halo_bin_particle_masses(halo_index, bin_id),
+                             _particle_masses(particle_index));
   }
 };
 
@@ -197,12 +197,13 @@ struct OverlapCount
   template <typename Query>
   KOKKOS_FUNCTION auto operator()(Query const &query, int halo_index) const
   {
-    auto i = getData(query);
+    auto particle_index = getData(query);
 
-    ArborX::Point const &point = ParticlesAccess::get(_particles, i);
-    if (ArborX::Details::distance(point, _centers(halo_index)) <=
+    ArborX::Point const &particle =
+        ParticlesAccess::get(_particles, particle_index);
+    if (ArborX::Details::distance(particle, _centers(halo_index)) <=
         _radii(halo_index))
-      ++_counts(i);
+      ++_counts(particle_index);
   }
 };
 
@@ -213,7 +214,7 @@ struct CriticalBinParticles
   Kokkos::View<int *, MemorySpace> _offsets;
   Kokkos::View<int *, MemorySpace> _indices;
   Kokkos::View<int *, MemorySpace> _critical_bin_ids;
-  Kokkos::View<ArborX::Point *, MemorySpace> _centers;
+  Kokkos::View<ArborX::Point *, MemorySpace> _fof_halo_centers;
   float _r_min;
   Kokkos::View<float *, MemorySpace> _r_max;
 
@@ -223,15 +224,19 @@ struct CriticalBinParticles
   template <typename Query>
   KOKKOS_FUNCTION auto operator()(Query const &query, int halo_index) const
   {
-    auto i = getData(query);
+    auto particle_index = getData(query);
 
-    int const bin_id = _critical_bin_ids(bin_id);
+    ArborX::Point const &particle =
+        ParticlesAccess::get(_particles, particle_index);
 
-    ArborX::Point const &particle = ParticlesAccess::get(_particles, i);
-    float r =
+    float dist =
         ArborX::Details::distance(particle, _fof_halo_centers(halo_index));
-    if (binID(_r_min, _r
-      ++_counts(i);
+    if (binID(_r_min, _r_max(halo_index), dist) ==
+        _critical_bin_ids(halo_index))
+    {
+      auto pos = Kokkos::atomic_fetch_add(&_offsets(halo_index), 1);
+      _indices(pos) = particle_index;
+    }
   }
 };
 
@@ -450,7 +455,9 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
       });
   ArborX::exclusivePrefixSum(exec_space, critical_bin_offsets);
 
-  auto const n = in.particles.extent_int(0);
+  printf("#particles in critical bins: %d\n",
+         ArborX::lastElement(critical_bin_offsets));
+
   Kokkos::View<int *, MemorySpace> critical_bin_indices(
       Kokkos::ViewAllocateWithoutInitializing("critical_bin_indices"),
       ArborX::lastElement(critical_bin_offsets));

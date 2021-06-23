@@ -265,7 +265,6 @@ void loadProfilesData(std::string const &filename, InputData const &in,
 int main(int argc, char *argv[])
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using MemorySpace = typename ExecutionSpace::memory_space;
 
   Kokkos::ScopeGuard guard(argc, argv);
 
@@ -351,7 +350,7 @@ int main(int argc, char *argv[])
     if (!matched)
     {
       printf("counts for halo tag %ld do not match: validation = [",
-              input_data.fof_halo_tags(i));
+             input_data.fof_halo_tags(i));
       for (int j = 1; j < NUM_BINS; ++j)
         printf(" %d", validation_data.sod_halo_bin_counts(i, j));
       printf(" ], errors = [");
