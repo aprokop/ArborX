@@ -318,7 +318,6 @@ int main(int argc, char *argv[])
 
   // validate
   auto const num_halos = input_data.fof_halo_tags.extent_int(0);
-#if 0
   // outer radii
   printf("validating radii\n");
   for (int i = 0; i < num_halos; ++i)
@@ -340,7 +339,6 @@ int main(int argc, char *argv[])
       printf(" ]\n");
     }
   }
-#endif
 
   // bin counts
   printf("validating bin counts\n");
@@ -352,14 +350,14 @@ int main(int argc, char *argv[])
                   validation_data.sod_halo_bin_counts(i, j));
     if (!matched)
     {
-      printf("counts for halo tag %ld do not match: [",
-             input_data.fof_halo_tags(i));
-      printf("%ld: result = [", input_data.fof_halo_tags(i));
-      for (int j = 1; j < NUM_BINS; ++j)
-        printf(" %d", output_data.sod_halo_bin_counts(i, j));
-      printf(" ], validation = [");
+      printf("counts for halo tag %ld do not match: validation = [",
+              input_data.fof_halo_tags(i));
       for (int j = 1; j < NUM_BINS; ++j)
         printf(" %d", validation_data.sod_halo_bin_counts(i, j));
+      printf(" ], errors = [");
+      for (int j = 1; j < NUM_BINS; ++j)
+        printf(" %d", output_data.sod_halo_bin_counts(i, j) -
+                          validation_data.sod_halo_bin_counts(i, j));
       printf(" ]\n");
     }
   }

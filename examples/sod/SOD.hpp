@@ -251,7 +251,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   // At redshift = 0, the factors are trivial:
   //   a = 1, Efact = 1,
   // so rho_c = RHO_C.
-  // float rho_c = RHO_C;
+  float rho_c = RHO_C;
 
   // Compute r_min and r_max
   float r_min = MIN_FACTOR * R_SMOOTH;
@@ -316,7 +316,6 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   Kokkos::deep_copy(out.sod_halo_bin_counts, sod_halo_bin_counts_host);
   elapsed["binning"] = timer_seconds(timer);
 
-#if 0
   // Step 3: recompute R_max based on sod_halo_bin_masses
   float const DELTA = 200;
   Kokkos::parallel_for(
@@ -336,7 +335,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           float density_upper_bound = accumulated_mass / rho_c / volume_inner;
           if (density_upper_bound < DELTA)
           {
-#if 0
+#if 1
             float bin_outer_radius = pow(10.0, (bin_id * r_delta)) * r_min;
             float volume_outer = 4.f / 3 * M_PI * pow(bin_outer_radius, 3);
             float density_lower_bound = accumulated_mass / rho_c / volume_outer;
@@ -404,7 +403,6 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
     if (num_inside_multiple > 0)
       printf("  max number of owners: %d\n", max_multiple);
   }
-#endif
 }
 
 #endif
