@@ -20,66 +20,36 @@
 
 #include <SOD.hpp>
 
-struct Data
+template <typename ExecutionSpace, typename Permute, typename View>
+std::enable_if_t<Kokkos::is_view<View>{} && View::rank == 1>
+applyPermutation(ExecutionSpace const &exec_space, Permute const &permute,
+                 View view)
 {
-  template <typename T>
-  using View = Kokkos::View<T *, Kokkos::HostSpace>;
+  auto const n = view.extent_int(0);
+  ARBORX_ASSERT(permute.extent_int(0) == n);
 
-  View<ArborX::Point> particles;
-  View<float> particle_masses;
+  auto view_clone = ArborX::clone(exec_space, view);
+  for (int i = 0; i < n; ++i)
+    view(i) = view_clone(permute(i));
+}
 
-  View<int64_t> fof_halo_tags;
-  View<int> fof_halo_sizes;
-  View<float> fof_halo_masses;
-  View<ArborX::Point> fof_halo_centers;
-  View<float> sod_halo_masses;
-  View<int64_t> sod_halo_sizes;
-  View<float> sod_halo_rdeltas;
-
-  Data()
-      : particles("particles", 0)
-      , particle_masses("particle_masses", 0)
-      , fof_halo_tags("fof_halo_tags", 0)
-      , fof_halo_sizes("fof_halo_sizes", 0)
-      , fof_halo_masses("fof_halo_masses", 0)
-      , fof_halo_centers("fof_halo_centers", 0)
-      , sod_halo_masses("sod_halo_masses", 0)
-      , sod_halo_sizes("sod_halo_sizes", 0)
-      , sod_halo_rdeltas("sod_halo_rdeltas", 0)
-  {
-  }
-};
-
-struct ProfilesData
+template <typename ExecutionSpace, typename Permute, typename View>
+std::enable_if_t<Kokkos::is_view<View>{} && View::rank == 2>
+applyPermutation2(ExecutionSpace const &exec_space, Permute const &permute,
+                  View view)
 {
-  template <typename T>
-  using View = Kokkos::View<T *, Kokkos::HostSpace>;
-  template <typename T>
-  using BinView = Kokkos::View<T * [NUM_BINS - 1], Kokkos::HostSpace>;
+  auto const n = view.extent_int(0);
+  ARBORX_ASSERT(permute.extent_int(0) == n);
 
-  View<int64_t> fof_halo_tags;
-  BinView<int> sod_halo_bin_ids;
-  BinView<int> sod_halo_bin_counts;
-  BinView<float> sod_halo_bin_masses;
-  BinView<float> sod_halo_bin_outer_radii;
-  BinView<float> sod_halo_bin_rhos;
-  BinView<float> sod_halo_bin_rho_ratios;
-  BinView<float> sod_halo_bin_radial_velocities;
+  auto const m = view.extent_int(1);
 
-  ProfilesData()
-      : fof_halo_tags("fof_halo_tags", 0)
-      , sod_halo_bin_ids("sod_halo_bin_ids", 0)
-      , sod_halo_bin_counts("sod_halo_bin_counts", 0)
-      , sod_halo_bin_masses("sod_halo_bin_masses", 0)
-      , sod_halo_bin_outer_radii("sod_halo_bin_outer_radii", 0)
-      , sod_halo_bin_rhos("sod_halo_bin_rhos", 0)
-      , sod_halo_bin_rho_ratios("sod_halo_bin_rho_ratios", 0)
-      , sod_halo_bin_radial_velocities("sod_hlo_bin_radial_velocities", 0)
-  {
-  }
-};
+  auto view_clone = ArborX::clone(exec_space, view);
+  for (int i = 0; i < n; ++i)
+    for (int j = 0; j < m; ++j)
+      view(i, j) = view_clone(permute(i), j);
+}
 
-void loadParticlesData(std::string const &filename, Data &data,
+void loadParticlesData(std::string const &filename, InputData &in,
                        int max_num_points = -1)
 {
   std::cout << "Reading in \"" << filename << "\" in binary mode...";
@@ -95,8 +65,8 @@ void loadParticlesData(std::string const &filename, Data &data,
   if (max_num_points > 0 && max_num_points < N)
     n = max_num_points;
 
-  Kokkos::resize(Kokkos::WithoutInitializing, data.particles, n);
-  Kokkos::resize(Kokkos::WithoutInitializing, data.particle_masses, n);
+  Kokkos::resize(Kokkos::WithoutInitializing, in.particles, n);
+  Kokkos::resize(Kokkos::WithoutInitializing, in.particle_masses, n);
 
   for (int d = 0; d < 3; ++d)
   {
@@ -105,9 +75,9 @@ void loadParticlesData(std::string const &filename, Data &data,
     input.ignore((N - n) * sizeof(float));
 
     for (int i = 0; i < n; ++i)
-      data.particles(i)[d] = tmp[i];
+      in.particles(i)[d] = tmp[i];
   }
-  input.read(reinterpret_cast<char *>(data.particle_masses.data()),
+  input.read(reinterpret_cast<char *>(in.particle_masses.data()),
              n * sizeof(float));
   input.ignore((N - n) * sizeof(float));
 
@@ -116,7 +86,7 @@ void loadParticlesData(std::string const &filename, Data &data,
   input.close();
 }
 
-void loadHalosData(std::string const &filename, Data &data)
+void loadHalosData(std::string const &filename, InputData &in, OutputData &out)
 {
   std::cout << "Reading in \"" << filename << "\" in binary mode...";
   std::cout.flush();
@@ -137,23 +107,22 @@ void loadHalosData(std::string const &filename, Data &data)
                n * sizeof(typename std::decay_t<decltype(view)>::value_type));
   };
 
-  read_view(data.fof_halo_tags, num_halos);
-  read_view(data.fof_halo_sizes, num_halos);
-  read_view(data.fof_halo_masses, num_halos);
+  read_view(in.fof_halo_tags, num_halos);
+  read_view(in.fof_halo_sizes, num_halos);
+  read_view(in.fof_halo_masses, num_halos);
   {
     std::vector<float> x, y, z;
     read_vector(x, num_halos);
     read_vector(y, num_halos);
     read_vector(z, num_halos);
 
-    Kokkos::resize(Kokkos::WithoutInitializing, data.fof_halo_centers,
-                   num_halos);
+    Kokkos::resize(Kokkos::WithoutInitializing, in.fof_halo_centers, num_halos);
     for (int i = 0; i < num_halos; i++)
-      data.fof_halo_centers(i) = {x[i], y[i], z[i]};
+      in.fof_halo_centers(i) = {x[i], y[i], z[i]};
   }
-  read_view(data.sod_halo_masses, num_halos);
-  read_view(data.sod_halo_sizes, num_halos);
-  read_view(data.sod_halo_rdeltas, num_halos);
+  read_view(out.sod_halo_masses, num_halos);
+  read_view(out.sod_halo_sizes, num_halos);
+  read_view(out.sod_halo_rdeltas, num_halos);
 
   // Filter out
   // - small halos (FOF halo size < 500)
@@ -163,25 +132,21 @@ void loadHalosData(std::string const &filename, Data &data)
   int num_filtered = 0;
   do
   {
-    if (data.fof_halo_sizes(i) < 500 || data.sod_halo_sizes(i) < 0)
+    if (in.fof_halo_sizes(i) < 500 || out.sod_halo_sizes(i) < 0)
     {
-      // printf("Filtering out halo tag %ld: fof size = %d, sod size = %ld\n",
-      // data.fof_halo_tags[i], data.fof_halo_sizes[i],
-      // data.sod_halo_sizes[i]);
-
       // Instead of using erase(), swap with the last element
       ++num_filtered;
 
       int j = num_halos - num_filtered;
       if (i < j)
       {
-        swap(data.fof_halo_tags, i, j);
-        swap(data.fof_halo_sizes, i, j);
-        swap(data.fof_halo_masses, i, j);
-        swap(data.fof_halo_centers, i, j);
-        swap(data.sod_halo_masses, i, j);
-        swap(data.sod_halo_sizes, i, j);
-        swap(data.sod_halo_rdeltas, i, j);
+        swap(in.fof_halo_tags, i, j);
+        swap(in.fof_halo_sizes, i, j);
+        swap(in.fof_halo_masses, i, j);
+        swap(in.fof_halo_centers, i, j);
+        swap(out.sod_halo_masses, i, j);
+        swap(out.sod_halo_sizes, i, j);
+        swap(out.sod_halo_rdeltas, i, j);
       }
     }
     else
@@ -193,22 +158,34 @@ void loadHalosData(std::string const &filename, Data &data)
   if (num_filtered > 0)
   {
     num_halos -= num_filtered;
-    Kokkos::resize(data.fof_halo_tags, num_halos);
-    Kokkos::resize(data.fof_halo_sizes, num_halos);
-    Kokkos::resize(data.fof_halo_masses, num_halos);
-    Kokkos::resize(data.fof_halo_centers, num_halos);
-    Kokkos::resize(data.sod_halo_masses, num_halos);
-    Kokkos::resize(data.sod_halo_sizes, num_halos);
-    Kokkos::resize(data.sod_halo_rdeltas, num_halos);
+    Kokkos::resize(in.fof_halo_tags, num_halos);
+    Kokkos::resize(in.fof_halo_sizes, num_halos);
+    Kokkos::resize(in.fof_halo_masses, num_halos);
+    Kokkos::resize(in.fof_halo_centers, num_halos);
+    Kokkos::resize(out.sod_halo_masses, num_halos);
+    Kokkos::resize(out.sod_halo_sizes, num_halos);
+    Kokkos::resize(out.sod_halo_rdeltas, num_halos);
   }
 
   printf("done\nRead in %d halos [%d total, %d filtered]\n", num_halos,
          num_halos + num_filtered, num_filtered);
 
+  // Sort halos by tags for consistency
+  auto host_space = Kokkos::DefaultHostExecutionSpace{};
+  auto permute = ArborX::Details::sortObjects(host_space, in.fof_halo_tags);
+  applyPermutation(host_space, permute, in.fof_halo_sizes);
+  applyPermutation(host_space, permute, in.fof_halo_sizes);
+  applyPermutation(host_space, permute, in.fof_halo_masses);
+  applyPermutation(host_space, permute, in.fof_halo_centers);
+  applyPermutation(host_space, permute, out.sod_halo_masses);
+  applyPermutation(host_space, permute, out.sod_halo_sizes);
+  applyPermutation(host_space, permute, out.sod_halo_rdeltas);
+
   input.close();
 }
 
-void loadProfilesData(std::string const &filename, ProfilesData &data)
+void loadProfilesData(std::string const &filename, InputData const &in,
+                      OutputData &out)
 {
   std::cout << "Reading in \"" << filename << "\" in binary mode...";
   std::cout.flush();
@@ -217,36 +194,72 @@ void loadProfilesData(std::string const &filename, ProfilesData &data)
   ARBORX_ASSERT(input.good());
 
   // The profile file does not contain first bin with < R_min)
-  int constexpr num_bins_in_input = 20;
-  assert(num_bins_in_input == NUM_BINS - 1);
+  ARBORX_ASSERT(NUM_BINS == 21);
 
   int num_records;
   input.read(reinterpret_cast<char *>(&num_records), 4);
-  int num_halos = num_records / num_bins_in_input;
+  ARBORX_ASSERT(num_records % (NUM_BINS - 1) == 0);
 
-  auto read_view = [&input](auto &view, int n, int s = 1) {
-    Kokkos::resize(Kokkos::WithoutInitializing, view, n / s);
+  int num_halos = num_records / (NUM_BINS - 1);
+
+  auto read_view = [&input](auto &view, int n) {
+    Kokkos::resize(Kokkos::WithoutInitializing, view, n);
     input.read(reinterpret_cast<char *>(view.data()),
                n * sizeof(typename std::decay_t<decltype(view)>::value_type));
   };
+  auto read_bin_view = [&input](auto &view, int n) {
+    using view_type = std::decay_t<decltype(view)>;
+    using value_type = typename view_type::value_type;
 
-  read_view(data.fof_halo_tags, num_records);
+    Kokkos::View<value_type *, typename view_type::device_type> v(
+        Kokkos::ViewAllocateWithoutInitializing("tmp"), n * (NUM_BINS - 1));
+    input.read(reinterpret_cast<char *>(v.data()),
+               v.extent(0) * sizeof(value_type));
+
+    // First bin is unused, shift data
+    Kokkos::resize(Kokkos::WithoutInitializing, view, n);
+    for (int i = 0; i < n; ++i)
+    {
+      view(i, 0) = -1; // just want a value that is clearly unidentifiable
+      for (int j = 0; j < NUM_BINS - 1; ++j)
+        view(i, j + 1) = v(i * (NUM_BINS - 1) + j);
+    }
+  };
+
+  // FOF halo tags are repeated in groups of size NUM_BINS-1, make them unique
+  read_view(out.fof_halo_tags, num_records);
   for (int i = 1; i < num_halos; ++i)
-    data.fof_halo_tags(i) = data.fof_halo_tags(i * num_bins_in_input);
-  Kokkos::resize(data.fof_halo_tags, num_halos);
+    out.fof_halo_tags(i) = out.fof_halo_tags(i * (NUM_BINS - 1));
+  Kokkos::resize(out.fof_halo_tags, num_halos);
 
-  read_view(data.sod_halo_bin_ids, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_counts, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_masses, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_outer_radii, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_rhos, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_rho_ratios, num_records, num_bins_in_input);
-  read_view(data.sod_halo_bin_radial_velocities, num_records,
-            num_bins_in_input);
+  read_bin_view(out.sod_halo_bin_ids, num_halos);
+  read_bin_view(out.sod_halo_bin_counts, num_halos);
+  read_bin_view(out.sod_halo_bin_masses, num_halos);
+  read_bin_view(out.sod_halo_bin_outer_radii, num_halos);
+  read_bin_view(out.sod_halo_bin_rhos, num_halos);
+  read_bin_view(out.sod_halo_bin_rho_ratios, num_halos);
+  read_bin_view(out.sod_halo_bin_radial_velocities, num_halos);
+
+  // Sort halos by tags for consistency
+  auto host_space = Kokkos::DefaultHostExecutionSpace{};
+  auto permute = ArborX::Details::sortObjects(host_space, out.fof_halo_tags);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_ids);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_counts);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_masses);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_outer_radii);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_rhos);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_rho_ratios);
+  applyPermutation2(host_space, permute, out.sod_halo_bin_radial_velocities);
 
   printf("done\nRead in %d halos\n", num_halos);
 
   input.close();
+
+  // Validate tags
+  ARBORX_ASSERT(out.fof_halo_tags.extent_int(0) ==
+                in.fof_halo_tags.extent_int(0));
+  for (int i = 0; i < num_halos; ++i)
+    ARBORX_ASSERT(in.fof_halo_tags(i) == out.fof_halo_tags(i));
 }
 
 int main(int argc, char *argv[])
@@ -286,61 +299,92 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // Print out the runtime parameters
+  // print out the runtime parameters
   printf("filename [particles] : %s [max_pts = %d]\n",
          filename_particles.c_str(), max_num_points);
   printf("filename [halos]     : %s\n", filename_halos.c_str());
   printf("filename [profiles]  : %s\n", filename_profiles.c_str());
 
   // read in data
-  Data data;
-  loadParticlesData(filename_particles, data, max_num_points);
-  loadHalosData(filename_halos, data);
+  InputData input_data;
+  OutputData validation_data;
+  loadParticlesData(filename_particles, input_data, max_num_points);
+  loadHalosData(filename_halos, input_data, validation_data);
+  loadProfilesData(filename_profiles, input_data, validation_data);
 
-  ProfilesData profiles_data;
-  loadProfilesData(filename_profiles, profiles_data);
+  // run SOD
+  OutputData output_data;
+  sod(ExecutionSpace{}, input_data, output_data);
 
-  ExecutionSpace exec_space;
+  // validate
+  auto const num_halos = input_data.fof_halo_tags.extent_int(0);
+#if 0
+  // outer radii
+  printf("validating radii\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int j = 1; j < NUM_BINS; ++j)
+      matched &= (output_data.sod_halo_bin_outer_radii(i, j) ==
+                  validation_data.sod_halo_bin_outer_radii(i, j));
+    if (!matched)
+    {
+      printf("radii for halo tag %ld do not match: relative errors [",
+             input_data.fof_halo_tags(i));
+      for (int j = 1; j < NUM_BINS; ++j)
+      {
+        float a = output_data.sod_halo_bin_outer_radii(i, j);
+        float b = validation_data.sod_halo_bin_outer_radii(i, j);
+        printf(" %e", std::abs((a - b) / a));
+      }
+      printf(" ]\n");
+    }
+  }
+#endif
 
-  auto const particles =
-      Kokkos::create_mirror_view_and_copy(exec_space, data.particles);
-  auto const particle_masses =
-      Kokkos::create_mirror_view_and_copy(exec_space, data.particle_masses);
-  auto const fof_halo_centers =
-      Kokkos::create_mirror_view_and_copy(exec_space, data.fof_halo_centers);
-  auto const fof_halo_masses =
-      Kokkos::create_mirror_view_and_copy(exec_space, data.fof_halo_masses);
+  // bin counts
+  printf("validating bin counts\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int j = 1; j < NUM_BINS; ++j)
+      matched &= (output_data.sod_halo_bin_counts(i, j) ==
+                  validation_data.sod_halo_bin_counts(i, j));
+    if (!matched)
+    {
+      printf("counts for halo tag %ld do not match: [",
+             input_data.fof_halo_tags(i));
+      printf("%ld: result = [", input_data.fof_halo_tags(i));
+      for (int j = 1; j < NUM_BINS; ++j)
+        printf(" %d", output_data.sod_halo_bin_counts(i, j));
+      printf(" ], validation = [");
+      for (int j = 1; j < NUM_BINS; ++j)
+        printf(" %d", validation_data.sod_halo_bin_counts(i, j));
+      printf(" ]\n");
+    }
+  }
 
-  auto const num_halos = fof_halo_centers.extent(0);
-
-  // HACC constants
-  float constexpr MIN_FACTOR = 0.05;
-  float constexpr MAX_FACTOR = 2.0;
-  float constexpr R_SMOOTH =
-      250.f / 3072; // interparticle separation, rl/np, where rl is the boxsize
-                    // of the simulation, and np is the number of particles
-  float constexpr SOD_MASS = 1e14;
-  float constexpr RHO_C = 2.77536627e11;
-
-  // rho_c = RHO_C * Efact*Efact * a*a
-  // At redshift = 0, the factors are trivial:
-  //   a = 1, Efact = 1,
-  // so rho_c = RHO_C.
-  float rho_c = RHO_C;
-
-  // Compute r_min and r_max
-  float r_min = MIN_FACTOR * R_SMOOTH;
-  Kokkos::View<float *, MemorySpace> r_max("r_max", fof_halo_centers.extent(0));
-  Kokkos::parallel_for(
-      "compute_r_max",
-      Kokkos::RangePolicy<ExecutionSpace>(ExecutionSpace{}, 0, num_halos),
-      KOKKOS_LAMBDA(int i) {
-        float R_init = std::cbrt(fof_halo_masses(i) / SOD_MASS);
-        r_max(i) = MAX_FACTOR * R_init;
-      });
-
-  sod(ExecutionSpace{}, particles, particle_masses, fof_halo_centers, r_min,
-      r_max, rho_c);
+  // bin masses
+  printf("validating bin masses\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int j = 1; j < NUM_BINS; ++j)
+      matched &= (output_data.sod_halo_bin_masses(i, j) ==
+                  validation_data.sod_halo_bin_masses(i, j));
+    if (!matched)
+    {
+      printf("masses for halo tag %ld do not match: relative errors [",
+             input_data.fof_halo_tags(i));
+      for (int j = 1; j < NUM_BINS; ++j)
+      {
+        float a = output_data.sod_halo_bin_masses(i, j);
+        float b = validation_data.sod_halo_bin_masses(i, j);
+        printf(" %e", std::abs((a - b) / a));
+      }
+      printf(" ]\n");
+    }
+  }
 
   return EXIT_SUCCESS;
 }

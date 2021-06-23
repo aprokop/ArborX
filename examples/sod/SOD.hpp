@@ -16,6 +16,67 @@
 
 int constexpr NUM_BINS = 20 + 1;
 
+struct InputData
+{
+  template <typename T>
+  using View = Kokkos::View<T *, Kokkos::HostSpace>;
+
+  View<ArborX::Point> particles;
+  View<float> particle_masses;
+
+  View<int64_t> fof_halo_tags;
+  View<int> fof_halo_sizes;
+  View<float> fof_halo_masses;
+  View<ArborX::Point> fof_halo_centers;
+
+  InputData()
+      : particles("particles", 0)
+      , particle_masses("particle_masses", 0)
+      , fof_halo_tags("fof_halo_tags", 0)
+      , fof_halo_sizes("fof_halo_sizes", 0)
+      , fof_halo_masses("fof_halo_masses", 0)
+      , fof_halo_centers("fof_halo_centers", 0)
+  {
+  }
+};
+
+struct OutputData
+{
+  template <typename T>
+  using View = Kokkos::View<T *, Kokkos::HostSpace>;
+  template <typename T>
+  using BinView = Kokkos::View<T * [NUM_BINS], Kokkos::HostSpace>;
+
+  View<int64_t> fof_halo_tags;
+
+  View<float> sod_halo_masses;
+  View<int64_t> sod_halo_sizes;
+  View<float> sod_halo_rdeltas;
+
+  BinView<int> sod_halo_bin_ids;
+  BinView<int> sod_halo_bin_counts;
+  BinView<float> sod_halo_bin_masses;
+  BinView<float> sod_halo_bin_outer_radii;
+  BinView<float> sod_halo_bin_rhos;
+  BinView<float> sod_halo_bin_rho_ratios;
+  BinView<float> sod_halo_bin_radial_velocities;
+
+  OutputData()
+      : fof_halo_tags("fof_halo_tags", 0)
+      , sod_halo_masses("sod_halo_masses", 0)
+      , sod_halo_sizes("sod_halo_sizes", 0)
+      , sod_halo_rdeltas("sod_halo_rdeltas", 0)
+      , sod_halo_bin_ids("sod_halo_bin_ids", 0)
+      , sod_halo_bin_counts("sod_halo_bin_counts", 0)
+      , sod_halo_bin_masses("sod_halo_bin_masses", 0)
+      , sod_halo_bin_outer_radii("sod_halo_bin_outer_radii", 0)
+      , sod_halo_bin_rhos("sod_halo_bin_rhos", 0)
+      , sod_halo_bin_rho_ratios("sod_halo_bin_rho_ratios", 0)
+      , sod_halo_bin_radial_velocities("sod_hlo_bin_radial_velocities", 0)
+  {
+  }
+};
+
 template <typename MemorySpace>
 struct Spheres
 {
@@ -41,27 +102,27 @@ struct ArborX::AccessTraits<Spheres<MemorySpace>, ArborX::PrimitivesTag>
   }
 };
 
-template <typename Points>
-struct PointsWrapper
+template <typename Particles>
+struct ParticlesWrapper
 {
-  Points _points;
+  Particles _particles;
 };
 
-template <typename Points>
-struct ArborX::AccessTraits<PointsWrapper<Points>, ArborX::PredicatesTag>
+template <typename Particles>
+struct ArborX::AccessTraits<ParticlesWrapper<Particles>, ArborX::PredicatesTag>
 {
-  using PointsAccess = AccessTraits<Points, PrimitivesTag>;
+  using ParticlesAccess = AccessTraits<Particles, PrimitivesTag>;
 
-  using memory_space = typename PointsAccess::memory_space;
-  using Predicates = PointsWrapper<Points>;
+  using memory_space = typename ParticlesAccess::memory_space;
+  using Predicates = ParticlesWrapper<Particles>;
 
   static KOKKOS_FUNCTION size_t size(Predicates const &w)
   {
-    return PointsAccess::size(w._points);
+    return ParticlesAccess::size(w._particles);
   }
   static KOKKOS_FUNCTION auto get(Predicates const &w, size_t i)
   {
-    return attach(intersects(PointsAccess::get(w._points, i)), (int)i);
+    return attach(intersects(ParticlesAccess::get(w._particles, i)), (int)i);
   }
 };
 
@@ -86,24 +147,26 @@ inline int binID(float r_min, float r_max, float r)
   return bin_id;
 }
 
-template <typename MemorySpace, typename Points>
+template <typename MemorySpace, typename Particles>
 struct BinAccumulator
 {
-  Points _points;
+  Particles _particles;
   Kokkos::View<float *, MemorySpace> _masses;
   Kokkos::View<float * [NUM_BINS], MemorySpace> _sod_halo_bin_masses;
-  Kokkos::View<float * [NUM_BINS], MemorySpace> _sod_halo_bin_counts;
+  Kokkos::View<int * [NUM_BINS], MemorySpace> _sod_halo_bin_counts;
   Kokkos::View<ArborX::Point *, MemorySpace> _fof_halo_centers;
   float _r_min;
   Kokkos::View<float *, MemorySpace> _r_max;
 
-  using PointsAccess = ArborX::AccessTraits<Points, ArborX::PrimitivesTag>;
+  using ParticlesAccess =
+      ArborX::AccessTraits<Particles, ArborX::PrimitivesTag>;
 
   template <typename Query>
   KOKKOS_FUNCTION void operator()(Query const &query, int halo_index) const
   {
     auto particle_index = getData(query);
-    ArborX::Point const &point = PointsAccess::get(_points, particle_index);
+    ArborX::Point const &point =
+        ParticlesAccess::get(_particles, particle_index);
 
     float dist =
         ArborX::Details::distance(point, _fof_halo_centers(halo_index));
@@ -120,33 +183,35 @@ struct BinAccumulator
   }
 };
 
-template <typename MemorySpace, typename Points>
+template <typename MemorySpace, typename Particles>
 struct OverlapCount
 {
-  Points _points;
+  Particles _particles;
   Kokkos::View<int *, MemorySpace> _counts;
   Kokkos::View<ArborX::Point *, MemorySpace> _centers;
   Kokkos::View<float *, MemorySpace> _radii;
 
-  using PointsAccess = ArborX::AccessTraits<Points, ArborX::PrimitivesTag>;
+  using ParticlesAccess =
+      ArborX::AccessTraits<Particles, ArborX::PrimitivesTag>;
 
   template <typename Query>
   KOKKOS_FUNCTION auto operator()(Query const &query, int j) const
   {
     auto i = getData(query);
 
-    ArborX::Point const &point = PointsAccess::get(_points, i);
+    ArborX::Point const &point = ParticlesAccess::get(_particles, i);
     if (ArborX::Details::distance(point, _centers(j)) <= _radii(j))
       ++_counts(i);
   }
 };
 
-template <typename ExecutionSpace, typename Points, typename MemorySpace>
-void sod(ExecutionSpace const &exec_space, Points points,
-         Kokkos::View<float *, MemorySpace> masses,
-         Kokkos::View<ArborX::Point *, MemorySpace> fof_halo_centers,
-         float r_min, Kokkos::View<float *, MemorySpace> r_max, float rho_c)
+template <typename ExecutionSpace>
+void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
 {
+  using MemorySpace = typename ExecutionSpace::memory_space;
+
+  Kokkos::HostSpace host_space;
+
   Kokkos::Timer timer_total;
   Kokkos::Timer timer;
   std::map<std::string, double> elapsed;
@@ -160,8 +225,44 @@ void sod(ExecutionSpace const &exec_space, Points points,
     return timer.seconds();
   };
 
-  int const n = points.extent(0);
-  int const num_halos = fof_halo_centers.extent(0);
+  auto const num_halos = in.fof_halo_tags.extent_int(0);
+
+  auto const particles =
+      Kokkos::create_mirror_view_and_copy(exec_space, in.particles);
+  auto const particle_masses =
+      Kokkos::create_mirror_view_and_copy(exec_space, in.particle_masses);
+  auto const fof_halo_centers =
+      Kokkos::create_mirror_view_and_copy(exec_space, in.fof_halo_centers);
+  auto const fof_halo_masses =
+      Kokkos::create_mirror_view_and_copy(exec_space, in.fof_halo_masses);
+
+  using Particles = decltype(particles);
+
+  // HACC constants
+  float constexpr MIN_FACTOR = 0.05;
+  float constexpr MAX_FACTOR = 2.0;
+  float constexpr R_SMOOTH =
+      250.f / 3072; // interparticle separation, rl/np, where rl is the boxsize
+                    // of the simulation, and np is the number of particles
+  float constexpr SOD_MASS = 1e14;
+  float constexpr RHO_C = 2.77536627e11;
+
+  // rho_c = RHO_C * Efact*Efact * a*a
+  // At redshift = 0, the factors are trivial:
+  //   a = 1, Efact = 1,
+  // so rho_c = RHO_C.
+  // float rho_c = RHO_C;
+
+  // Compute r_min and r_max
+  float r_min = MIN_FACTOR * R_SMOOTH;
+  Kokkos::View<float *, MemorySpace> r_max("r_max", fof_halo_centers.extent(0));
+  Kokkos::parallel_for(
+      "compute_r_max",
+      Kokkos::RangePolicy<ExecutionSpace>(ExecutionSpace{}, 0, num_halos),
+      KOKKOS_LAMBDA(int i) {
+        float R_init = std::cbrt(fof_halo_masses(i) / SOD_MASS);
+        r_max(i) = MAX_FACTOR * R_init;
+      });
 
   // Do not sort for now, so as to not allocate additional memory, which would
   // take 8*n bytes (4 for Morton index, 4 for permutation index)
@@ -174,20 +275,48 @@ void sod(ExecutionSpace const &exec_space, Points points,
                                Spheres<MemorySpace>{fof_halo_centers, r_max});
   elapsed["construction"] = timer_seconds(timer);
 
-  // Step 2: compute mass profiles
+  // Store outer radii
+  Kokkos::View<float * [NUM_BINS], MemorySpace> sod_halo_bin_outer_radii(
+      "sod_halo_bin_outer_radii", num_halos);
+  Kokkos::parallel_for(
+      "recompute_outer_radii",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
+      KOKKOS_LAMBDA(int halo_index) {
+        float r_delta = rDelta(r_min, r_max(halo_index));
+        sod_halo_bin_outer_radii(halo_index, 0) = r_min;
+        for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+          sod_halo_bin_outer_radii(halo_index, bin_id) =
+              pow(10.0, (bin_id * r_delta)) * r_min;
+      });
+  auto sod_halo_bin_outer_radii_host =
+      Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_outer_radii);
+  Kokkos::resize(out.sod_halo_bin_outer_radii, num_halos);
+  Kokkos::deep_copy(out.sod_halo_bin_outer_radii,
+                    sod_halo_bin_outer_radii_host);
+
+  // Step 2: compute mass and count profiles
   timer_start(timer);
   Kokkos::View<float * [NUM_BINS], MemorySpace> sod_halo_bin_masses(
       "sod_halo_bin_masses", num_halos);
-  Kokkos::View<float * [NUM_BINS], MemorySpace> sod_halo_bin_counts(
+  Kokkos::View<int * [NUM_BINS], MemorySpace> sod_halo_bin_counts(
       "sod_halo_bin_counts", num_halos);
-  bvh.query(exec_space, PointsWrapper<Points>{points},
-            BinAccumulator<MemorySpace, Points>{
-                points, masses, sod_halo_bin_masses, sod_halo_bin_counts,
-                fof_halo_centers, r_min, r_max},
+  bvh.query(exec_space, ParticlesWrapper<Particles>{particles},
+            BinAccumulator<MemorySpace, Particles>{
+                particles, particle_masses, sod_halo_bin_masses,
+                sod_halo_bin_counts, fof_halo_centers, r_min, r_max},
             ArborX::Experimental::TraversalPolicy().setPredicateSorting(
                 sort_predicates));
+  auto sod_halo_bin_masses_host =
+      Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_masses);
+  auto sod_halo_bin_counts_host =
+      Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_counts);
+  Kokkos::resize(out.sod_halo_bin_masses, num_halos);
+  Kokkos::resize(out.sod_halo_bin_counts, num_halos);
+  Kokkos::deep_copy(out.sod_halo_bin_masses, sod_halo_bin_masses_host);
+  Kokkos::deep_copy(out.sod_halo_bin_counts, sod_halo_bin_counts_host);
   elapsed["binning"] = timer_seconds(timer);
 
+#if 0
   // Step 3: recompute R_max based on sod_halo_bin_masses
   float const DELTA = 200;
   Kokkos::parallel_for(
@@ -225,9 +354,10 @@ void sod(ExecutionSpace const &exec_space, Points points,
 
   // Step 4: compute overlap counts
   timer_start(timer);
+  auto const n = in.particles.extent_int(0);
   Kokkos::View<int *, MemorySpace> counts("counts", n);
-  bvh.query(exec_space, PointsWrapper<Points>{points},
-            OverlapCount<MemorySpace, Points>{points, counts, fof_halo_centers,
+  bvh.query(exec_space, ParticlesWrapper<Particles>{particles},
+            OverlapCount<MemorySpace, Particles>{particles, counts, fof_halo_centers,
                                               r_max},
             ArborX::Experimental::TraversalPolicy().setPredicateSorting(
                 sort_predicates));
@@ -248,7 +378,7 @@ void sod(ExecutionSpace const &exec_space, Points points,
                               ++update;
                           },
                           num_inside);
-  printf("  #points inside spheres: %d/%d [%.2f]\n", num_inside, n,
+  printf("  #particles inside spheres: %d/%d [%.2f]\n", num_inside, n,
          (100.f * num_inside) / n);
 
   int num_inside_multiple = 0;
@@ -259,7 +389,7 @@ void sod(ExecutionSpace const &exec_space, Points points,
                               ++update;
                           },
                           num_inside_multiple);
-  printf("  #points in multiple: %d\n", num_inside_multiple);
+  printf("  #particles in multiple: %d\n", num_inside_multiple);
 
   if (num_inside_multiple > 0)
   {
@@ -274,6 +404,7 @@ void sod(ExecutionSpace const &exec_space, Points points,
     if (num_inside_multiple > 0)
       printf("  max number of owners: %d\n", max_multiple);
   }
+#endif
 }
 
 #endif
