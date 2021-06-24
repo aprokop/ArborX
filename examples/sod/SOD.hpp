@@ -372,10 +372,12 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
       num_halos);
   Kokkos::deep_copy(critical_bin_max_ids, -1);
   Kokkos::parallel_for(
-      "recompute_R_max",
+      "compute_critical_bins",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
       KOKKOS_LAMBDA(int halo_index) {
         float r_delta = rDelta(r_min, r_max(halo_index));
+
+        float densities[2 * NUM_BINS];
 
         float accumulated_mass = sod_halo_bin_masses(halo_index, 0);
         critical_bin_min_ids(halo_index) = 0;
@@ -392,6 +394,9 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           float density_lower_bound = accumulated_mass / rho_c / volume_outer;
           float density_upper_bound = accumulated_mass / rho_c / volume_inner;
 
+          densities[2 * bin_id + 0] = density_lower_bound;
+          densities[2 * bin_id + 1] = density_upper_bound;
+
           if (density_lower_bound >= DELTA)
           {
             critical_bin_min_ids(halo_index) = bin_id;
@@ -402,6 +407,9 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           {
             critical_bin_max_ids(halo_index) = bin_id;
 #if 1
+            for (int k = critical_bin_min_ids(halo_index); k <= bin_id; ++k)
+              printf("%d: %d [%f, %f]\n", halo_index, k, densities[2 * k + 0],
+                     densities[2 * k + 1]);
             printf("%d : critical bins [%d, %d], "
                    "density in the last bin [%f, %f]\n",
                    halo_index, critical_bin_min_ids(halo_index),
@@ -420,10 +428,13 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
       "compute_critical_bin_counts",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
       KOKKOS_LAMBDA(int halo_index) {
+        int num_particles_in_critical_bins = 0;
         for (int bin_id = critical_bin_min_ids(halo_index);
              bin_id <= critical_bin_max_ids(halo_index); ++bin_id)
-          critical_bin_offsets(halo_index) +=
+          num_particles_in_critical_bins +=
               sod_halo_bin_counts(halo_index, bin_id);
+
+        critical_bin_offsets(halo_index) = num_particles_in_critical_bins;
       });
   ArborX::exclusivePrefixSum(exec_space, critical_bin_offsets);
 
