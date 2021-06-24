@@ -317,6 +317,7 @@ int main(int argc, char *argv[])
 
   // validate
   auto const num_halos = input_data.fof_halo_tags.extent_int(0);
+#if 0
   // outer radii
   printf("validating radii\n");
   for (int i = 0; i < num_halos; ++i)
@@ -382,6 +383,21 @@ int main(int argc, char *argv[])
       printf(" ]\n");
     }
   }
+#endif
+
+  // r_delta
+  printf("validating rdelta\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    float a = output_data.sod_halo_rdeltas(i);
+    float b = validation_data.sod_halo_rdeltas(i);
+
+    // if (a != b)
+    printf("%d rdelta for halo tag %ld do not match: "
+           "output = %f, validation = %f, relative error = %f\n",
+           i, input_data.fof_halo_tags(i), a, b, std::abs(a - b) / b);
+  }
+  fflush(stdout);
 
   return EXIT_SUCCESS;
 }
