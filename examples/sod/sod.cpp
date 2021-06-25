@@ -317,74 +317,83 @@ int main(int argc, char *argv[])
 
   // validate
   auto const num_halos = input_data.fof_halo_tags.extent_int(0);
+
+  auto relative_error = [](auto a, auto b) {
+    if (a != 0)
+      return std::abs(float(a - b) / a);
+    if (a == 0 && b != 0)
+      return std::numeric_limits<float>::infinity();
+    return 0.f;
+  };
 #if 0
   // outer radii
   printf("validating radii\n");
   for (int i = 0; i < num_halos; ++i)
   {
     bool matched = true;
-    for (int j = 1; j < NUM_BINS; ++j)
-      matched &= (output_data.sod_halo_bin_outer_radii(i, j) ==
-                  validation_data.sod_halo_bin_outer_radii(i, j));
+    for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+      matched &= (output_data.sod_halo_bin_outer_radii(i, bin_id) ==
+                  validation_data.sod_halo_bin_outer_radii(i, bin_id));
     if (!matched)
     {
       printf("radii for halo tag %ld do not match: relative errors [",
              input_data.fof_halo_tags(i));
-      for (int j = 1; j < NUM_BINS; ++j)
-      {
-        float a = output_data.sod_halo_bin_outer_radii(i, j);
-        float b = validation_data.sod_halo_bin_outer_radii(i, j);
-        printf(" %e", std::abs((a - b) / a));
-      }
-      printf(" ]\n");
-    }
-  }
-
-  // bin counts
-  printf("validating bin counts\n");
-  for (int i = 0; i < num_halos; ++i)
-  {
-    bool matched = true;
-    for (int j = 1; j < NUM_BINS; ++j)
-      matched &= (output_data.sod_halo_bin_counts(i, j) ==
-                  validation_data.sod_halo_bin_counts(i, j));
-    if (!matched)
-    {
-      printf("counts for halo tag %ld do not match: validation = [",
-             input_data.fof_halo_tags(i));
-      for (int j = 1; j < NUM_BINS; ++j)
-        printf(" %d", validation_data.sod_halo_bin_counts(i, j));
-      printf(" ], errors = [");
-      for (int j = 1; j < NUM_BINS; ++j)
-        printf(" %d", output_data.sod_halo_bin_counts(i, j) -
-                          validation_data.sod_halo_bin_counts(i, j));
-      printf(" ]\n");
-    }
-  }
-
-  // bin masses
-  printf("validating bin masses\n");
-  for (int i = 0; i < num_halos; ++i)
-  {
-    bool matched = true;
-    for (int j = 1; j < NUM_BINS; ++j)
-      matched &= (output_data.sod_halo_bin_masses(i, j) ==
-                  validation_data.sod_halo_bin_masses(i, j));
-    if (!matched)
-    {
-      printf("masses for halo tag %ld do not match: relative errors [",
-             input_data.fof_halo_tags(i));
-      for (int j = 1; j < NUM_BINS; ++j)
-      {
-        float a = output_data.sod_halo_bin_masses(i, j);
-        float b = validation_data.sod_halo_bin_masses(i, j);
-        printf(" %e", std::abs((a - b) / a));
-      }
+      for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+        printf(" %e", relative_error(
+                          output_data.sod_halo_bin_outer_radii(i, bin_id),
+                          validation_data.sod_halo_bin_outer_radii(i, bin_id)));
       printf(" ]\n");
     }
   }
 #endif
 
+#if 0
+  // bin counts
+  printf("validating bin counts\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+      matched &= (output_data.sod_halo_bin_counts(i, bin_id) ==
+                  validation_data.sod_halo_bin_counts(i, bin_id));
+    if (!matched)
+    {
+      printf("counts for halo tag %ld do not match: validation = [",
+             input_data.fof_halo_tags(i));
+      for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+        printf(" %d", validation_data.sod_halo_bin_counts(i, bin_id));
+      printf(" ], errors = [");
+      for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+        printf(" %d", output_data.sod_halo_bin_counts(i, bin_id) -
+                          validation_data.sod_halo_bin_counts(i, bin_id));
+      printf(" ]\n");
+    }
+  }
+#endif
+
+#if 0
+  // bin masses
+  printf("validating bin masses\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+      matched &= (output_data.sod_halo_bin_masses(i, bin_id) ==
+                  validation_data.sod_halo_bin_masses(i, bin_id));
+    if (!matched)
+    {
+      printf("masses for halo tag %ld do not match: relative errors [",
+             input_data.fof_halo_tags(i));
+      for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+        printf(" %e",
+               relative_error(output_data.sod_halo_bin_masses(i, bin_id),
+                              validation_data.sod_halo_bin_masses(i, bin_id)));
+      printf(" ]\n");
+    }
+  }
+#endif
+
+#if 1
   // r_delta
   printf("validating rdelta\n");
   for (int i = 0; i < num_halos; ++i)
@@ -392,12 +401,34 @@ int main(int argc, char *argv[])
     float a = output_data.sod_halo_rdeltas(i);
     float b = validation_data.sod_halo_rdeltas(i);
 
-    // if (a != b)
-    printf("%d rdelta for halo tag %ld do not match: "
-           "output = %f, validation = %f, relative error = %f\n",
-           i, input_data.fof_halo_tags(i), a, b, std::abs(a - b) / b);
+    if (a != b)
+      printf("%d rdelta for halo tag %ld do not match: "
+             "output = %f, validation = %f, relative error = %f\n",
+             i, input_data.fof_halo_tags(i), a, b, relative_error(a, b));
   }
-  fflush(stdout);
+#endif
+
+#if 0
+  // rho
+  printf("validating rho\n");
+  for (int i = 0; i < num_halos; ++i)
+  {
+    bool matched = true;
+    for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+      matched &= (output_data.sod_halo_bin_rhos(i, bin_id) ==
+                  validation_data.sod_halo_bin_rhos(i, bin_id));
+    if (!matched)
+    {
+      printf("rho for halo tag %ld do not match: relative errors [",
+             input_data.fof_halo_tags(i));
+      for (int bin_id = 1; bin_id < NUM_BINS; ++bin_id)
+        printf(" %e",
+               relative_error(output_data.sod_halo_bin_rhos(i, bin_id),
+                              validation_data.sod_halo_bin_rhos(i, bin_id)));
+      printf(" ]\n");
+    }
+  }
+#endif
 
   return EXIT_SUCCESS;
 }

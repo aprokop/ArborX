@@ -444,11 +444,10 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           if (bin_rho_ratio_int <= DELTA)
           {
             critical_bin_id = bin_id;
-            critical_bin_offsets(halo_index) =
-                sod_halo_bin_counts(halo_index, bin_id);
             break;
           }
         }
+
         if (critical_bin_id < 0)
         {
           printf("%d (halo tag ?): max radius is not big enough, will "
@@ -466,6 +465,21 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           while (sod_halo_bin_counts(halo_index, critical_bin_id) == 0)
             ++critical_bin_id;
         }
+
+        // Capture the cases where normal critical bin is empty, and that
+        // extra radius meets the rho_ratio criteria
+        while (sod_halo_bin_counts(halo_index, critical_bin_id) == 0)
+          --critical_bin_id;
+
+        // This should not happen but protecting against no zero bins for all up
+        // to the critical bin
+        if (critical_bin_id < 0)
+          printf(
+              "%d (halo tag ?): error, not even the first bin has particles\n",
+              halo_index);
+
+        critical_bin_offsets(halo_index) =
+            sod_halo_bin_counts(halo_index, critical_bin_id);
 #if 0
         printf("%d : critical bin %d\n", halo_index, critical_bin_id);
 #endif
@@ -534,6 +548,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
 
     auto bin_start = critical_bin_offsets_host(halo_index);
     auto bin_end = critical_bin_offsets_host(halo_index + 1);
+    ARBORX_ASSERT(bin_start < bin_end);
 
     // By default, set the r_delta to be the last particle in the bin. This
     // fixes a potential error of r_200 between the bin edge and the first
@@ -561,7 +576,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   }
   elapsed["rdelta"] = timer_seconds(timer);
 
-#if 1
+#if 0
   Kokkos::View<float *, MemorySpace> sod_halo_rdeltas("rdeltas", num_halos);
   Kokkos::deep_copy(sod_halo_rdeltas, out.sod_halo_rdeltas);
   // Check overlaps
