@@ -275,8 +275,11 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
     return timer.seconds();
   };
 
+  timer_start(timer_total);
+
   auto const num_halos = in.fof_halo_tags.extent_int(0);
 
+  timer_start(timer);
   auto const particles =
       Kokkos::create_mirror_view_and_copy(exec_space, in.particles);
   auto const particle_masses =
@@ -285,6 +288,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
       Kokkos::create_mirror_view_and_copy(exec_space, in.fof_halo_centers);
   auto const fof_halo_masses =
       Kokkos::create_mirror_view_and_copy(exec_space, in.fof_halo_masses);
+  elapsed["transfer"] = timer_seconds(timer);
 
   using Particles = decltype(particles);
 
@@ -303,6 +307,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   // so rho = RHO.
 
   // Compute r_min and r_max
+  timer_start(timer);
   float r_min = MIN_FACTOR * R_SMOOTH;
   Kokkos::View<float *, MemorySpace> r_max("r_max", fof_halo_centers.extent(0));
   Kokkos::parallel_for(
@@ -312,6 +317,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
         float R_init = std::cbrt(fof_halo_masses(i) / SOD_MASS);
         r_max(i) = MAX_FACTOR * R_init;
       });
+  elapsed["r_max"] = timer_seconds(timer);
 
   // Do not sort for now, so as to not allocate additional memory, which would
   // take 8*n bytes (4 for Morton index, 4 for permutation index)
@@ -343,7 +349,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
       Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_outer_radii);
   Kokkos::deep_copy(out.sod_halo_bin_outer_radii,
                     sod_halo_bin_outer_radii_host);
-  elapsed["outer_radii"] = timer_seconds(timer);
+  elapsed["outer radii"] = timer_seconds(timer);
 
   // Step 2: compute some profiles (mass, count, avg radius);
   timer_start(timer);
@@ -493,12 +499,10 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   auto sod_halo_bin_rho_ratios_host =
       Kokkos::create_mirror_view_and_copy(host_space, sod_halo_bin_rho_ratios);
   Kokkos::deep_copy(out.sod_halo_bin_rho_ratios, sod_halo_bin_rho_ratios_host);
-  auto critical_bin_ids_host =
-      Kokkos::create_mirror_view_and_copy(host_space, critical_bin_ids);
-  elapsed["critical bins"] = timer_seconds(timer);
-
   ArborX::exclusivePrefixSum(exec_space, critical_bin_offsets);
   auto num_critical_bin_particles = ArborX::lastElement(critical_bin_offsets);
+  elapsed["critical bins"] = timer_seconds(timer);
+
   printf("#particles in critical bins: %d\n", num_critical_bin_particles);
 
   // Step 3: compute r_delta
@@ -520,8 +524,6 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   elapsed["critical query"] = timer_seconds(timer);
 
   timer_start(timer);
-  Kokkos::resize(out.sod_halo_rdeltas, num_halos);
-
   auto permute =
       ArborX::Details::sortObjects(exec_space, critical_bin_distances);
   auto critical_bin_indices_clone = ArborX::clone(critical_bin_indices);
@@ -535,30 +537,41 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   elapsed["sort"] = timer_seconds(timer);
 
   timer_start(timer);
-  Kokkos::View<float *, MemorySpace> sod_halo_rdeltas(
-      Kokkos::ViewAllocateWithoutInitializing("sod_halo_rdeltas"), num_halos);
+  auto critical_bin_ids_host = Kokkos::create_mirror_view_and_copy(
+      Kokkos::HostSpace{}, critical_bin_ids);
+  auto critical_bin_offsets_host = Kokkos::create_mirror_view_and_copy(
+      Kokkos::HostSpace{}, critical_bin_offsets);
+  auto critical_bin_indices_host = Kokkos::create_mirror_view_and_copy(
+      Kokkos::HostSpace{}, critical_bin_indices);
+  auto critical_bin_distances_host = Kokkos::create_mirror_view_and_copy(
+      Kokkos::HostSpace{}, critical_bin_distances);
+  Kokkos::resize(out.sod_halo_rdeltas, num_halos);
+  auto &sod_halo_rdeltas = out.sod_halo_rdeltas;
   Kokkos::parallel_for(
       "compute_r_delta",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
+      Kokkos::RangePolicy<HostExecutionSpace>(host_space, 0, num_halos),
       KOKKOS_LAMBDA(int halo_index) {
         float mass = 0.f;
-        for (int bin_id = 0; bin_id < critical_bin_ids(halo_index); ++bin_id)
-          mass += sod_halo_bin_masses(halo_index, bin_id);
+        for (int bin_id = 0; bin_id < critical_bin_ids_host(halo_index);
+             ++bin_id)
+          mass += out.sod_halo_bin_masses(halo_index, bin_id);
 
-        auto bin_start = critical_bin_offsets(halo_index);
-        auto bin_end = critical_bin_offsets(halo_index + 1);
+        auto bin_start = critical_bin_offsets_host(halo_index);
+        auto bin_end = critical_bin_offsets_host(halo_index + 1);
         assert(bin_start < bin_end);
 
         // By default, set the r_delta to be the last particle in the bin. This
         // fixes a potential error of r_200 between the bin edge and the first
         // particle radius.
         sod_halo_rdeltas(halo_index) =
-            (critical_bin_distances(bin_end - 1) / MAX_DISTANCE - halo_index);
+            (critical_bin_distances_host(bin_end - 1) / MAX_DISTANCE -
+             halo_index);
 
         for (int i = bin_start; i < bin_end; ++i)
         {
-          mass += particle_masses(critical_bin_indices(i));
-          float r = (critical_bin_distances(i) / MAX_DISTANCE - halo_index);
+          mass += in.particle_masses(critical_bin_indices_host(i));
+          float r =
+              (critical_bin_distances_host(i) / MAX_DISTANCE - halo_index);
           float volume = 4.f / 3 * M_PI * pow(r, 3);
           float ratio = (mass / volume) / RHO;
 
@@ -572,7 +585,6 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
           }
         }
       });
-  Kokkos::deep_copy(out.sod_halo_rdeltas, sod_halo_rdeltas);
   elapsed["rdelta"] = timer_seconds(timer);
 
 #if 0
@@ -626,12 +638,18 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   }
 #endif
 
+  elapsed["total"] = timer_seconds(timer_total);
+
+  printf("-- transfer         : %10.3f\n", elapsed["transfer"]);
+  printf("-- r_max            : %10.3f\n", elapsed["r_max"]);
   printf("-- construction     : %10.3f\n", elapsed["construction"]);
+  printf("-- outer radii      : %10.3f\n", elapsed["outer radii"]);
   printf("-- profiles         : %10.3f\n", elapsed["profiles"]);
   printf("-- critical bins    : %10.3f\n", elapsed["critical bins"]);
   printf("-- critical query   : %10.3f\n", elapsed["critical query"]);
   printf("-- sort             : %10.3f\n", elapsed["sort"]);
   printf("-- rdelta           : %10.3f\n", elapsed["rdelta"]);
+  printf("-- total            : %10.3f\n", elapsed["total"]);
 }
 
 #endif
