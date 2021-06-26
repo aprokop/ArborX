@@ -210,6 +210,7 @@ struct OverlapCount
   }
 };
 
+#define MAX_DISTANCE 10
 template <typename MemorySpace, typename Particles>
 struct CriticalBinParticles
 {
@@ -246,7 +247,9 @@ struct CriticalBinParticles
     {
       auto pos = Kokkos::atomic_fetch_add(&_offsets(halo_index), 1);
       _indices(pos) = particle_index;
-      _distances(pos) = dist;
+      // FIXME: hacky way to permute within the individual bins. Not sure if
+      // this constant is conservative enough.
+      _distances(pos) = (dist + halo_index) * MAX_DISTANCE;
     }
   }
 };
@@ -492,7 +495,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   Kokkos::deep_copy(out.sod_halo_bin_rho_ratios, sod_halo_bin_rho_ratios_host);
   auto critical_bin_ids_host =
       Kokkos::create_mirror_view_and_copy(host_space, critical_bin_ids);
-  elapsed["critical"] = timer_seconds(timer);
+  elapsed["critical bins"] = timer_seconds(timer);
 
   ArborX::exclusivePrefixSum(exec_space, critical_bin_offsets);
   auto num_critical_bin_particles = ArborX::lastElement(critical_bin_offsets);
@@ -500,7 +503,7 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
 
   // Step 3: compute r_delta
   timer_start(timer);
-  Kokkos::View<int *, MemorySpace> critical_bins_indices(
+  Kokkos::View<int *, MemorySpace> critical_bin_indices(
       Kokkos::ViewAllocateWithoutInitializing("critical_bin_indices"),
       num_critical_bin_particles);
   Kokkos::View<float *, MemorySpace> critical_bin_distances(
@@ -509,71 +512,67 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
   auto offsets = ArborX::clone(critical_bin_offsets);
   bvh.query(exec_space, ParticlesWrapper<Particles>{particles},
             CriticalBinParticles<MemorySpace, Particles>{
-                particles, offsets, critical_bins_indices,
+                particles, offsets, critical_bin_indices,
                 critical_bin_distances, critical_bin_ids, fof_halo_centers,
                 r_min, r_max},
             ArborX::Experimental::TraversalPolicy().setPredicateSorting(
                 sort_predicates));
+  elapsed["critical query"] = timer_seconds(timer);
 
   timer_start(timer);
   Kokkos::resize(out.sod_halo_rdeltas, num_halos);
-  auto critical_bin_min_ids_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, critical_bin_ids);
-  auto critical_bin_offsets_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, critical_bin_offsets);
-  auto critical_bins_indices_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, critical_bins_indices);
-  auto critical_bin_distances_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, critical_bin_distances);
 
-  std::vector<int> permute(num_critical_bin_particles);
-  for (int halo_index = 0; halo_index < num_halos; ++halo_index)
-  {
-    auto start = critical_bin_offsets_host(halo_index);
-    auto end = critical_bin_offsets_host(halo_index + 1);
+  auto permute =
+      ArborX::Details::sortObjects(exec_space, critical_bin_distances);
+  auto critical_bin_indices_clone = ArborX::clone(critical_bin_indices);
+  Kokkos::parallel_for("apply_permutation",
+                       Kokkos::RangePolicy<ExecutionSpace>(
+                           exec_space, 0, num_critical_bin_particles),
+                       KOKKOS_LAMBDA(int i) {
+                         critical_bin_indices(i) =
+                             critical_bin_indices_clone(permute(i));
+                       });
+  elapsed["sort"] = timer_seconds(timer);
 
-    std::iota(permute.begin() + start, permute.begin() + end, start);
+  timer_start(timer);
+  Kokkos::View<float *, MemorySpace> sod_halo_rdeltas(
+      Kokkos::ViewAllocateWithoutInitializing("sod_halo_rdeltas"), num_halos);
+  Kokkos::parallel_for(
+      "compute_r_delta",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
+      KOKKOS_LAMBDA(int halo_index) {
+        float mass = 0.f;
+        for (int bin_id = 0; bin_id < critical_bin_ids(halo_index); ++bin_id)
+          mass += sod_halo_bin_masses(halo_index, bin_id);
 
-    std::sort(permute.begin() + start, permute.begin() + end,
-              [&critical_bin_distances_host](auto const &i, auto const &j) {
-                return critical_bin_distances_host(i) <
-                       critical_bin_distances_host(j);
-              });
-  }
-  for (int halo_index = 0; halo_index < num_halos; ++halo_index)
-  {
-    float mass = 0.f;
-    for (int bin_id = 0; bin_id < critical_bin_ids_host(halo_index); ++bin_id)
-      mass += out.sod_halo_bin_masses(halo_index, bin_id);
+        auto bin_start = critical_bin_offsets(halo_index);
+        auto bin_end = critical_bin_offsets(halo_index + 1);
+        assert(bin_start < bin_end);
 
-    auto bin_start = critical_bin_offsets_host(halo_index);
-    auto bin_end = critical_bin_offsets_host(halo_index + 1);
-    ARBORX_ASSERT(bin_start < bin_end);
+        // By default, set the r_delta to be the last particle in the bin. This
+        // fixes a potential error of r_200 between the bin edge and the first
+        // particle radius.
+        sod_halo_rdeltas(halo_index) =
+            (critical_bin_distances(bin_end - 1) / MAX_DISTANCE - halo_index);
 
-    // By default, set the r_delta to be the last particle in the bin. This
-    // fixes a potential error of r_200 between the bin edge and the first
-    // particle radius.
-    out.sod_halo_rdeltas(halo_index) =
-        critical_bin_distances_host(permute[bin_end - 1]);
+        for (int i = bin_start; i < bin_end; ++i)
+        {
+          mass += particle_masses(critical_bin_indices(i));
+          float r = (critical_bin_distances(i) / MAX_DISTANCE - halo_index);
+          float volume = 4.f / 3 * M_PI * pow(r, 3);
+          float ratio = (mass / volume) / RHO;
 
-    for (int i = bin_start; i < bin_end; ++i)
-    {
-      mass += in.particle_masses(critical_bins_indices_host(permute[i]));
-      float r = critical_bin_distances_host(permute[i]);
-      float volume = 4.f / 3 * M_PI * pow(r, 3);
-      float ratio = (mass / volume) / RHO;
-
-      if (ratio <= DELTA)
-      {
+          if (ratio <= DELTA)
+          {
 #if 0
-        printf("%d: %f\n", halo_index, ratio);
+            printf("%d: %f\n", halo_index, ratio);
 #endif
-        out.sod_halo_rdeltas(halo_index) =
-            critical_bin_distances_host(permute[i]);
-        break;
-      }
-    }
-  }
+            sod_halo_rdeltas(halo_index) = r;
+            break;
+          }
+        }
+      });
+  Kokkos::deep_copy(out.sod_halo_rdeltas, sod_halo_rdeltas);
   elapsed["rdelta"] = timer_seconds(timer);
 
 #if 0
@@ -629,7 +628,9 @@ void sod(ExecutionSpace const &exec_space, InputData const &in, OutputData &out)
 
   printf("-- construction     : %10.3f\n", elapsed["construction"]);
   printf("-- profiles         : %10.3f\n", elapsed["profiles"]);
-  printf("-- critical bins    : %10.3f\n", elapsed["critical"]);
+  printf("-- critical bins    : %10.3f\n", elapsed["critical bins"]);
+  printf("-- critical query   : %10.3f\n", elapsed["critical query"]);
+  printf("-- sort             : %10.3f\n", elapsed["sort"]);
   printf("-- rdelta           : %10.3f\n", elapsed["rdelta"]);
 }
 
