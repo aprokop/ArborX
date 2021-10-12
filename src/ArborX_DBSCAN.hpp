@@ -189,26 +189,18 @@ struct Parameters
     return *this;
   }
 };
-} // namespace DBSCAN
 
-template <typename ExecutionSpace, typename Primitives>
+template <typename ExecutionSpace, typename Primitives, typename Labels>
 Kokkos::View<int *,
              typename AccessTraits<Primitives, PrimitivesTag>::memory_space>
-dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
-       float eps, int core_min_size,
-       DBSCAN::Parameters const &parameters = DBSCAN::Parameters())
+dbscanCore(ExecutionSpace const &exec_space, Primitives const &primitives,
+           float eps, int core_min_size, Labels labels,
+           DBSCAN::Parameters const &parameters = DBSCAN::Parameters())
 {
   Kokkos::Profiling::pushRegion("ArborX::DBSCAN");
 
   using Access = AccessTraits<Primitives, PrimitivesTag>;
   using MemorySpace = typename Access::memory_space;
-
-  static_assert(
-      KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
-      "Primitives must be accessible from the execution space");
-
-  ARBORX_ASSERT(eps > 0);
-  ARBORX_ASSERT(core_min_size >= 2);
 
   bool const is_special_case = (core_min_size == 2);
 
@@ -231,12 +223,6 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
   Kokkos::View<int *, MemorySpace> num_neigh("ArborX::DBSCAN::num_neighbors",
                                              0);
-
-  Kokkos::View<int *, MemorySpace> labels(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing, "ArborX::DBSCAN::labels"),
-      n);
-  ArborX::iota(exec_space, labels);
-
   if (parameters._implementation == DBSCAN::Implementation::FDBSCAN)
   {
     // Build the tree
@@ -427,6 +413,121 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     }
   }
 
+  Kokkos::Profiling::popRegion();
+  elapsed["query+cluster"] = timer_seconds(timer);
+
+  if (verbose)
+  {
+    if (parameters._implementation == DBSCAN::Implementation::FDBSCAN_DenseBox)
+      printf("-- dense cells      : %10.3f\n", elapsed["dense_cells"]);
+    printf("-- construction     : %10.3f\n", elapsed["construction"]);
+    printf("-- query+cluster    : %10.3f\n", elapsed["query+cluster"]);
+    if (!is_special_case)
+    {
+      printf("---- neigh          : %10.3f\n", elapsed["neigh"]);
+      printf("---- query          : %10.3f\n", elapsed["query"]);
+    }
+  }
+
+  Kokkos::Profiling::popRegion();
+}
+
+} // namespace DBSCAN
+
+template <typename ExecutionSpace, typename Primitives>
+Kokkos::View<int *,
+             typename AccessTraits<Primitives, PrimitivesTag>::memory_space>
+dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
+       float eps, int core_min_size,
+       DBSCAN::Parameters const &parameters = DBSCAN::Parameters())
+{
+  Kokkos::Profiling::pushRegion("ArborX::DBSCAN");
+
+  using Access = AccessTraits<Primitives, PrimitivesTag>;
+  using MemorySpace = typename Access::memory_space;
+
+  static_assert(
+      KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
+      "Primitives must be accessible from the execution space");
+
+  ARBORX_ASSERT(eps > 0);
+  ARBORX_ASSERT(core_min_size >= 2);
+
+  bool const is_special_case = (core_min_size == 2);
+
+  Kokkos::Timer timer;
+  std::map<std::string, double> elapsed;
+
+  bool const verbose = parameters._print_timers;
+  auto timer_start = [&exec_space, verbose](Kokkos::Timer &timer) {
+    if (verbose)
+      exec_space.fence();
+    timer.reset();
+  };
+  auto timer_seconds = [&exec_space, verbose](Kokkos::Timer const &timer) {
+    if (verbose)
+      exec_space.fence();
+    return timer.seconds();
+  };
+
+  int const n = Access::size(primitives);
+
+  Kokkos::View<int *, MemorySpace> num_neigh("ArborX::DBSCAN::num_neighbors",
+                                             (is_special_case ? 0 : n));
+
+  // Pre-processing
+  Kokkos::View<unsigned int *, MemorySpace> permute("ArborX::DBSCAN::permute",
+                                                    0);
+  {
+    Kokkos::View<float *, MemorySpace> x(
+        Kokkos::ViewAllocateWithoutInitializing("ArborX::DBSCAN::x"), n);
+    Kokkos::parallel_for(
+        "ArborX::DBSCAN::compute_x",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i) {
+          using Access =
+              ArborX::AccessTraits<Primitives, ArborX::PrimitivesTag>;
+          x(i) = Access::get(primitives, i)[0];
+        });
+    permute = sortObjects(exec_space, x);
+  }
+  int constexpt NUM_BATCHES = 2;
+  Kokkos::View<int *, MemorySpace> batched_offsets(
+      "ArborX::DBSCAN::batch_offsets", 2 * NUM_BATCHES);
+  Kokkos::parallel_scan("ArborX::DBSCAN::compute_batch_offsets",
+                        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 1, n),
+                        KOKKOS_LAMBDA(int i, int &update, bool final_pass) {
+                          for (int j = 0; j < NUM_BATCHES; ++j)
+                          {
+                            float split =
+                                primitives(permute(n / NUM_BATCHES * j))[0];
+                            if (primitives(permute(i)) < split - 2 * eps)
+                              // TODO
+                              blah;
+                          }
+                        });
+
+  Kokkos::View<int *, MemorySpace> labels(
+      Kokkos::ViewAllocateWithoutInitializing("ArborX::DBSCAN::labels"), n);
+  ArborX::iota(exec_space, labels);
+
+  // Main loop
+  for (int i = 0; i < num_batches; ++i)
+  {
+    int batch_start = batch_offsets_host(std::max(i - 1, 0));
+    int batch_end = batch_offsets_host(std::min(i + 1, num_batches));
+
+    auto batch_primitives = Kokkos::subview(primitives, batch_start, batch_end);
+    auto batch_labels = Kokkos::subview(labels, batch_start, batch_end);
+    auto batch_num_neigh = Kokkos::subview(num_neigh, batch_start, batch_end);
+
+    // TODO: should we use different execution spaces (streams) for each batch?
+    DBSCAN::dbscanCore(exec_space, batch_primitives, eps, core_min_size,
+                       batch_labels, batch_num_neigh, parameters);
+  }
+
+  // Post-processing
+  timer_start(timer);
   // Per [1]:
   //
   // ```
@@ -476,21 +577,12 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
                              labels(i) = -1;
                          });
   }
+  // FIXME Permute back labels
   Kokkos::Profiling::popRegion();
-  elapsed["query+cluster"] = timer_seconds(timer);
+  elapsed["finalization"] = timer_seconds(timer);
 
   if (verbose)
-  {
-    if (parameters._implementation == DBSCAN::Implementation::FDBSCAN_DenseBox)
-      printf("-- dense cells      : %10.3f\n", elapsed["dense_cells"]);
-    printf("-- construction     : %10.3f\n", elapsed["construction"]);
-    printf("-- query+cluster    : %10.3f\n", elapsed["query+cluster"]);
-    if (!is_special_case)
-    {
-      printf("---- neigh          : %10.3f\n", elapsed["neigh"]);
-      printf("---- query          : %10.3f\n", elapsed["query"]);
-    }
-  }
+    printf("-- finalization     : %10.3f\n", elapsed["finalization"]);
 
   Kokkos::Profiling::popRegion();
 
