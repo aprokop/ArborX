@@ -180,24 +180,36 @@ struct FDBSCANDenseBoxCallback
     using Access = AccessTraits<Primitives, PrimitivesTag>;
 
     auto const i = ArborX::getData(query);
+    Point const &query_point = Access::get(_primitives, i);
+
+    int const cell_start = _dense_cell_offsets(k);
+    int const cell_end = _dense_cell_offsets(k + 1);
 
     bool const is_border_point = !_is_core_point(i);
     if (is_border_point)
-      return ArborX::CallbackTreeTraversalControl::early_exit;
-
-    bool const is_dense_cell = (k < _num_dense_cells);
-
-    if (is_dense_cell)
     {
-      int const cell_start = _dense_cell_offsets(k);
-      int const cell_end = _dense_cell_offsets(k + 1);
+      for (int jj = cell_start; jj < cell_end; ++jj)
+      {
+        int j = _permute(jj);
 
+        if (distance(query_point, Access::get(_primitives, j)) <= eps)
+        {
+          // We connected to at least one point in the dense box, thus we
+          // connected to all of them, so may terminate
+          _union_find.merge_into(i, j);
+          return ArborX::CallbackTreeTraversalControl::early_exit;
+        }
+      }
+    }
+    else
+    {
       // Skip the dense box if they were already merged together
+      // TODO Not sure how important this check here is, as there is a similar
+      // inside the for loop
+      int const first_index_in_cell = _permute(cell_start);
       if (_union_find.representative(i) ==
-          _union_find.representative(_permute(cell_start)))
+          _union_find.representative(first_index_in_cell))
         return ArborX::CallbackTreeTraversalControl::normal_continuation;
-
-      Point const &query_point = Access::get(_primitives, i);
 
       for (int jj = cell_start; jj < cell_end; ++jj)
       {
@@ -218,18 +230,60 @@ struct FDBSCANDenseBoxCallback
         }
       }
     }
-    else
+
+    return ArborX::CallbackTreeTraversalControl::normal_continuation;
+  }
+};
+
+template <typename MemorySpace, typename CorePointsType, typename Permutation>
+struct FDBSCANSparseCallback
+{
+  UnionFind<MemorySpace> _union_find;
+  CorePointsType _is_core_point;
+  Permutation _permute;
+
+  FDBSCANSparseCallback(Kokkos::View<int *, MemorySpace> const &view,
+                        CorePointsType is_core_point, Permutation permute)
+      : _union_find(view)
+      , _is_core_point(is_core_point)
+      , _permute(permute)
+  {
+  }
+
+  template <typename Query>
+  KOKKOS_FUNCTION auto operator()(Query const &query, int jj) const
+  {
+    int const i = ArborX::getData(query);
+    int const j = _permute(jj);
+
+    bool const is_border_point = !_is_core_point(i);
+    if (is_border_point)
     {
-      int j = _permute(_num_points_in_dense_cells + (k - _num_dense_cells));
+      // Ignore border points, they will be processed by the
+      // connected core points. Theoretically, border points could have been
+      // filtered out prior to running the algorithm, but that may be expensive.
+      return ArborX::CallbackTreeTraversalControl::early_exit;
+    }
 
-      // No need to check the distance here, as the fact that we are inside the
-      // callback guarantees that it is <= eps
-
-      bool const is_neighbor_core_point = _is_core_point(j);
-      if (is_neighbor_core_point && i > j)
-        _union_find.merge(i, j);
-      else if (!is_neighbor_core_point)
-        _union_find.merge_into(j, i);
+    bool const is_neighbor_core_point = _is_core_point(j);
+    if (is_neighbor_core_point && i > j)
+    {
+      // For a core point that is connected to another core point, do the
+      // standard CCS algorithm
+      _union_find.merge(i, j);
+    }
+    else if (!is_neighbor_core_point)
+    {
+      // For a border point that is connected to a core point, set its
+      // representative to that of the core point. If it is connected to
+      // multiple core points, it will be assigned to the cluster that the last
+      // core point was in.
+      //
+      // NOTE: DO NOT USE merge(i, j) here. This may set this border
+      // point as a representative for the whole cluster. This would mean that
+      // a) labels_(i) == i still (so it would be processed later, and b) it may
+      // be combined with a different cluster later forming a bridge.
+      _union_find.merge_into(j, i);
     }
 
     return ArborX::CallbackTreeTraversalControl::normal_continuation;
