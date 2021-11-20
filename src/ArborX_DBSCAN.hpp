@@ -381,6 +381,9 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     Kokkos::Profiling::popRegion();
     elapsed["construction"] = timer_seconds(timer);
 
+    printf("Dense  tree size: %d\n", bvh_dense.size());
+    printf("Sparse tree size: %d\n", bvh_sparse.size());
+
     timer_start(timer);
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters");
 
@@ -390,12 +393,20 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
         Details::PrimitivesWithRadiusReorderedAndFiltered<
             Primitives, decltype(sparse_permute)>{primitives, eps,
                                                   sparse_permute};
+    auto dense_permute = Kokkos::subview(
+        permute, Kokkos::make_pair(0, num_points_in_dense_cells));
+    auto const dense_predicates =
+        Details::PrimitivesWithRadiusReorderedAndFiltered<
+            Primitives, decltype(dense_permute)>{primitives, eps,
+                                                 dense_permute};
     if (is_special_case)
     {
       // Perform the queries and build clusters through callback
       using CorePoints = Details::CCSCorePoints;
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
 
+      Kokkos::Profiling::pushRegion(
+          "ArborX::DBSCAN::clusters::query::dense_all");
       // Query the dense tree using all predicates
       auto const predicates =
           Details::PrimitivesWithRadius<Primitives>{primitives, eps};
@@ -407,11 +418,39 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
               labels, CorePoints{}, primitives, dense_cell_offsets, permute,
               eps});
 
+      Kokkos::Profiling::popRegion();
+      Kokkos::Profiling::pushRegion(
+          "ArborX::DBSCAN::clusters::query::dense_dense");
+
+      bvh_dense.query(
+          exec_space, dense_predicates,
+          Details::FDBSCANDenseBoxCallback<MemorySpace, CorePoints, Primitives,
+                                           decltype(dense_cell_offsets),
+                                           decltype(permute)>{
+              labels, CorePoints{}, primitives, dense_cell_offsets, permute,
+              eps});
+
+      Kokkos::Profiling::popRegion();
+      Kokkos::Profiling::pushRegion(
+          "ArborX::DBSCAN::clusters::query::dense_sparse");
+
+      bvh_dense.query(
+          exec_space, sparse_predicates,
+          Details::FDBSCANDenseBoxCallback<MemorySpace, CorePoints, Primitives,
+                                           decltype(dense_cell_offsets),
+                                           decltype(permute)>{
+              labels, CorePoints{}, primitives, dense_cell_offsets, permute,
+              eps});
+
+      Kokkos::Profiling::popRegion();
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query::sparse");
+
       // Query the sparse tree using only sparse predicates
       bvh_sparse.query(exec_space, sparse_predicates,
                        Details::FDBSCANSparseCallback<MemorySpace, CorePoints,
                                                       decltype(permute)>{
                            labels, CorePoints{}, sparse_permute});
+      Kokkos::Profiling::popRegion();
 
       Kokkos::Profiling::popRegion();
     }
