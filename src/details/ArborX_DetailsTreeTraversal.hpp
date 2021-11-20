@@ -12,6 +12,7 @@
 #define ARBORX_DETAILS_TREE_TRAVERSAL_HPP
 
 #include <ArborX_AccessTraits.hpp>
+#include <ArborX_Callbacks.hpp>
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
@@ -110,14 +111,16 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       {
         if (HappyTreeFriends::isLeaf(_bvh, left_child))
         {
-          if (invoke_callback_and_check_early_exit(
+          if (!pruneLeaf(queryIndex, left_child) &&
+              invoke_callback_and_check_early_exit(
                   _callback, predicate,
                   HappyTreeFriends::getLeafPermutationIndex(_bvh, left_child)))
             return;
         }
         else
         {
-          traverse_left = true;
+          if (!pruneLeftSubtree(queryIndex, left_child))
+            traverse_left = true;
         }
       }
 
@@ -125,7 +128,8 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       {
         if (HappyTreeFriends::isLeaf(_bvh, right_child))
         {
-          if (invoke_callback_and_check_early_exit(
+          if (!pruneLeaf(queryIndex, right_child) &&
+              invoke_callback_and_check_early_exit(
                   _callback, predicate,
                   HappyTreeFriends::getLeafPermutationIndex(_bvh, right_child)))
             return;
@@ -167,11 +171,16 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       {
         if (!HappyTreeFriends::isLeaf(_bvh, node))
         {
-          next = HappyTreeFriends::getLeftChild(_bvh, node);
+          int const left_child = HappyTreeFriends::getLeftChild(_bvh, node);
+          if (!pruneLeftSubtree(queryIndex, left_child))
+            next = left_child;
+          else
+            next = HappyTreeFriends::getRightChild(_bvh, node);
         }
         else
         {
-          if (invoke_callback_and_check_early_exit(
+          if (!pruneLeaf(queryIndex, node) &&
+              invoke_callback_and_check_early_exit(
                   _callback, predicate,
                   HappyTreeFriends::getLeafPermutationIndex(_bvh, node)))
             return;
@@ -184,6 +193,41 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       }
 
     } while (next != ROPE_SENTINEL);
+  }
+
+  template <typename T = Callback>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<T, Callback>{} && !traverse_half<Callback>{}, bool>
+  pruneLeaf(int, int) const
+  {
+    return false;
+  }
+
+  template <typename T = Callback>
+  KOKKOS_FUNCTION
+      std::enable_if_t<std::is_same<T, Callback>{} && traverse_half<Callback>{},
+                       bool>
+      pruneLeaf(int query_index, int leaf_index) const
+  {
+    int const leaf_nodes_shift = _bvh.size() - 1;
+    return leaf_index - leaf_nodes_shift <= query_index;
+  }
+
+  template <typename T = Callback>
+  KOKKOS_FUNCTION std::enable_if_t<
+      std::is_same<T, Callback>{} && !traverse_half<Callback>{}, bool>
+  pruneLeftSubtree(int, int) const
+  {
+    return false;
+  }
+
+  template <typename T = Callback>
+  KOKKOS_FUNCTION
+      std::enable_if_t<std::is_same<T, Callback>{} && traverse_half<Callback>{},
+                       bool>
+      pruneLeftSubtree(int query_index, int left_child_index) const
+  {
+    return left_child_index <= query_index;
   }
 };
 
