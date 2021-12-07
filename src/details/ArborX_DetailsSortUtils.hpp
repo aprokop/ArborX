@@ -142,7 +142,7 @@ Kokkos::View<SizeType *, typename ViewType::device_type> sortObjects(
   auto permute_ptr = thrust::device_ptr<SizeType>(permute.data());
   auto begin_ptr = thrust::device_ptr<ValueType>(view.data());
   auto end_ptr = thrust::device_ptr<ValueType>(view.data() + n);
-  thrust::sort_by_key(execution_policy, begin_ptr, end_ptr, permute_ptr);
+  thrust::stable_sort_by_key(execution_policy, begin_ptr, end_ptr, permute_ptr);
 
   return permute;
 }
