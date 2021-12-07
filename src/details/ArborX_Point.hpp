@@ -68,6 +68,12 @@ public:
   {
     return _data.coords[i];
   }
+  KOKKOS_FUNCTION bool operator==(Point const& other) {
+      return (*this)[0] == other[0] && (*this)[1] == other[1] && (*this)[2] == other[2];
+  }
+  KOKKOS_FUNCTION bool operator!=(Point const& other) {
+      return !(*this == other);
+  }
 };
 } // namespace ArborX
 

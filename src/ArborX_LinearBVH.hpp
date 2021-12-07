@@ -79,7 +79,7 @@ public:
                   std::forward<View>(view), std::forward<Args>(args)...);
   }
 
-private:
+// private:
   friend struct Details::HappyTreeFriends;
 
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)

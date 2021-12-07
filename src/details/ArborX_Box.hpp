@@ -106,6 +106,13 @@ struct Box
     return *this;
   }
 
+  KOKKOS_FUNCTION bool operator==(Box const& other) {
+      return _min_corner == other._min_corner && _max_corner == other._max_corner;
+  }
+  KOKKOS_FUNCTION bool operator!=(Box const& other) {
+      return !(*this == other);
+  }
+
 // FIXME Temporary workaround until we clarify requirements on the Kokkos side.
 #if defined(KOKKOS_ENABLE_OPENMPTARGET) || defined(KOKKOS_ENABLE_SYCL)
 private:
