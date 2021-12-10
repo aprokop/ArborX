@@ -334,6 +334,8 @@ public:
 
         delta_right = delta(range_right);
 
+        // Make sure that the bounding box of the other thread is correctly loaded.
+        Kokkos::load_fence();
         expand(bounding_volume, getNodePtr(right_child)->bounding_volume);
       }
       else
@@ -355,6 +357,7 @@ public:
 
         delta_left = delta(range_left - 1);
 
+        Kokkos::load_fence();
         expand(bounding_volume, getNodePtr(left_child)->bounding_volume);
       }
 
