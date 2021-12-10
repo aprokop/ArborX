@@ -334,8 +334,6 @@ public:
 
         delta_right = delta(range_right);
 
-        // Make sure that the bounding box of the other thread is correctly loaded.
-        Kokkos::load_fence();
         expand(bounding_volume, getNodePtr(right_child)->bounding_volume);
       }
       else
@@ -357,7 +355,6 @@ public:
 
         delta_left = delta(range_left - 1);
 
-        Kokkos::load_fence();
         expand(bounding_volume, getNodePtr(left_child)->bounding_volume);
       }
 
@@ -370,6 +367,7 @@ public:
       setRightChild(parent_node, right_child);
       setRope(parent_node, range_right, delta_right);
       parent_node->bounding_volume = bounding_volume;
+      desul::atomic_thread_fence(desul::MemoryOrderRelease(), desul::MemoryScopeDevice());
 
       i = karras_parent;
 
