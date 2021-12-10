@@ -334,7 +334,7 @@ public:
 
         delta_right = delta(range_right);
 
-        expand(bounding_volume, getNodePtr(right_child)->bounding_volume);
+        expand(bounding_volume, desul::atomic_load(&getNodePtr(right_child)->bounding_volume, desul::MemoryOrderAcquire(), desul::MemoryScopeDevice()));
       }
       else
       {
@@ -355,7 +355,7 @@ public:
 
         delta_left = delta(range_left - 1);
 
-        expand(bounding_volume, getNodePtr(left_child)->bounding_volume);
+        expand(bounding_volume, desul::atomic_load(&getNodePtr(left_child)->bounding_volume, desul::MemoryOrderAcquire(), desul::MemoryScopeDevice()));
       }
 
       // Having the full range for the parent, we can compute the Karras index.
@@ -366,7 +366,7 @@ public:
       parent_node->left_child = left_child;
       setRightChild(parent_node, right_child);
       setRope(parent_node, range_right, delta_right);
-      desul::atomic_store(&parent_node->bounding_volume, bounding_volume, desul::MemoryOrderRelease(), desul::MemoryScopeDevice());
+      parent_node->bounding_volume = bounding_volume;
 
       i = karras_parent;
 
