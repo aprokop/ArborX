@@ -182,7 +182,7 @@ struct FDBSCANDenseBoxCallback
     auto const i = ArborX::getData(query);
 
     bool const is_border_point = !_is_core_point(i);
-    if (is_border_point)
+    if (is_border_point && _union_find.representative(i) != i)
       return ArborX::CallbackTreeTraversalControl::early_exit;
 
     bool const is_dense_cell = (k < _num_dense_cells);
@@ -199,6 +199,7 @@ struct FDBSCANDenseBoxCallback
 
       Point const &query_point = Access::get(_primitives, i);
 
+      int found_j = -1;
       for (int jj = cell_start; jj < cell_end; ++jj)
       {
         int j = _permute(jj);
@@ -213,9 +214,19 @@ struct FDBSCANDenseBoxCallback
         {
           // We connected to at least one point in the dense box, thus we
           // connected to all of them, so may terminate
-          _union_find.merge(i, j);
+          found_j = j;
           break;
         }
+      }
+
+      if (found_j != -1)
+      {
+        if (is_border_point)
+        {
+          _union_find.merge_into(i, found_j);
+          return ArborX::CallbackTreeTraversalControl::early_exit;
+        }
+        _union_find.merge(i, found_j);
       }
     }
     else
@@ -226,10 +237,29 @@ struct FDBSCANDenseBoxCallback
       // callback guarantees that it is <= eps
 
       bool const is_neighbor_core_point = _is_core_point(j);
-      if (is_neighbor_core_point && i > j)
-        _union_find.merge(i, j);
-      else if (!is_neighbor_core_point)
+      if (is_neighbor_core_point)
+      {
+        if (!is_border_point)
+        {
+          // Both points are core points
+          _union_find.merge(i, j);
+        }
+        else
+        {
+          // A border point is connected to a core point
+          _union_find.merge_into(i, j);
+          return ArborX::CallbackTreeTraversalControl::early_exit;
+        }
+      }
+      else if (!is_border_point)
+      {
+        // A core point is connected to a border point
         _union_find.merge_into(j, i);
+      }
+      else
+      {
+        // Both points are border points, do nothing
+      }
     }
 
     return ArborX::CallbackTreeTraversalControl::normal_continuation;

@@ -62,33 +62,33 @@ struct FDBSCANCallback
     int const i = ArborX::getData(query);
 
     bool const is_border_point = !_is_core_point(i);
-    if (is_border_point)
-    {
-      // Ignore border points, they will be processed by the
-      // connected core points. Theoretically, border points could have been
-      // filtered out prior to running the algorithm, but that may be expensive.
-      return ArborX::CallbackTreeTraversalControl::early_exit;
-    }
-
     bool const is_neighbor_core_point = _is_core_point(j);
-    if (is_neighbor_core_point && i > j)
+
+    if (is_border_point && _union_find.representative(i) != i)
+      return ArborX::CallbackTreeTraversalControl::early_exit;
+
+    if (is_neighbor_core_point)
     {
-      // For a core point that is connected to another core point, do the
-      // standard CCS algorithm
-      _union_find.merge(i, j);
+      if (!is_border_point)
+      {
+        // Both points are core points
+        _union_find.merge(i, j);
+      }
+      else
+      {
+        // A border point is connected to a core point
+        _union_find.merge_into(i, j);
+        return ArborX::CallbackTreeTraversalControl::early_exit;
+      }
     }
-    else if (!is_neighbor_core_point)
+    else if (!is_border_point)
     {
-      // For a border point that is connected to a core point, set its
-      // representative to that of the core point. If it is connected to
-      // multiple core points, it will be assigned to the cluster that the last
-      // core point was in.
-      //
-      // NOTE: DO NOT USE merge(i, j) here. This may set this border
-      // point as a representative for the whole cluster. This would mean that
-      // a) labels_(i) == i still (so it would be processed later, and b) it may
-      // be combined with a different cluster later forming a bridge.
+      // A core point is connected to a border point
       _union_find.merge_into(j, i);
+    }
+    else
+    {
+      // Both points are border points, do nothing
     }
 
     return ArborX::CallbackTreeTraversalControl::normal_continuation;
