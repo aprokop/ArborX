@@ -22,8 +22,8 @@ namespace Experimental
 {
 
 template <class ExecutionSpace, class BVH, class LabelsIn, class LabelsOut>
-void initBVHlabels(ExecutionSpace const &exec_space, BVH const &bvh,
-                   LabelsIn const &in, LabelsOut const &out)
+void initBVHLabels(ExecutionSpace const &exec_space, BVH const &bvh,
+                   LabelsIn const &in, LabelsOut &out)
 {
   auto const n = bvh.size();
 
@@ -88,9 +88,9 @@ void reduceBVHLabels(ExecutionSpace const &exec_space, Parents const &parents,
           int const parent_label = Kokkos::atomic_compare_exchange(
               &labels(parent), untouched, label);
 
-          // Terminate first thread and let second one continue.
-          // This ensures that every node gets processed only once, and not
-          // before both of its children are processed.
+          // Terminate the first thread and let the second one continue. This
+          // ensures that every node is processed only once, and only after
+          // processing both of its children.
           if (parent_label == untouched)
             break;
 
