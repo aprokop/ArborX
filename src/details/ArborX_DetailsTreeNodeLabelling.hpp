@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
-#ifndef ARBORX_DETAILS_HDBSCAN_HPP
-#define ARBORX_DETAILS_HDBSCAN_HPP
+#ifndef ARBORX_DETAILS_TREE_NODE_LABELLING_HPP
+#define ARBORX_DETAILS_TREE_NODE_LABELLING_HPP
 
 #include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_LinearBVH.hpp>
@@ -22,64 +22,69 @@ namespace Experimental
 {
 
 template <class ExecutionSpace, class BVH, class LabelsIn, class LabelsOut>
-void initBVHLabels(ExecutionSpace const &exec_space, BVH const &bvh,
-                   LabelsIn const &in, LabelsOut &out)
+void initLabels(ExecutionSpace const &exec_space, BVH const &bvh,
+                LabelsIn const &in, LabelsOut &out)
 {
   auto const n = bvh.size();
 
+  ARBORX_ASSERT(n >= 2);
   ARBORX_ASSERT(in.size() == n);
   ARBORX_ASSERT(out.size() == 2 * n - 1);
 
   Kokkos::parallel_for(
-      "ArborX::Experimental::init_labels",
+      "ArborX::initialize_leaf_node_labels",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, n - 1, 2 * n - 1),
       KOKKOS_LAMBDA(int i) {
         out(i) = in(Details::HappyTreeFriends::getLeafPermutationIndex(bvh, i));
       });
 }
 
-template <class ExecutionSpace, class BVH, class BVHParents>
-void findBVHParents(ExecutionSpace const &exec_space, BVH const &bvh,
-                    BVHParents const &bvh_parents)
+template <class ExecutionSpace, class BVH, class Parents>
+void findParents(ExecutionSpace const &exec_space, BVH const &bvh,
+                 Parents const &parents)
 {
   auto const n = bvh.size();
 
-  ARBORX_ASSERT(bvh_parents.size() == 2 * n - 1);
+  ARBORX_ASSERT(n >= 2);
+  ARBORX_ASSERT(parents.size() == 2 * n - 1);
 
   Kokkos::parallel_for(
-      "ArborX::Experimental::tag_children",
+      "ArborX::recompute_internal_and_leaf_node_parents",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
       KOKKOS_LAMBDA(int i) {
-        bvh_parents(Details::HappyTreeFriends::getLeftChild(bvh, i)) = i;
-        bvh_parents(Details::HappyTreeFriends::getRightChild(bvh, i)) = i;
+        parents(Details::HappyTreeFriends::getLeftChild(bvh, i)) = i;
+        parents(Details::HappyTreeFriends::getRightChild(bvh, i)) = i;
       });
 }
 
 template <class ExecutionSpace, class Parents, class Labels>
-void reduceBVHLabels(ExecutionSpace const &exec_space, Parents const &parents,
-                     Labels labels)
+void reduceLabels(ExecutionSpace const &exec_space, Parents const &parents,
+                  Labels labels)
 {
   auto const n = (parents.size() + 1) / 2;
 
   ARBORX_ASSERT(n >= 2);
   ARBORX_ASSERT(labels.size() == parents.size());
 
-  constexpr typename Labels::value_type indeterminate = -1;
-  constexpr typename Labels::value_type untouched = -2;
+  using ValueType = typename Labels::value_type;
+  constexpr ValueType indeterminate = -1;
+  constexpr ValueType untouched = -2;
 
   // Reset parent labels
   auto internal_node_labels =
       Kokkos::subview(labels, std::make_pair(0, (int)n - 1));
   Kokkos::deep_copy(exec_space, internal_node_labels, untouched);
   Kokkos::parallel_for(
-      "ArborX::Experimental::reduce_labels",
+      "ArborX::reduce_internal_node_labels",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, n - 1, 2 * n - 1),
       KOKKOS_LAMBDA(int i) {
         assert(labels(i) != indeterminate);
         assert(labels(i) != untouched);
         assert(parents(i) >= 0);
 
-        constexpr typename Labels::value_type root = 0;
+        // TODO consider asserting the precondition below holds at call site or
+        // taking root as an input argument
+        constexpr int root = 0; // Details::HappyTreeFriends::getRoot(bvh)
         do
         {
           int const label = labels(i);
