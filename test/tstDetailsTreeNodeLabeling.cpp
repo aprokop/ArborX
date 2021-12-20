@@ -38,13 +38,14 @@ struct MockBVH
 
 #define HAPPY_TREE_FRIENDS_GET_CHILDREN_SPECIALIZATION(MEMORY_SPACE)           \
   template <>                                                                  \
-  auto ArborX::Details::HappyTreeFriends::getLeftChild<MockBVH<MEMORY_SPACE>>( \
+  KOKKOS_FUNCTION auto                                                         \
+  ArborX::Details::HappyTreeFriends::getLeftChild<MockBVH<MEMORY_SPACE>>(      \
       MockBVH<MEMORY_SPACE> const &x, int i)                                   \
   {                                                                            \
     return x.children_(i).first;                                               \
   }                                                                            \
   template <>                                                                  \
-  auto                                                                         \
+  KOKKOS_FUNCTION auto                                                         \
   ArborX::Details::HappyTreeFriends::getRightChild<MockBVH<MEMORY_SPACE>>(     \
       MockBVH<MEMORY_SPACE> const &x, int i)                                   \
   {                                                                            \
