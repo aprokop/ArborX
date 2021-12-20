@@ -11,7 +11,7 @@
 
 #include "ArborX_EnableDeviceTypes.hpp" // ARBORX_DEVICE_TYPES
 #include "ArborX_EnableViewComparison.hpp"
-#include <ArborX_DetailsTreeNodeLabelling.hpp>
+#include <ArborX_DetailsTreeNodeLabeling.hpp>
 #include <ArborX_LinearBVH.hpp>
 
 #include "BoostTest_CUDA_clang_workarounds.hpp"

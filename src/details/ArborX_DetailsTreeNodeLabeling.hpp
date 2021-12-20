@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
-#ifndef ARBORX_DETAILS_TREE_NODE_LABELLING_HPP
-#define ARBORX_DETAILS_TREE_NODE_LABELLING_HPP
+#ifndef ARBORX_DETAILS_TREE_NODE_LABELING_HPP
+#define ARBORX_DETAILS_TREE_NODE_LABELING_HPP
 
 #include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_LinearBVH.hpp>
