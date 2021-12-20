@@ -83,9 +83,10 @@ auto findParents(ExecutionSpace const &exec_space,
       2 * n - 1);
   Kokkos::deep_copy(parents, -1);
 
+  using MemorySpace = typename ExecutionSpace::memory_space;
   using ArborX::Experimental::findParents;
-  findParents(exec_space, MockBVH<Kokkos::HostSpace>{children}, parents);
-  return parents;
+  findParents(exec_space, MockBVH<MemorySpace>{children}, parents);
+  return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, parents);
 }
 
 #define ARBORX_TEST_FIND_PARENTS(exec_space, children, ref)                    \
