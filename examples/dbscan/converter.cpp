@@ -363,6 +363,52 @@ auto loadSWData(std::string const &filename)
   return points;
 }
 
+// PBBS (Problem Based Benchmark Suite) data reader.
+//
+// The data file is a text file. A header is one line. Each line contains
+// several floating point numbers separated by spaces. The dimensionality of
+// the data depends on the number of fields.
+auto loadPBBSData(std::string const &filename)
+{
+  std::cout << "Assuming PBBS data.\n";
+  std::cout << "Reading in \"" << filename << "\" in text mode...";
+  std::cout.flush();
+
+  std::ifstream input;
+  input.open(filename);
+  if (!input.good())
+    throw std::runtime_error("Cannot open file");
+
+  std::string line;
+
+  // Get data dimension from
+  // 'pbbs_sequencePoint7d'
+  std::getline(input, line);
+  int dim = line.at(18) - '0';
+
+  Points points(dim);
+  while (input.good())
+  {
+    std::string line;
+    if (!std::getline(input, line))
+      break;
+
+    std::istringstream line_stream(line);
+
+    for (int k = 0; k < dim; ++k)
+    {
+      float f;
+      line_stream >> f;
+      points[k].emplace_back(f);
+    }
+  }
+  input.close();
+  std::cout << "done\nRead in " << points.size() << " " << dim << "D points"
+            << std::endl;
+
+  return points;
+}
+
 // Gaia data reader.
 //
 // Gaia catalog (data release 2) contains 1.69 billion points
@@ -426,6 +472,8 @@ auto loadData(std::string const &filename, std::string const &reader_type)
     return loadSWData(filename);
   if (reader_type == "gaia")
     return loadGaiaData(filename);
+  if (reader_type == "pbbs")
+    return loadPBBSData(filename);
 
   throw std::runtime_error("Unknown reader type: \"" + reader_type + "\"");
 }
