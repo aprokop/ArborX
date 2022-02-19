@@ -13,6 +13,7 @@
 #include <ArborX_DBSCANVerification.hpp>
 #include <ArborX_DetailsHeap.hpp>
 #include <ArborX_DetailsOperatorFunctionObjects.hpp> // Less
+#include <ArborX_DetailsTreeInfo.hpp>
 #include <ArborX_MinimumSpanningTree.hpp>
 #include <ArborX_Version.hpp>
 
@@ -377,6 +378,7 @@ int main(int argc, char *argv[])
 
   ExecutionSpace exec_space;
 
+#if 0
   Kokkos::Timer timer_total;
   Kokkos::Timer timer;
   std::map<std::string, double> elapsed;
@@ -441,6 +443,27 @@ int main(int argc, char *argv[])
     throw std::runtime_error("MST is only available with Kokkos 3.5 or later");
 #endif
   }
+#else
+  bool success = true;
+  ArborX::BVH<MemorySpace> bvh(exec_space, primitives);
+  auto heights = ArborX::Details::TreeInfo::computeHeights(exec_space, bvh);
+  auto permute = ArborX::Details::sortObjects(exec_space, heights);
+  auto offsets =
+      ArborX::Details::computeOffsetsInOrderedView(exec_space, heights);
+  auto heights_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, heights);
+  auto offsets_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, offsets);
+
+  printf("Heights distribution:\n");
+  for (int i = 0; i < offsets_host.extent_int(0) - 1; ++i)
+  {
+    int offset = offsets_host(i);
+    int num_same_heights = offsets_host(i + 1) - offset;
+    printf("%d [%5.2f%%] of height %d\n", num_same_heights,
+           (100.f * num_same_heights) / bvh.size(), heights_host(offset));
+  }
+#endif
 
   return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
