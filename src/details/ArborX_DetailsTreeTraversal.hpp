@@ -15,6 +15,7 @@
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
+#include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsNode.hpp> // ROPE_SENTINEL
 #include <ArborX_DetailsPriorityQueue.hpp>
 #include <ArborX_DetailsStack.hpp>
@@ -187,6 +188,14 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   }
 };
 
+using PairIndexDistance = Kokkos::pair<int, float>;
+
+KOKKOS_INLINE_FUNCTION bool operator<(PairIndexDistance const &lhs,
+                                      PairIndexDistance const &rhs)
+{
+  return lhs.second < rhs.second;
+}
+
 template <typename BVH, typename Predicates, typename Callback>
 struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
 {
@@ -289,49 +298,122 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     _callback(predicate, 0);
   }
 
+  template <typename Key, int SIZE>
+  struct StaticPQ
+  {
+    Key _k[SIZE];
+    int _size = 0;
+
+    KOKKOS_FUNCTION
+    StaticPQ()
+    {
+      constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
+#pragma unroll
+      for (int i = 0; i < SIZE; ++i)
+        _k[i].second = inf;
+    }
+
+    KOKKOS_FUNCTION
+    void push(Key const &key)
+    {
+      assert(size() < SIZE);
+
+      ++_size;
+      _k[0] = key;
+      sort();
+    }
+
+    KOKKOS_FUNCTION Key *data() { return _k; }
+    KOKKOS_FUNCTION Key const *data() const { return _k; }
+
+    KOKKOS_FUNCTION
+    void popPush(Key const &key)
+    {
+      assert(size() == SIZE);
+      _k[0] = key;
+      sort();
+    }
+
+    KOKKOS_FUNCTION
+    int size() const { return _size; }
+
+    KOKKOS_FUNCTION
+    void sort()
+    {
+      using KokkosExt::swap;
+
+#pragma unroll
+      for (int i = 0; i < SIZE - 1; ++i)
+        if (_k[i] < _k[i + 1])
+          swap(_k[i], _k[i + 1]);
+    }
+
+    KOKKOS_FUNCTION
+    Key const &top() const
+    {
+      assert(size() > 0);
+      return _k[SIZE - _size];
+    }
+  };
+
   KOKKOS_FUNCTION void operator()(int queryIndex) const
   {
     auto const &predicate = Access::get(_predicates, queryIndex);
     auto const k = getK(predicate);
-    auto const distance = [geometry = getGeometry(predicate),
-                           bvh = _bvh](int node) {
-      using Details::distance;
-      return distance(geometry, HappyTreeFriends::getBoundingVolume(bvh, node));
-    };
-    auto const buffer = _buffer(queryIndex);
 
     // NOTE thinking about making this a precondition
     if (k < 1)
       return;
 
+    assert(k <= 3);
+
+    auto const buffer = _buffer(queryIndex);
+    // static_assert(
+    // std::is_same<typename decltype(buffer)::value_type,
+    // PairIndexDistance>::value,
+    // "Type of the elements stored in the buffer passed as argument to "
+    // "TreeTraversal::nearestQuery is not right");
+    assert(k == (int)buffer.size());
+
+    if (k == 1)
+    {
+      StaticPQ<PairIndexDistance, 1> pq;
+      (*this)(queryIndex, pq);
+      buffer[0] = pq._k[0];
+    }
+    else if (k == 2)
+    {
+      StaticPQ<PairIndexDistance, 2> pq;
+      (*this)(queryIndex, pq);
+      buffer[0] = pq._k[0];
+      buffer[1] = pq._k[1];
+    }
+    else if (k == 3)
+    {
+      StaticPQ<PairIndexDistance, 3> pq;
+      (*this)(queryIndex, pq);
+      buffer[0] = pq._k[0];
+      buffer[1] = pq._k[1];
+      buffer[2] = pq._k[2];
+    }
+  }
+
+  template <typename Heap>
+  KOKKOS_FUNCTION void operator()(int queryIndex, Heap &heap) const
+  {
+    auto const &predicate = Access::get(_predicates, queryIndex);
+    auto const k = getK(predicate);
+
+    auto const distance = [geometry = getGeometry(predicate),
+                           bvh = _bvh](int node) {
+      using Details::distance;
+      return distance(geometry, HappyTreeFriends::getBoundingVolume(bvh, node));
+    };
+
     // Nodes with a distance that exceed that radius can safely be
     // discarded. Initialize the radius to infinity and tighten it once k
     // neighbors have been found.
     auto radius = KokkosExt::ArithmeticTraits::infinity<float>::value;
-
-    using PairIndexDistance = Kokkos::pair<int, float>;
-    static_assert(
-        std::is_same<typename decltype(buffer)::value_type,
-                     PairIndexDistance>::value,
-        "Type of the elements stored in the buffer passed as argument to "
-        "TreeTraversal::nearestQuery is not right");
-    struct CompareDistance
-    {
-      KOKKOS_INLINE_FUNCTION bool operator()(PairIndexDistance const &lhs,
-                                             PairIndexDistance const &rhs) const
-      {
-        return lhs.second < rhs.second;
-      }
-    };
-    // Use a priority queue for convenience to store the results and
-    // preserve the heap structure internally at all time.  There is no
-    // memory allocation, elements are stored in the buffer passed as an
-    // argument. The farthest leaf node is on top.
-    assert(k == (int)buffer.size());
-    PriorityQueue<PairIndexDistance, CompareDistance,
-                  UnmanagedStaticVector<PairIndexDistance>>
-        heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
-                                                      buffer.size()));
 
     constexpr int SENTINEL = -1;
     int stack[64];
@@ -444,7 +526,7 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     // Sort the leaf nodes and output the results.
     // NOTE: Do not try this at home.  Messing with the underlying container
     // invalidates the state of the PriorityQueue.
-    sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
+    // sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
     for (decltype(heap.size()) i = 0; i < heap.size(); ++i)
     {
       int const leaf_index = (heap.data() + i)->first;
