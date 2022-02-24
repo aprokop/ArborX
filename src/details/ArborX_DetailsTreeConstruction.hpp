@@ -63,14 +63,32 @@ assignMortonCodesImpl(ExecutionSpace const &space, Primitives const &primitives,
 {
   using Access = AccessTraits<Primitives, PrimitivesTag>;
   auto const n = Access::size(primitives);
-  Kokkos::parallel_for("ArborX::TreeConstruction::assign_morton_codes",
-                       Kokkos::RangePolicy<ExecutionSpace>(space, 0, n),
-                       KOKKOS_LAMBDA(int i) {
-                         Point xyz;
-                         centroid(Access::get(primitives, i), xyz);
-                         translateAndScale(xyz, xyz, scene_bounding_box);
-                         morton_codes(i) = morton64(xyz[0], xyz[1], xyz[2]);
-                       });
+  using OrderValueType = typename MortonCodes::value_type;
+  static_assert(std::is_same<OrderValueType, unsigned int>::value ||
+                    std::is_same<OrderValueType, unsigned long long>::value,
+                "");
+  if (std::is_same<OrderValueType, unsigned int>::value)
+  {
+    Kokkos::parallel_for("ArborX::TreeConstruction::assign_32bit_morton_codes",
+                         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n),
+                         KOKKOS_LAMBDA(int i) {
+                           Point xyz;
+                           centroid(Access::get(primitives, i), xyz);
+                           translateAndScale(xyz, xyz, scene_bounding_box);
+                           morton_codes(i) = morton32(xyz[0], xyz[1], xyz[2]);
+                         });
+  }
+  else
+  {
+    Kokkos::parallel_for("ArborX::TreeConstruction::assign_64bit_morton_codes",
+                         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n),
+                         KOKKOS_LAMBDA(int i) {
+                           Point xyz;
+                           centroid(Access::get(primitives, i), xyz);
+                           translateAndScale(xyz, xyz, scene_bounding_box);
+                           morton_codes(i) = morton64(xyz[0], xyz[1], xyz[2]);
+                         });
+  }
 }
 
 template <typename ExecutionSpace, typename Primitives, typename MortonCodes>
@@ -82,21 +100,39 @@ assignMortonCodesImpl(ExecutionSpace const &space, Primitives const &primitives,
 {
   using Access = AccessTraits<Primitives, PrimitivesTag>;
   auto const n = Access::size(primitives);
-  Kokkos::parallel_for(
-      "ArborX::TreeConstruction::assign_morton_codes",
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, n), KOKKOS_LAMBDA(int i) {
-        Point xyz;
-        translateAndScale(Access::get(primitives, i), xyz, scene_bounding_box);
-        morton_codes(i) = morton64(xyz[0], xyz[1], xyz[2]);
-      });
+  using OrderValueType = typename MortonCodes::value_type;
+  static_assert(std::is_same<OrderValueType, unsigned int>::value ||
+                    std::is_same<OrderValueType, unsigned long long>::value,
+                "");
+  if (std::is_same<OrderValueType, unsigned int>::value)
+  {
+    Kokkos::parallel_for("ArborX::TreeConstruction::assign_32bit_morton_codes",
+                         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n),
+                         KOKKOS_LAMBDA(int i) {
+                           Point xyz;
+                           translateAndScale(Access::get(primitives, i), xyz,
+                                             scene_bounding_box);
+                           morton_codes(i) = morton32(xyz[0], xyz[1], xyz[2]);
+                         });
+  }
+  else
+  {
+    Kokkos::parallel_for("ArborX::TreeConstruction::assign_64_morton_codes",
+                         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n),
+                         KOKKOS_LAMBDA(int i) {
+                           Point xyz;
+                           translateAndScale(Access::get(primitives, i), xyz,
+                                             scene_bounding_box);
+                           morton_codes(i) = morton64(xyz[0], xyz[1], xyz[2]);
+                         });
+  }
 }
 
-template <typename ExecutionSpace, typename Primitives,
+template <typename ExecutionSpace, typename Primitives, typename OrderValueType,
           typename... MortonCodesViewProperties>
 inline void assignMortonCodes(
     ExecutionSpace const &space, Primitives const &primitives,
-    Kokkos::View<unsigned long long *, MortonCodesViewProperties...>
-        morton_codes,
+    Kokkos::View<OrderValueType *, MortonCodesViewProperties...> morton_codes,
     Box const &scene_bounding_box)
 {
   using Access = AccessTraits<Primitives, PrimitivesTag>;
@@ -140,7 +176,8 @@ namespace
 constexpr int UNTOUCHED_NODE = -1;
 } // namespace
 
-template <typename Primitives, typename MemorySpace, typename Node>
+template <typename Primitives, typename MemorySpace, typename Node,
+          typename OrderValueType>
 class GenerateHierarchy
 {
 public:
@@ -153,7 +190,7 @@ public:
       ExecutionSpace const &space, Primitives const &primitives,
       Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>
           permutation_indices,
-      Kokkos::View<unsigned long long const *, MortonCodesViewProperties...>
+      Kokkos::View<OrderValueType const *, MortonCodesViewProperties...>
           sorted_morton_codes,
       Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
       Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
@@ -176,8 +213,10 @@ public:
         *this);
   }
 
+  using DeltaValueType = std::make_signed_t<OrderValueType>;
+
   KOKKOS_FUNCTION
-  long long delta(int const i) const
+  DeltaValueType delta(int const i) const
   {
     // Per Apetrei:
     //   Because we already know where the highest differing bit is for each
@@ -189,10 +228,16 @@ public:
     //   numbers. The higher the index of the differing bit, the larger the
     //   number.
 
+    constexpr bool use_32bit_morton_code =
+        std::is_same<OrderValueType, unsigned int>::value;
+    constexpr bool use_64bit_morton_code =
+        std::is_same<OrderValueType, unsigned long long>::value;
+    static_assert(use_32bit_morton_code || use_64bit_morton_code, "");
+
     // This check is here simply to avoid code complications in the main
     // operator
     if (i < 0 || i >= _num_internal_nodes)
-      return LLONG_MAX;
+      return use_64bit_morton_code ? LLONG_MAX : INT_MAX;
 
     // The Apetrei's paper does not mention dealing with duplicate indices. We
     // follow the original Karras idea in this situation:
@@ -205,6 +250,11 @@ public:
     // We also want the result in this situation to always be less than any
     // Morton comparison. Thus, we add LLONG_MIN to it.
     auto x = _sorted_morton_codes(i) ^ _sorted_morton_codes(i + 1);
+    if (use_32bit_morton_code)
+    {
+      return x + (!x) * (INT_MIN + (i ^ (i + 1)));
+    }
+
     if (x != 0)
     {
       // When using 63 bits for Morton codes, the LLONG_MAX is actually a valid
@@ -241,14 +291,14 @@ public:
 
   template <typename Tag = typename Node::Tag>
   KOKKOS_FUNCTION std::enable_if_t<std::is_same<Tag, NodeWithTwoChildrenTag>{}>
-  setRope(Node *, int, int) const
+  setRope(Node *, int, DeltaValueType) const
   {
   }
 
   template <typename Tag = typename Node::Tag>
   KOKKOS_FUNCTION
       std::enable_if_t<std::is_same<Tag, NodeWithLeftChildAndRopeTag>{}>
-      setRope(Node *node, int range_right, long long delta_right) const
+      setRope(Node *node, int range_right, DeltaValueType delta_right) const
   {
     int rope;
     if (range_right != _num_internal_nodes)
@@ -389,7 +439,7 @@ public:
 private:
   Primitives _primitives;
   Kokkos::View<unsigned int const *, MemorySpace> _permutation_indices;
-  Kokkos::View<unsigned long long const *, MemorySpace> _sorted_morton_codes;
+  Kokkos::View<OrderValueType const *, MemorySpace> _sorted_morton_codes;
   Kokkos::View<Node *, MemorySpace> _leaf_nodes;
   Kokkos::View<Node *, MemorySpace> _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
@@ -397,7 +447,7 @@ private:
 };
 
 template <typename ExecutionSpace, typename Primitives,
-          typename... PermutationIndicesViewProperties,
+          typename... PermutationIndicesViewProperties, typename OrderValueType,
           typename... MortonCodesViewProperties, typename Node,
           typename... LeafNodesViewProperties,
           typename... InternalNodesViewProperties>
@@ -405,7 +455,7 @@ void generateHierarchy(
     ExecutionSpace const &space, Primitives const &primitives,
     Kokkos::View<unsigned int *, PermutationIndicesViewProperties...>
         permutation_indices,
-    Kokkos::View<unsigned long long *, MortonCodesViewProperties...>
+    Kokkos::View<OrderValueType *, MortonCodesViewProperties...>
         sorted_morton_codes,
     Kokkos::View<Node *, LeafNodesViewProperties...> leaf_nodes,
     Kokkos::View<Node *, InternalNodesViewProperties...> internal_nodes)
@@ -413,11 +463,11 @@ void generateHierarchy(
   using ConstPermutationIndices =
       Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>;
   using ConstMortonCodes =
-      Kokkos::View<unsigned long long const *, MortonCodesViewProperties...>;
+      Kokkos::View<OrderValueType const *, MortonCodesViewProperties...>;
 
   using MemorySpace = typename decltype(internal_nodes)::memory_space;
 
-  GenerateHierarchy<Primitives, MemorySpace, Node>(
+  GenerateHierarchy<Primitives, MemorySpace, Node, OrderValueType>(
       space, primitives, ConstPermutationIndices(permutation_indices),
       ConstMortonCodes(sorted_morton_codes), leaf_nodes, internal_nodes);
 }

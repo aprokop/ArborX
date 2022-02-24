@@ -48,9 +48,11 @@ public:
 
   BasicBoundingVolumeHierarchy() = default; // build an empty tree
 
-  template <typename ExecutionSpace, typename Primitives>
+  template <typename ExecutionSpace, typename Primitives,
+            typename SpaceFillingCurve = Experimental::Morton32>
   BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                               Primitives const &primitives);
+                               Primitives const &primitives,
+                               SpaceFillingCurve = {});
 
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
@@ -190,10 +192,12 @@ template <typename MemorySpace>
 using BVH = BoundingVolumeHierarchy<MemorySpace>;
 
 template <typename MemorySpace, typename BoundingVolume, typename Enable>
-template <typename ExecutionSpace, typename Primitives>
+template <typename ExecutionSpace, typename Primitives,
+          typename SpaceFillingCurve>
 BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
     BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                                 Primitives const &primitives)
+                                 Primitives const &primitives,
+                                 SpaceFillingCurve)
     : _size(AccessTraits<Primitives, PrimitivesTag>::size(primitives))
     , _internal_and_leaf_nodes(
           Kokkos::view_alloc(Kokkos::WithoutInitializing,
@@ -241,7 +245,15 @@ BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::assign_morton_codes");
 
   // calculate Morton codes of all objects
-  Kokkos::View<unsigned long long *, MemorySpace> morton_indices(
+  static_assert(
+      std::is_same<SpaceFillingCurve, Experimental::Morton32>::value ||
+          std::is_same<SpaceFillingCurve, Experimental::Morton64>::value,
+      "");
+
+  using OrderValueType = std::conditional_t<
+      std::is_same<SpaceFillingCurve, Experimental::Morton32>::value,
+      unsigned int, unsigned long long>;
+  Kokkos::View<OrderValueType *, MemorySpace> morton_indices(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::BVH::BVH::morton"),
       size());

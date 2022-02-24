@@ -18,6 +18,16 @@
 namespace ArborX
 {
 
+namespace Experimental
+{
+struct Morton32
+{
+};
+struct Morton64
+{
+};
+} // namespace Experimental
+
 namespace Details
 {
 
