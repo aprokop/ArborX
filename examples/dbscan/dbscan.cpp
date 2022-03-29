@@ -372,8 +372,12 @@ int main(int argc, char *argv[])
 
   // read in data
   std::vector<ArborX::Point> data = loadData(filename, binary, max_num_points);
-  if (num_samples > 0 && num_samples < (int)data.size())
+#if 0
+  if (num_samples > 0 && num_samples < data.size())
     data = sampleData(data, num_samples);
+#else
+  data = sampleData(data, data.size());
+#endif
   auto const primitives = vec2view<MemorySpace>(data, "primitives");
 
   ExecutionSpace exec_space;

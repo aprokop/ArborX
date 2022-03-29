@@ -257,9 +257,11 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       using CorePoints = Details::CCSCorePoints;
       CorePoints core_points;
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
-      bvh.query(exec_space, predicates,
-                Details::FDBSCANCallback<MemorySpace, CorePoints>{labels,
-                                                                  core_points});
+      bvh.query(
+          exec_space, predicates,
+          Details::FDBSCANCallback<MemorySpace, CorePoints>{labels,
+                                                            core_points},
+          ArborX::Experimental::TraversalPolicy().setPredicateSorting(false));
       Kokkos::Profiling::popRegion();
     }
     else
@@ -269,8 +271,10 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       timer_start(timer_local);
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::num_neigh");
       Kokkos::resize(num_neigh, n);
-      bvh.query(exec_space, predicates,
-                Details::CountUpToN<MemorySpace>{num_neigh, core_min_size});
+      bvh.query(
+          exec_space, predicates,
+          Details::CountUpToN<MemorySpace>{num_neigh, core_min_size},
+          ArborX::Experimental::TraversalPolicy().setPredicateSorting(false));
       Kokkos::Profiling::popRegion();
       elapsed["neigh"] = timer_seconds(timer_local);
 
@@ -279,9 +283,11 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       // Perform the queries and build clusters through callback
       timer_start(timer_local);
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters:query");
-      bvh.query(exec_space, predicates,
-                Details::FDBSCANCallback<MemorySpace, CorePoints>{
-                    labels, CorePoints{num_neigh, core_min_size}});
+      bvh.query(
+          exec_space, predicates,
+          Details::FDBSCANCallback<MemorySpace, CorePoints>{
+              labels, CorePoints{num_neigh, core_min_size}},
+          ArborX::Experimental::TraversalPolicy().setPredicateSorting(false));
       Kokkos::Profiling::popRegion();
       elapsed["query"] = timer_seconds(timer_local);
     }
