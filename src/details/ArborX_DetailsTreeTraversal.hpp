@@ -23,6 +23,8 @@
 #include <ArborX_Exception.hpp>
 #include <ArborX_Predicates.hpp>
 
+#include <cmath>
+
 namespace ArborX
 {
 namespace Details
@@ -39,6 +41,8 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   BVH _bvh;
   Predicates _predicates;
   Callback _callback;
+
+  static constexpr int _num_items_per_block = 4;
 
   using Access = AccessTraits<Predicates, PredicatesTag>;
 
@@ -63,10 +67,13 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     }
     else
     {
-      Kokkos::parallel_for("ArborX::TreeTraversal::spatial",
-                           Kokkos::RangePolicy<ExecutionSpace>(
-                               space, 0, Access::size(predicates)),
-                           *this);
+      Kokkos::parallel_for(
+          "ArborX::TreeTraversal::spatial",
+          Kokkos::RangePolicy<ExecutionSpace>(
+              space, 0,
+              (int)std::ceil(((float)Access::size(predicates)) /
+                             _num_items_per_block)),
+          *this);
     }
   }
 
@@ -154,37 +161,43 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   template <typename BVH_ = BVH>
   KOKKOS_FUNCTION std::enable_if_t<
       HappyTreeFriends::has_node_with_left_child_and_rope<BVH_>{}>
-  operator()(int queryIndex) const
+  operator()(int k) const
   {
-    auto const &predicate = Access::get(_predicates, queryIndex);
-
-    int node;
-    int next = HappyTreeFriends::getRoot(_bvh); // start with root
-    do
+    int start = k * _num_items_per_block;
+    int end = KokkosExt::min((k + 1) * _num_items_per_block,
+                             (int)Access::size(_predicates));
+    for (int queryIndex = start; queryIndex < end; ++queryIndex)
     {
-      node = next;
+      auto const &predicate = Access::get(_predicates, queryIndex);
 
-      if (predicate(HappyTreeFriends::getBoundingVolume(_bvh, node)))
+      int node;
+      int next = HappyTreeFriends::getRoot(_bvh); // start with root
+      do
       {
-        if (!HappyTreeFriends::isLeaf(_bvh, node))
+        node = next;
+
+        if (predicate(HappyTreeFriends::getBoundingVolume(_bvh, node)))
         {
-          next = HappyTreeFriends::getLeftChild(_bvh, node);
+          if (!HappyTreeFriends::isLeaf(_bvh, node))
+          {
+            next = HappyTreeFriends::getLeftChild(_bvh, node);
+          }
+          else
+          {
+            if (invoke_callback_and_check_early_exit(
+                    _callback, predicate,
+                    HappyTreeFriends::getLeafPermutationIndex(_bvh, node)))
+              return;
+            next = HappyTreeFriends::getRope(_bvh, node);
+          }
         }
         else
         {
-          if (invoke_callback_and_check_early_exit(
-                  _callback, predicate,
-                  HappyTreeFriends::getLeafPermutationIndex(_bvh, node)))
-            return;
           next = HappyTreeFriends::getRope(_bvh, node);
         }
-      }
-      else
-      {
-        next = HappyTreeFriends::getRope(_bvh, node);
-      }
 
-    } while (next != ROPE_SENTINEL);
+      } while (next != ROPE_SENTINEL);
+    }
   }
 };
 
