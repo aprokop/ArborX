@@ -164,6 +164,11 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     {
       node = next;
 
+      if (!HappyTreeFriends::isLeaf(_bvh, node))
+        printf(" %d(I)", node);
+      else
+        printf(" %d(L)", node);
+
       if (predicate(HappyTreeFriends::getBoundingVolume(_bvh, node)))
       {
         if (!HappyTreeFriends::isLeaf(_bvh, node))
@@ -185,6 +190,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
       }
 
     } while (next != ROPE_SENTINEL);
+    printf("\n");
   }
 };
 

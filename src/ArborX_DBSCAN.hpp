@@ -181,6 +181,8 @@ struct Parameters
   // Algorithm implementation (FDBSCAN or FDBSCAN-DenseBox)
   Implementation _implementation = Implementation::FDBSCAN_DenseBox;
 
+  int _warp = -1;
+
   Parameters &setPrintTimers(bool print_timers)
   {
     _print_timers = print_timers;
@@ -189,6 +191,11 @@ struct Parameters
   Parameters &setImplementation(Implementation impl)
   {
     _implementation = impl;
+    return *this;
+  }
+  Parameters &setWarp(int warp)
+  {
+    _warp = warp;
     return *this;
   }
 };
@@ -260,9 +267,41 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       using CorePoints = Details::CCSCorePoints;
       CorePoints core_points;
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
-      bvh.query(exec_space, predicates,
-                Details::FDBSCANCallback<MemorySpace, CorePoints>{labels,
-                                                                  core_points});
+      int warp = parameters._warp;
+      if (warp < 0)
+      {
+        bvh.query(exec_space, predicates,
+                  Details::FDBSCANCallback<MemorySpace, CorePoints>{
+                      labels, core_points});
+      }
+      else
+      {
+        using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
+        using Predicates = Details::PrimitivesWithRadius<Primitives>;
+
+        Predicates predicates{primitives, eps};
+        auto permute = Details::BatchedQueries<DeviceType>::
+            sortPredicatesAlongSpaceFillingCurve(
+                exec_space, Experimental::Morton32(),
+                static_cast<Box>(bvh.bounds()), predicates);
+        auto permute_host =
+            Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, permute);
+
+        printf("----------------------------------\n");
+        for (int i = warp * 32; i < (warp + 1) * 32; ++i)
+        {
+          int index =
+              permute_host(i); // change to "= i" to run unsorted queries
+          auto primitive =
+              Kokkos::subview(primitives, std::make_pair(index, index + 1));
+
+          bvh.query(exec_space,
+                    Details::PrimitivesWithRadius<decltype(primitive)>{
+                        primitive, eps},
+                    Details::FDBSCANCallback<MemorySpace, CorePoints>{
+                        labels, core_points});
+        }
+      }
       Kokkos::Profiling::popRegion();
     }
     else

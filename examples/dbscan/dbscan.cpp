@@ -319,6 +319,7 @@ int main(int argc, char *argv[])
   int core_min_size;
   int max_num_points;
   int num_samples;
+  int warp;
   std::string filename_labels;
   Implementation implementation;
 
@@ -338,6 +339,7 @@ int main(int argc, char *argv[])
       ( "labels", bpo::value<std::string>(&filename_labels)->default_value(""), "clutering results output" )
       ( "print-dbscan-timers", bpo::bool_switch(&print_dbscan_timers)->default_value(false), "print dbscan timers")
       ( "impl", bpo::value<Implementation>(&implementation)->default_value(Implementation::FDBSCAN), R"(implementation ("fdbscan" or "fdbscan-densebox"))")
+      ( "warp", bpo::value<int>(&warp)->default_value(-1), "warp hits" )
       ;
   // clang-format on
   bpo::variables_map vm;
@@ -369,6 +371,8 @@ int main(int argc, char *argv[])
     printf("filename [labels] : %s [binary]\n", filename_labels.c_str());
   printf("samples           : %d\n", num_samples);
   printf("print timers      : %s\n", (print_dbscan_timers ? "true" : "false"));
+  if (warp > 0)
+    printf("warp              : %d\n", warp);
 
   // read in data
   std::vector<ArborX::Point> data = loadData(filename, binary, max_num_points);
@@ -402,7 +406,8 @@ int main(int argc, char *argv[])
     auto labels = ArborX::dbscan(exec_space, primitives, eps, core_min_size,
                                  ArborX::DBSCAN::Parameters()
                                      .setPrintTimers(print_dbscan_timers)
-                                     .setImplementation(implementation));
+                                     .setImplementation(implementation)
+                                     .setWarp(warp));
 
     timer_start(timer);
     Kokkos::View<int *, MemorySpace> cluster_indices("Testing::cluster_indices",
