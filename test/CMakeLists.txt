@@ -182,8 +182,9 @@ configure_file(
   COPYONLY
 )
 add_executable(ArborX_DetailsClusteringHelpers.exe
-  tstDetailsTreeNodeLabeling.cpp
+  tstDetailsEulerTour.cpp
   tstDetailsMutualReachabilityDistance.cpp
+  tstDetailsTreeNodeLabeling.cpp
   tstMinimumSpanningTree.cpp
   tstMinimumSpanningTreeGoldenTest.cpp
   utf_main.cpp
