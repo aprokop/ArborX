@@ -23,79 +23,94 @@
 namespace ArborX::Details
 {
 
-struct Pair
-{
-  int first;
-  int second;
-
-private:
-  friend KOKKOS_FUNCTION bool operator<(Pair const &a, Pair const &b)
-  {
-    return a.first < b.first || (a.first == b.first && a.second < b.second);
-  }
-};
-
-// Assumption: edges are bidirectional and unique
+// Assumption: edges are bidirectional and unique and form a tree
 template <typename ExecutionSpace, typename Edges>
-auto eulerTourList(ExecutionSpace const &exec_space, Edges const &edges)
+Kokkos::View<int *, typename Edges::memory_space>
+eulerTourList(ExecutionSpace const &exec_space, Edges const &edges)
 {
   Kokkos::Profiling::pushRegion("ArborX::euler_tour_list");
 
   using MemorySpace = typename Edges::memory_space;
 
-  int const n = 2 * edges.size();
+  int const num_edges = edges.size();
+  int const num_vertices = num_edges + 1;
 
-  ARBORX_ASSERT(n > 0);
+  ARBORX_ASSERT(num_edges > 0);
 
-  // Construct a list of directed edges (half-edges)
-  Kokkos::View<Pair *, MemorySpace> directed_edges(
-      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                         "ArborX::euler_tour_list::directed_edges"),
-      n);
+  Kokkos::View<int *, MemorySpace> offsets("ArborX::euler_tour_list::offsets",
+                                           num_vertices + 1);
   Kokkos::parallel_for(
-      "ArborX::euler_tour_list::compute_directed_edges",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, edges.size()),
-      KOKKOS_LAMBDA(int const i) {
-        directed_edges(2 * i + 0) = Pair{edges(i).source, edges(i).target};
-        directed_edges(2 * i + 1) = Pair{edges(i).target, edges(i).source};
+      "ArborX::euler_tour_list::compute_counts",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const edge_index) {
+        auto const &edge = edges(edge_index);
+        Kokkos::atomic_increment(&offsets(edge.source));
+        Kokkos::atomic_increment(&offsets(edge.target));
       });
+  exclusivePrefixSum(exec_space, offsets);
 
-  auto directed_edges_clone = KokkosExt::clone(exec_space, directed_edges);
+  ARBORX_ASSERT(KokkosExt::lastElement(exec_space, offsets) == 2 * num_edges);
 
-  auto permute = sortObjects(exec_space, directed_edges_clone);
-  auto const &sorted_directed_edges = directed_edges_clone;
+  Kokkos::View<unsigned *, MemorySpace> permute(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::euler_tour_list::permute"),
+      2 * num_edges);
 
-  auto rev_permute =
-      KokkosExt::cloneWithoutInitializingNorCopying(exec_space, permute);
+  auto offsets_clone = KokkosExt::clone(exec_space, offsets);
   Kokkos::parallel_for(
-      "ArborX::euler_tour_list::compute_rev_permute",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-      KOKKOS_LAMBDA(int const i) { rev_permute(permute(i)) = i; });
+      "ArborX::euler_tour_list::compute_intermediate_permutation",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const edge_index) {
+        auto const &edge = edges(edge_index);
+        permute(Kokkos::atomic_fetch_add(&offsets_clone(edge.source), 1)) =
+            2 * edge_index + 0;
+        permute(Kokkos::atomic_fetch_add(&offsets_clone(edge.target), 1)) =
+            2 * edge_index + 1;
+      });
+  Kokkos::resize(offsets_clone, 0); // deallocate memory
 
   Kokkos::View<int *, MemorySpace> successors(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::euler_tour_list::successors"),
-      n);
+      2 * num_edges);
   Kokkos::parallel_for(
       "ArborX::euler_tour_list::build_successors",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_vertices),
       KOKKOS_LAMBDA(int const i) {
-        int const twin = (i % 2 == 0 ? i + 1 : i - 1);
-        int next;
-        int j = rev_permute(twin);
-        if (j < n - 1 && (sorted_directed_edges(j + 1).first ==
-                          sorted_directed_edges(j).first))
+        int start = offsets(i);
+        int len = offsets(i + 1) - start;
+
+        auto value = [i, start, &edges, &permute](int k) {
+          auto const &edge = edges(permute(start + k) / 2);
+          return (i == edge.source ? edge.target : edge.source);
+        };
+
+        // Sort edges originating from each vertex and leading to a vertex with
+        // larger index
+        //
+        // Using insertion sort, assuming that the degree of each node is small.
+        // This works well for the trees coming from the Euclidean
+        // minimum-spanning tree calculations. Probably does not work well for
+        // power law kind of tree structures.
+        for (int k = 1, j; k < len; ++k)
         {
-          next = j + 1;
+          auto p = permute(start + k);
+          auto t = value(k);
+
+          for (j = k; j > 0 && value(j - 1) > t; --j)
+            permute(start + j) = permute(start + j - 1);
+          permute(start + j) = p;
         }
-        else
+
+        // Build successors following the formula
+        //      succ(twin(e)) = next(e)
+        for (int k = 0; k < len; ++k)
         {
-          while (j > 0 && (sorted_directed_edges(j - 1).first ==
-                           sorted_directed_edges(j).first))
-            --j;
-          next = j;
+          int e = permute(start + k);
+          int const twin = (e % 2 == 0 ? e + 1 : e - 1);
+          int const next = start + (k + 1) % len;
+          successors(twin) = permute(next);
         }
-        successors(i) = permute(next);
       });
 
   Kokkos::Profiling::popRegion();
@@ -148,7 +163,7 @@ rankList(ExecutionSpace const &exec_space, List &list, int head)
                          "ArborX::list_ranking::sublists_heads"),
       num_sublists);
   Kokkos::parallel_for(
-      "ArborX::HDBSCAN::init_sublists",
+      "ArborX::list_ranking::init_sublists",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_splitters),
       KOKKOS_LAMBDA(int const i) {
         using KokkosExt::min;
