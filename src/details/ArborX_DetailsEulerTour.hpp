@@ -18,8 +18,6 @@
 #include <ArborX_Exception.hpp>
 #include <ArborX_MinimumSpanningTree.hpp> // WeightedEdge
 
-#include <Kokkos_Random.hpp>
-
 namespace ArborX::Details
 {
 
@@ -157,7 +155,6 @@ rankList(ExecutionSpace const &exec_space, List &list, int head)
       });
 
   // Initialize splitters
-  Kokkos::Random_XorShift1024_Pool<MemorySpace> rand_pool(1984);
   Kokkos::View<int *, MemorySpace> sublists_heads(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::list_ranking::sublists_heads"),
@@ -171,15 +168,20 @@ rankList(ExecutionSpace const &exec_space, List &list, int head)
         int start = i * segment_size;
         int end = min(start + segment_size, n);
 
+        // Lehmer (or Park-Miller) RNG
+        unsigned int state = i + 1; // any positive number less than modulus
+        auto lehmer = [&state]() {
+          state = ((unsigned long long)state * 48271) % 0x7fffffff;
+          return state;
+        };
+
         // Choose the splitter randomly in the [start, end) interval as long as
         // it's not the last element in the list.
-        auto rand_gen = rand_pool.get_state();
         int splitter;
         do
         {
-          splitter = start + rand_gen.urand() % (end - start);
+          splitter = start + lehmer() % (end - start);
         } while (list(splitter) == end_of_list);
-        rand_pool.free_state(rand_gen);
 
         sublists_heads(i + 1) = list(splitter);
         if (i == 0)
