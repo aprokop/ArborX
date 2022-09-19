@@ -83,6 +83,11 @@ eulerTourList(ExecutionSpace const &exec_space, Edges const &edges)
           return (i == edge.source ? edge.target : edge.source);
         };
 
+        // FIXME This sorting is unnecessary. It will only affect the order of
+        // subtrees to traverse, but will still produce a correct Euler Tour.
+        // However, removing the sort will make the algorithm
+        // non-deterministic, so the testing would need to change.
+        //
         // Sort edges originating from each vertex and leading to a vertex with
         // larger index
         //
