@@ -49,6 +49,15 @@ auto rank_list(ExecutionSpace const &exec_space,
   auto ranks = ArborX::Details::rankList(exec_space, list, head);
   return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, ranks);
 }
+
+template <class ExecutionSpace>
+auto euler_tour(ExecutionSpace const &exec_space,
+                std::vector<WeightedEdge> const &edges_host, int head)
+{
+  auto edges = toView<ExecutionSpace>(edges_host, "Test::edges");
+  auto tour = ArborX::Details::eulerTour(exec_space, edges, head);
+  return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, tour);
+}
 } // namespace Test
 
 #define ARBORX_TEST_COMPUTE_SUCCESSORS(exec_space, edges, ref)                 \
@@ -57,6 +66,10 @@ auto rank_list(ExecutionSpace const &exec_space,
 
 #define ARBORX_TEST_RANK_LIST(exec_space, list, head, ref)                     \
   BOOST_TEST(Test::rank_list(exec_space, list, head) == ref,                   \
+             boost::test_tools::per_element())
+
+#define ARBORX_TEST_EULER_TOUR(exec_space, edges, head, ref)                   \
+  BOOST_TEST(Test::euler_tour(exec_space, edges, head) == ref,                 \
              boost::test_tools::per_element())
 
 BOOST_AUTO_TEST_SUITE(EulerTour)
@@ -108,6 +121,19 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(rank_list, DeviceType, ARBORX_DEVICE_TYPES)
     large_ref[i] = count;
   }
   ARBORX_TEST_RANK_LIST(exec_space, large_list, large_head, large_ref);
+}
+
+BOOST_AUTO_TEST_CASE_TEMPLATE(euler_tour, DeviceType, ARBORX_DEVICE_TYPES)
+{
+  using ExecutionSpace = typename DeviceType::execution_space;
+  ExecutionSpace exec_space;
+
+  // Example from the Polak's "Euler meets GPU" paper
+  ARBORX_TEST_EULER_TOUR(
+      exec_space,
+      (std::vector<WeightedEdge>{
+          {0, 2, 0.f}, {0, 3, 0.f}, {0, 4, 0.f}, {2, 1, 0.f}, {2, 5, 0.f}}),
+      0, (std::vector<int>{0, 5, 6, 7, 8, 9, 1, 2, 3, 4}));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
