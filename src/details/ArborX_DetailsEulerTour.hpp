@@ -260,13 +260,12 @@ rankList(ExecutionSpace const &exec_space, List &list, int head)
 // Assumption: edges are bidirectional and unique
 template <typename ExecutionSpace, typename... EdgesProperties>
 auto eulerTour(ExecutionSpace const &exec_space,
-               Kokkos::View<WeightedEdge *, EdgesProperties...> const &edges)
+               Kokkos::View<WeightedEdge *, EdgesProperties...> const &edges,
+               int head = 0)
 {
   Kokkos::Profiling::pushRegion("ArborX::euler_tour");
 
   auto successors = eulerTourList(exec_space, edges);
-
-  int const head = 0; // does not matter
   auto euler_tour = rankList(exec_space, successors, head);
 
   Kokkos::Profiling::popRegion();
