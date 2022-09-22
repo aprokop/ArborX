@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
       ( "print-dbscan-timers", bpo::bool_switch(&params.print_dbscan_timers)->default_value(false), "print dbscan timers")
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), R"(implementation ("fdbscan" or "fdbscan-densebox"))")
       ( "print-mst", bpo::bool_switch(&params.print_mst)->default_value(false), "print MST")
-      ( "dendrogram", bpo::value<std::string>(&params.dendrogram)->default_value("none"), R"(dendrogram (none | alpha | bfs | union-find | bottom-up))")
+      ( "dendrogram", bpo::value<std::string>(&params.dendrogram)->default_value("none"), R"(dendrogram (none | alpha | union-find))")
       ;
   // clang-format on
   bpo::variables_map vm;

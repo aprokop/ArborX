@@ -339,12 +339,8 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
     Dendrogram dendrogram = Dendrogram::NONE;
     if (params.dendrogram == "none")
       dendrogram = Dendrogram::NONE;
-    else if (params.dendrogram == "bfs")
-      dendrogram = Dendrogram::BFS;
     else if (params.dendrogram == "union-find")
       dendrogram = Dendrogram::UNION_FIND;
-    else if (params.dendrogram == "bottom-up")
-      dendrogram = Dendrogram::BOTTOM_UP;
     else if (params.dendrogram == "alpha")
       dendrogram = Dendrogram::ALPHA;
 

@@ -30,9 +30,7 @@ namespace HDBSCAN
 
 enum class Dendrogram
 {
-  BFS,
   UNION_FIND,
-  BOTTOM_UP,
   ALPHA,
   NONE
 };
@@ -124,14 +122,8 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::View<int *, MemorySpace> edge_parents;
   switch (parameters._dendrogram)
   {
-  case HDBSCAN::Dendrogram::BFS:
-    edge_parents = Details::dendrogramBFS(exec_space, sorted_mst_edges);
-    break;
   case HDBSCAN::Dendrogram::UNION_FIND:
     edge_parents = Details::dendrogramUnionFind(exec_space, sorted_mst_edges);
-    break;
-  case HDBSCAN::Dendrogram::BOTTOM_UP:
-    edge_parents = Details::dendrogramBottomUp(exec_space, sorted_mst_edges);
     break;
   case HDBSCAN::Dendrogram::ALPHA:
     Details::dendrogramAlphaTree(exec_space, sorted_mst_edges);
