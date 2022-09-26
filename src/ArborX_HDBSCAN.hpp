@@ -108,16 +108,16 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     }
   }
 
+  Kokkos::Profiling::ProfilingSection profile_dendrogram(
+      "ArborX::HDBSCAN::dendrogram");
+  profile_dendrogram.start();
+  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram");
+
   Kokkos::Profiling::ProfilingSection profile_edge_sort(
       "ArborX::HDBSCAN::edge_sort");
   profile_edge_sort.start();
   auto sorted_mst_edges = Details::sortEdges(exec_space, mst_edges);
   profile_edge_sort.stop();
-
-  Kokkos::Profiling::ProfilingSection profile_dendrogram(
-      "ArborX::HDBSCAN::dendrogram");
-  profile_dendrogram.start();
-  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram");
 
   Kokkos::View<int *, MemorySpace> edge_parents;
   switch (parameters._dendrogram)

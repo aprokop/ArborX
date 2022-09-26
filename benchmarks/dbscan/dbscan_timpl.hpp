@@ -370,10 +370,10 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
     {
       printf("-- mst              : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::mst"));
-      printf("-- edge sort        : %10.3f\n",
-             arborx_dbscan_example_get_time("ArborX::HDBSCAN::edge_sort"));
       printf("-- dendrogram       : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
+      printf("---- edge sort      : %10.3f\n",
+             arborx_dbscan_example_get_time("ArborX::HDBSCAN::edge_sort"));
       if (params.dendrogram == "alpha")
       {
         printf("---- euler tour     : %10.3f\n",
@@ -382,8 +382,6 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
                arborx_dbscan_example_get_time(
                    "ArborX::HDBSCAN::compute_alpha_edges"));
       }
-      printf("-- dendrogram       : %10.3f\n",
-             arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));
       printf("total time          : %10.3f\n",
