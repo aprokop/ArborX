@@ -77,7 +77,7 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   // requires introducing a self-loops at the MST level to compute cluster
   // stability. To simplify our life, we disallow this case, and require
   // minpts > 2.
-  ARBORX_ASSERT(core_min_size > 2);
+  // ARBORX_ASSERT(core_min_size > 2);
 
   int const n = primitives.extent_int(0);
 
