@@ -378,6 +378,9 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
       {
         printf("---- euler tour     : %10.3f\n",
                arborx_dbscan_example_get_time("ArborX::HDBSCAN::euler_tour"));
+        printf("---- incidence mat  : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::HDBSCAN::build_incidence_matrix"));
         printf("---- alpha edges    : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::HDBSCAN::compute_alpha_edges"));

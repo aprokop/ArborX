@@ -16,11 +16,112 @@
 #include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
+#include <ArborX_MinimumSpanningTree.hpp> // WeightedEdge
 
 #include <Kokkos_Core.hpp>
 
 namespace ArborX::Details
 {
+
+template <typename MemorySpace>
+struct IncidenceMatrix
+{
+  Kokkos::View<WeightedEdge *, MemorySpace> _edges;
+  Kokkos::View<int *, MemorySpace> _incident_offsets;
+  Kokkos::View<int *, MemorySpace>
+      _incident_edges; // edges incident to a specific vertex
+
+  template <typename ExecutionSpace, typename Edges>
+  IncidenceMatrix(ExecutionSpace const &exec_space, Edges const &edges)
+      : _edges(edges)
+  {
+    int const n = edges.extent(0) + 1;
+
+    Kokkos::realloc(_incident_offsets, n + 1);
+    Kokkos::parallel_for(
+        "ArborX::HDBSCAN::compute_incident_counts",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
+        KOKKOS_LAMBDA(int const edge_index) {
+          auto const &edge = edges(edge_index);
+          Kokkos::atomic_fetch_add(&_incident_offsets(edge.source), 1);
+          Kokkos::atomic_fetch_add(&_incident_offsets(edge.target), 1);
+        });
+    exclusivePrefixSum(exec_space, _incident_offsets);
+
+    ARBORX_ASSERT(KokkosExt::lastElement(exec_space, _incident_offsets) ==
+                  2 * (n - 1));
+
+    KokkosExt::reallocWithoutInitializing(
+        exec_space, _incident_edges,
+        KokkosExt::lastElement(exec_space, _incident_offsets));
+
+    auto offsets = KokkosExt::clone(exec_space, _incident_offsets);
+    Kokkos::parallel_for(
+        "ArborX::HDBSCAN::compute_incident_counts",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
+        KOKKOS_LAMBDA(int const edge_index) {
+          auto const &edge = edges(edge_index);
+          _incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.source), 1)) =
+              edge_index;
+          _incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.target), 1)) =
+              edge_index;
+        });
+  }
+
+  template <typename ExecutionSpace>
+  void degrees(ExecutionSpace const &exec_space)
+  {
+    int const n = _edges.extent(0) + 1;
+
+    int max_degree = 0;
+    Kokkos::parallel_reduce(
+        "ArborX::HDBSCA::max_offset",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i, int &update) {
+          int degree = _incident_offsets(i + 1) - _incident_offsets(i);
+          if (degree > update)
+            update = degree;
+        },
+        Kokkos::Max<int>(max_degree));
+
+    Kokkos::View<int *, MemorySpace> degrees_hist("ArborX::HDBSCAN::degrees",
+                                                  max_degree);
+    Kokkos::parallel_for(
+        "blah", Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i) {
+          int degree = _incident_offsets(i + 1) - _incident_offsets(i);
+          Kokkos::atomic_fetch_add(&degrees_hist(degree), 1);
+        });
+    auto degrees_hist_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, degrees_hist);
+    printf("Degrees distribution:\n");
+    for (int i = 1; i < max_degree; ++i)
+      printf("  %d: %8d [%.5f]\n", i, degrees_hist_host(i),
+             (100.f * degrees_hist_host(i)) / n);
+    return;
+  }
+
+  template <typename ExecutionSpace>
+  void print(std::ostream &os)
+  {
+    int const n = _edges.extent(0) + 1;
+
+    auto incident_offsets_host = Kokkos::create_mirror_view_and_copy(
+        Kokkos::HostSpace{}, _incident_offsets);
+    auto incident_edges_host = Kokkos::create_mirror_view_and_copy(
+        Kokkos::HostSpace{}, _incident_edges);
+
+    os << "Incidence matrix:" << std::endl;
+    for (int i = 0; i < n; ++i)
+    {
+      os << i << ":";
+      for (int j = incident_offsets_host(i); j < incident_offsets_host(i + 1);
+           ++j)
+        os << " " << incident_edges_host(j);
+      os << std::endl;
+    }
+  }
+};
 
 template <typename ExecutionSpace, typename Edges>
 Edges sortEdges(ExecutionSpace const &exec_space, Edges edges)
@@ -46,89 +147,6 @@ Edges sortEdges(ExecutionSpace const &exec_space, Edges edges)
   Kokkos::Profiling::popRegion();
 
   return edges;
-}
-
-template <typename ExecutionSpace, typename MST, typename IncidentOffsets,
-          typename IncidentEdges>
-void buildIncidenceMatrix(ExecutionSpace const &exec_space,
-                          MST const &sorted_mst_edges,
-                          IncidentOffsets &incident_offsets,
-                          IncidentEdges &incident_edges)
-{
-  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::build_incidence_matrix");
-
-  int const n = sorted_mst_edges.extent(0) + 1;
-
-  Kokkos::realloc(incident_offsets, n + 1);
-  Kokkos::parallel_for(
-      "ArborX::HDBSCAN::compute_incident_counts",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
-      KOKKOS_LAMBDA(int const edge_index) {
-        auto const &edge = sorted_mst_edges(edge_index);
-        Kokkos::atomic_fetch_add(&incident_offsets(edge.source), 1);
-        Kokkos::atomic_fetch_add(&incident_offsets(edge.target), 1);
-      });
-  exclusivePrefixSum(exec_space, incident_offsets);
-
-  ARBORX_ASSERT(KokkosExt::lastElement(exec_space, incident_offsets) ==
-                2 * (n - 1));
-
-  KokkosExt::reallocWithoutInitializing(
-      exec_space, incident_edges,
-      KokkosExt::lastElement(exec_space, incident_offsets));
-
-  auto offsets = KokkosExt::clone(exec_space, incident_offsets);
-  Kokkos::parallel_for(
-      "ArborX::HDBSCAN::compute_incident_counts",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
-      KOKKOS_LAMBDA(int const edge_index) {
-        auto const &edge = sorted_mst_edges(edge_index);
-        incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.source), 1)) =
-            edge_index;
-        incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.target), 1)) =
-            edge_index;
-      });
-
-#if 0
-  int max_degree = 0;
-  Kokkos::parallel_reduce(
-      "blah", Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-      KOKKOS_LAMBDA(int i, int &update) {
-        int degree = incident_offsets(i + 1) - incident_offsets(i);
-        if (degree > update)
-          update = degree;
-      },
-      Kokkos::Max<int>(max_degree));
-
-  Kokkos::View<int *, MemorySpace> degrees_hist("blah", max_degree);
-  Kokkos::parallel_for(
-      "blah", Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-      KOKKOS_LAMBDA(int i) {
-        int degree = incident_offsets(i + 1) - incident_offsets(i);
-        Kokkos::atomic_fetch_add(&degrees_hist(degree), 1);
-      });
-  auto degrees_hist_host =
-      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, degrees_hist);
-  printf("Degrees distribution:\n");
-  for (int i = 1; i < max_degree; ++i)
-    printf("  %d: %8d [%.5f]\n", i, degrees_hist_host(i),
-           (100.f * degrees_hist_host(i)) / n);
-  return;
-#endif
-
-#if 0
-  std::cout << "Incidence matrix:" << std::endl;
-  for (int i = 0; i < n; ++i)
-  {
-    std::cout << i << ":";
-    for (int j = incident_offsets_host(i); j < incident_offsets_host(i + 1);
-         ++j)
-      std::cout << " " << incident_edges_host(j);
-    std::cout << std::endl;
-  }
-#endif
-
-  Kokkos::Profiling::popRegion();
 }
 
 struct WangUnionFind
@@ -259,12 +277,9 @@ void computeFlatClustering(ExecutionSpace const &exec_space, int core_min_size,
 
   int const n = sorted_mst_edges.extent_int(0) + 1;
 
-  Kokkos::View<int *, MemorySpace> incident_offsets(
-      "ArborX::HDBSCAN::incident_offsets", 0);
-  Kokkos::View<int *, MemorySpace> incident_edges(
-      "ArborX::HDBSCAN::incident_edges", 0);
-  buildIncidenceMatrix(exec_space, sorted_mst_edges, incident_offsets,
-                       incident_edges);
+  IncidenceMatrix<MemorySpace> incidence_matrix(exec_space, sorted_mst_edges);
+  auto &incident_offsets = incidence_matrix._incident_offsets;
+  auto &incident_edges = incidence_matrix._incident_edges;
 
   Kokkos::View<int *, MemorySpace> num_descendants(
       "ArborX::HDBSCAN::num_descendants", n - 1);
@@ -369,25 +384,18 @@ void printSortedEuler(Permute permute, InvPermute inv_permute,
 // the first edge has the largest weight), an edge e is an alpha-edge if both
 // vertices have an incident edge (different from e) that is larger (in
 // index) than e.
-template <typename ExecutionSpace, typename MST>
-Kokkos::View<int *, typename MST::memory_space>
-findAlphaEdges(ExecutionSpace const &exec_space, MST const &sorted_mst_edges)
+template <typename ExecutionSpace, typename MemorySpace>
+Kokkos::View<int *, MemorySpace>
+findAlphaEdges(ExecutionSpace const &exec_space,
+               IncidenceMatrix<MemorySpace> incidence_matrix)
 {
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::find_alpha_edges");
 
-  using MemorySpace = typename MST::memory_space;
+  auto const &incident_offsets = incidence_matrix._incident_offsets;
+  auto const &incident_edges = incidence_matrix._incident_edges;
+  auto const &sorted_edges = incidence_matrix._edges;
 
-  auto const num_edges = sorted_mst_edges.extent_int(0);
-
-  // Construct incidence matrix (vertex -> incident edges)
-  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::incidence_matrix");
-  Kokkos::View<int *, MemorySpace> incident_offsets(
-      "ArborX::HDBSCAN::incident_offsets", 0);
-  Kokkos::View<int *, MemorySpace> incident_edges(
-      "ArborX::HDBSCAN::incident_edges", 0);
-  buildIncidenceMatrix(exec_space, sorted_mst_edges, incident_offsets,
-                       incident_edges);
-  Kokkos::Profiling::popRegion();
+  auto const num_edges = sorted_edges.extent_int(0);
 
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::alpha_edges");
   Kokkos::View<int *, MemorySpace> alpha_edge_indices(
@@ -399,8 +407,8 @@ findAlphaEdges(ExecutionSpace const &exec_space, MST const &sorted_mst_edges)
       "ArborX::HDBSCAN::determine_alpha_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const edge, int &update, bool final_pass) {
-        int vertices[2] = {sorted_mst_edges(edge).source,
-                           sorted_mst_edges(edge).target};
+        int vertices[2] = {sorted_edges(edge).source,
+                           sorted_edges(edge).target};
         for (int k = 0; k < 2; ++k)
         {
           int v = vertices[k];
@@ -510,23 +518,23 @@ void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
 {
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram_alpha");
 
+  using MemorySpace = typename MST::memory_space;
+
   auto const num_edges = sorted_mst_edges.extent_int(0);
 
-  // Compute Euler tour for the original MST
-  //
-  // The returned Euler tour is of size twice the number of edges. Each pair of
-  // entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
-  // going down, one up). The entries are sorted so that the first of the two
-  // corresponds to the first time the edge is encountered going away from the
-  // head of the tree, and the second going towards it.
+  // Step 1: compute Euler tour for the original MST
   Kokkos::Profiling::ProfilingSection profile_euler_tour(
       "ArborX::HDBSCAN::euler_tour");
   profile_euler_tour.start();
+  // The returned Euler tour is of size twice the number of edges. Each pair of
+  // entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
+  // going down, one up).
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::euler_tour");
   auto euler_tour = eulerTour(exec_space, sorted_mst_edges);
   Kokkos::Profiling::popRegion();
 
-  // Make sure the first entry for every edge is the start entry
+  // Steps 1.5: make sure the first entry for every edge is the start entry
+  // (i.e., the smaller one)
   Kokkos::parallel_for(
       "ArborX::euler_tour::order_start_end",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0,
@@ -539,11 +547,20 @@ void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
       });
   profile_euler_tour.stop();
 
-  // Find alpha edges for the original MST
+  // Step 2: construct edge incident matrix (vertex -> incident edges)
+  Kokkos::Profiling::ProfilingSection profile_build_incidence_matrix(
+      "ArborX::HDBSCAN::build_incidence_matrix");
+  profile_build_incidence_matrix.start();
+  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::build_incidence_matrix");
+  IncidenceMatrix<MemorySpace> incidence_matrix(exec_space, sorted_mst_edges);
+  Kokkos::Profiling::popRegion();
+  profile_build_incidence_matrix.stop();
+
+  // Step 3: find alpha edges of the original MST
   Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
       "ArborX::HDBSCAN::compute_alpha_edges");
   profile_compute_alpha_edges.start();
-  auto alpha_edge_indices = findAlphaEdges(exec_space, sorted_mst_edges);
+  auto alpha_edge_indices = findAlphaEdges(exec_space, incidence_matrix);
   profile_compute_alpha_edges.start();
 
   auto num_alpha_edges = alpha_edge_indices.extent_int(0);
@@ -560,7 +577,7 @@ void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
   printf("\n");
 #endif
 
-  // Construct alpha-MST
+  // Step 3: Construct alpha-MST
   auto alpha_mst_edges =
       buildAlphaMST<ExecutionSpace, decltype(euler_tour), MST>(
           exec_space, euler_tour, alpha_edge_indices);
@@ -577,7 +594,7 @@ void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
   }
   else
   {
-    // Step 5: construct alpha incidence matrix (incidence matrix for alpha-MST)
+    // Step 5: construct alpha incident matrix (incident matrix for alpha-MST)
 
     // Step 6: determine beta-edges
 
