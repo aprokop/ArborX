@@ -384,6 +384,11 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- alpha edges    : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::HDBSCAN::compute_alpha_edges"));
+        printf("---- alpha mst      : %10.3f\n",
+               arborx_dbscan_example_get_time("ArborX::HDBSCAN::alpha_mst"));
+        printf("---- dendrogram (a) : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::HDBSCAN::dendrogram_alpha"));
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));

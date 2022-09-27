@@ -513,8 +513,7 @@ MST buildAlphaMST(
 }
 
 template <typename ExecutionSpace, typename MST>
-void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
-                         bool use_beta = false)
+void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges)
 {
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram_alpha");
 
@@ -577,37 +576,27 @@ void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges,
   printf("\n");
 #endif
 
-  // Step 3: Construct alpha-MST
+  // Step 4: construct alpha-MST
+  Kokkos::Profiling::ProfilingSection profile_alpha_mst(
+      "ArborX::HDBSCAN::alpha_mst");
+  profile_alpha_mst.start();
   auto alpha_mst_edges =
       buildAlphaMST<ExecutionSpace, decltype(euler_tour), MST>(
           exec_space, euler_tour, alpha_edge_indices);
+  profile_alpha_mst.stop();
 
-  if (!use_beta)
-  {
-    // auto alpha_parents_of_alpha =
-    // dendrogramUnionFind(exec_space, alpha_mst_edges);
+  // Step 5: build dendrogram of the alpha-tree
+  Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
+      "ArborX::HDBSCAN::dendrogram_alpha");
+  profile_dendrogram_alpha.start();
+  auto alpha_parents_of_alpha =
+      dendrogramUnionFind(exec_space, alpha_mst_edges);
+  profile_dendrogram_alpha.stop();
 
-    // auto alpha_sided_parents =
-    // findAlphaParents(exec_space, sorted_mst_edges, alpha_parents_of_alpha);
+  // auto alpha_sided_parents =
+  // findAlphaParents(exec_space, sorted_mst_edges, alpha_parents_of_alpha);
 
-    // auto permute = sortObjects(alpha_sided_parents);
-  }
-  else
-  {
-    // Step 5: construct alpha incident matrix (incident matrix for alpha-MST)
-
-    // Step 6: determine beta-edges
-
-    // Step 7: construct beta-MST
-
-    // Step 8: compute beta-dendrogram
-
-    // Step 9: determine beta-parents for alpha edges
-
-    // Step 10: sort alpha edges by their beta-parent
-
-    // Step 11: determine alpha-parents for all edges
-  }
+  // auto permute = sortObjects(alpha_sided_parents);
 
   Kokkos::Profiling::popRegion();
 }
