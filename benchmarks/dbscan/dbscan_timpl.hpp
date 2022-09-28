@@ -335,14 +335,14 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
   }
   else if (params.algorithm == "hdbscan")
   {
-    using ArborX::HDBSCAN::Dendrogram;
-    Dendrogram dendrogram = Dendrogram::NONE;
+    using ArborX::DendrogramImplementation;
+    DendrogramImplementation dendrogram = DendrogramImplementation::NONE;
     if (params.dendrogram == "none")
-      dendrogram = Dendrogram::NONE;
+      dendrogram = DendrogramImplementation::NONE;
     else if (params.dendrogram == "union-find")
-      dendrogram = Dendrogram::UNION_FIND;
+      dendrogram = DendrogramImplementation::UNION_FIND;
     else if (params.dendrogram == "alpha")
-      dendrogram = Dendrogram::ALPHA;
+      dendrogram = DendrogramImplementation::ALPHA;
 
     ArborX::HDBSCAN::Parameters hdbscan_params;
     hdbscan_params.setPrintTimers(params.print_dbscan_timers)
@@ -373,22 +373,26 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
       printf("-- dendrogram       : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
       printf("---- edge sort      : %10.3f\n",
-             arborx_dbscan_example_get_time("ArborX::HDBSCAN::edge_sort"));
+             arborx_dbscan_example_get_time("ArborX::Dendrogram::edge_sort"));
       if (params.dendrogram == "alpha")
       {
-        printf("---- euler tour     : %10.3f\n",
-               arborx_dbscan_example_get_time("ArborX::HDBSCAN::euler_tour"));
+        printf(
+            "---- euler tour     : %10.3f\n",
+            arborx_dbscan_example_get_time("ArborX::Dendrogram::euler_tour"));
         printf("---- incidence mat  : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::HDBSCAN::build_incidence_matrix"));
+                   "ArborX::Dendrogram::build_incidence_matrix"));
         printf("---- alpha edges    : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::HDBSCAN::compute_alpha_edges"));
-        printf("---- alpha mst      : %10.3f\n",
-               arborx_dbscan_example_get_time("ArborX::HDBSCAN::alpha_mst"));
-        printf("---- dendrogram (a) : %10.3f\n",
+                   "ArborX::Dendrogram::compute_alpha_edges"));
+        printf("---- alpha vertcies : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::HDBSCAN::dendrogram_alpha"));
+                   "ArborX::Dendrogram::alpha_vertices"));
+        // printf("---- alpha mst      : %10.3f\n",
+        // arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
+        // printf("---- dendrogram (a) : %10.3f\n",
+        // arborx_dbscan_example_get_time(
+        // "ArborX::Dendrogram::dendrogram_alpha"));
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));

@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2017-2021 by the ArborX authors                            *
+ * Copyright (c) 2017-2022 by the ArborX authors                            *
  * All rights reserved.                                                     *
  *                                                                          *
  * This file is part of the ArborX library. ArborX is                       *
@@ -12,8 +12,6 @@
 #ifndef ARBORX_DETAILS_DENDROGRAM_HPP
 #define ARBORX_DETAILS_DENDROGRAM_HPP
 
-#include <ArborX_DetailsEulerTour.hpp>
-#include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_MinimumSpanningTree.hpp> // WeightedEdge
@@ -124,7 +122,8 @@ struct IncidenceMatrix
 };
 
 template <typename ExecutionSpace, typename Edges>
-Edges sortEdges(ExecutionSpace const &exec_space, Edges edges)
+Kokkos::View<unsigned int *, typename Edges::memory_space>
+sortEdges(ExecutionSpace const &exec_space, Edges &edges)
 {
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram::sort_edges");
   using MemorySpace = typename Edges::memory_space;
@@ -146,7 +145,7 @@ Edges sortEdges(ExecutionSpace const &exec_space, Edges edges)
 
   Kokkos::Profiling::popRegion();
 
-  return edges;
+  return permute;
 }
 
 struct WangUnionFind
@@ -266,68 +265,6 @@ dendrogramUnionFind(ExecutionSpace const &exec_space, MST sorted_mst_edges)
   Kokkos::Profiling::popRegion();
 
   return edge_parents;
-}
-
-template <typename ExecutionSpace, typename MST, typename EdgeParents>
-void computeFlatClustering(ExecutionSpace const &exec_space, int core_min_size,
-                           MST sorted_mst_edges, EdgeParents edge_parents)
-{
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_flat_clustering");
-
-  using MemorySpace = typename MST::memory_space;
-
-  int const n = sorted_mst_edges.extent_int(0) + 1;
-
-  IncidenceMatrix<MemorySpace> incidence_matrix(exec_space, sorted_mst_edges);
-  auto &incident_offsets = incidence_matrix._incident_offsets;
-  auto &incident_edges = incidence_matrix._incident_edges;
-
-  Kokkos::View<int *, MemorySpace> num_descendants(
-      "ArborX::Dendrogram::num_descendants", n - 1);
-  Kokkos::parallel_for(
-      "ArborX::Dendrogram::compute_num_descendants",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-      KOKKOS_LAMBDA(int i) {
-        int parent = -1;
-
-        // Parent of a vertex is the largest incident edge
-        for (int j = incident_offsets(i); j < incident_offsets(i + 1); ++j)
-          if (incident_edges(j) > parent)
-            parent = incident_edges(j);
-
-        int count = 1;
-
-        do
-        {
-          // First thread up would encounter 0 at the parent,
-          // while the second would see stored nonzero count
-          // from the first thread
-          int count_other_child = Kokkos::atomic_compare_exchange(
-              &num_descendants(parent), 0, count);
-          if (count_other_child == 0)
-          {
-            // First thread up
-            break;
-          }
-
-          num_descendants(parent) += count;
-
-          bool const is_valid_cluster =
-              (num_descendants(parent) >= core_min_size);
-          bool const is_true_cluster =
-              is_valid_cluster &&
-              (count >= core_min_size && count_other_child >= core_min_size);
-          (void)is_valid_cluster;
-          (void)is_true_cluster;
-
-          count = num_descendants(parent);
-          i = parent;
-          parent = edge_parents(i);
-
-        } while (i != 0);
-      });
-
-  Kokkos::Profiling::popRegion();
 }
 
 template <typename Permute, typename InvPermute>
@@ -513,7 +450,7 @@ MST buildAlphaMST(
   return alpha_mst_edges;
 }
 
-enum class Bracket
+enum Bracket
 {
   NO_BRACKET = 0,
   OPENING_BRACKET = 1,
@@ -534,147 +471,139 @@ auto assignAlphaVertices(ExecutionSpace const &exec_space,
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::brackets"),
       euler_tour.size());
-  Kokkos::deep_copy(exec_space, brackets, Bracket::NO_BRACKET);
+  Kokkos::deep_copy(exec_space, brackets, NO_BRACKET);
   Kokkos::parallel_for(
       "ArborX::Dendrogram::build_bracket_array",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
       KOKKOS_LAMBDA(int k) {
         int alpha_edge = alpha_edge_indices(k);
-        euler_flat(euler_tour(2 * alpha_edge + 0)) = Bracket::OPENING_BRACKET;
-        euler_flat(euler_tour(2 * alpha_edge + 1)) = Bracket::CLOSING_BRACKET;
+        brackets(euler_tour(2 * alpha_edge + 0)) = OPENING_BRACKET;
+        brackets(euler_tour(2 * alpha_edge + 1)) = CLOSING_BRACKET;
       });
 
-  Kokkos::View<Kokkos::pair<int, int> *, MemorySpace> bracket_counts(
+  Kokkos::View<int *, MemorySpace> opening_bracket_counts(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::bracket_counts"),
+                         "ArborX::Dendrogram::opening_bracket_counts"),
       euler_tour.size());
   Kokkos::parallel_scan(
-      "ArborX::Dendrogram::count_alpha_[]",
+      "ArborX::Dendrogram::count_opening_brackets",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, 2 * num_edges),
-      KOKKOS_LAMBDA(int i, Kokkos::pair<int, int> &partial_sum, bool is_final) {
-        if (brackets(i) == Bracket::OPENING_BRACKET)
-          ++partial_sum.first;
-        else if (brackets(i) == Bracket::CLOSING_BRACKET)
-          ++partial_sum.second;
-
+      KOKKOS_LAMBDA(int i, int &partial_sum, bool is_final) {
+        if (brackets(i) == OPENING_BRACKET)
+          ++partial_sum;
         if (is_final)
-          bracket_counts[i] = partial_sum;
+          opening_bracket_counts(i) = partial_sum;
+      });
+
+  Kokkos::View<int *, MemorySpace> closing_bracket_counts(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::closing_bracket_counts"),
+      euler_tour.size());
+  Kokkos::parallel_scan(
+      "ArborX::Dendrogram::count_closing_brackets",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, 2 * num_edges),
+      KOKKOS_LAMBDA(int i, int &partial_sum, bool is_final) {
+        if (brackets(i) == CLOSING_BRACKET)
+          ++partial_sum;
+        if (is_final)
+          closing_bracket_counts(i) = partial_sum;
       });
 
   Kokkos::View<int *, MemorySpace> alpha_vertices(
-      "ArborX::Dendrogram::alpha_vertices", euler_tour.size());
-  Kokkos::parallel_for(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_vertices"),
+      euler_tour.size());
+  Kokkos::parallel_scan(
       "ArborX::Dendrogram::assign_alpha_vertices",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, 2 * num_edges),
       KOKKOS_LAMBDA(int i, int &partial_sum, bool is_final) {
-        if (brackets(i) == Bracket::OPENING_BRACKET)
-          partial_sum = bracket_counts[i].first;
+        if (brackets(i) == OPENING_BRACKET)
+          partial_sum = opening_bracket_counts(i);
 
         if (is_final)
           alpha_vertices(i) = partial_sum;
 
-        if (brackets(i) == Bracket::CLOSING_BRACKET)
-          partial_sum -= (bracket_counts[i].first - bracket_counts[i].second);
+        if (brackets(i) == CLOSING_BRACKET)
+          partial_sum -=
+              (opening_bracket_counts(i) - closing_bracket_counts(i));
       });
+
+  return alpha_vertices;
 }
 
-template <typename ExecutionSpace, typename MST>
-void dendrogramAlphaTree(ExecutionSpace const &exec_space, MST sorted_mst_edges)
+#if 0
+template <typename ExecutionSpace, typename EulerTour,
+
+          auto buildAlphaEdges(ExecutionSpace const &exec_space, euler_tour,
+                               alpha_edge_indices, alpha_vertices)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
+
+}
+#endif
+
+#if 0
+template <typename ExecutionSpace, typename MST, typename EdgeParents>
+void computeFlatClustering(ExecutionSpace const &exec_space, int core_min_size,
+                           MST sorted_mst_edges, EdgeParents edge_parents)
+{
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_flat_clustering");
 
   using MemorySpace = typename MST::memory_space;
 
-  auto const num_edges = sorted_mst_edges.extent_int(0);
+  int const n = sorted_mst_edges.extent_int(0) + 1;
 
-  // Step 1: compute Euler tour for the original MST
-  Kokkos::Profiling::ProfilingSection profile_euler_tour(
-      "ArborX::Dendrogram::euler_tour");
-  profile_euler_tour.start();
-  // The returned Euler tour is of size twice the number of edges. Each pair
-  // of entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
-  // going down, one up).
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::euler_tour");
-  auto euler_tour = eulerTour(exec_space, sorted_mst_edges);
-  Kokkos::Profiling::popRegion();
-
-  // Steps 1.5: make sure the first entry for every edge is the start entry
-  // (i.e., the smaller one)
-  Kokkos::parallel_for(
-      "ArborX::euler_tour::order_start_end",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0,
-                                          euler_tour.extent(0) / 2),
-      KOKKOS_LAMBDA(int k) {
-        using KokkosExt::swap;
-        int i = 2 * k;
-        if (euler_tour(i) > euler_tour(i + 1))
-          swap(euler_tour(i), euler_tour(i + 1));
-      });
-  profile_euler_tour.stop();
-
-  // Step 2: construct edge incident matrix (vertex -> incident edges)
-  Kokkos::Profiling::ProfilingSection profile_build_incidence_matrix(
-      "ArborX::Dendrogram::build_incidence_matrix");
-  profile_build_incidence_matrix.start();
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::build_incidence_matrix");
   IncidenceMatrix<MemorySpace> incidence_matrix(exec_space, sorted_mst_edges);
-  Kokkos::Profiling::popRegion();
-  profile_build_incidence_matrix.stop();
+  auto &incident_offsets = incidence_matrix._incident_offsets;
+  auto &incident_edges = incidence_matrix._incident_edges;
 
-  // Step 3: find alpha edges of the original MST
-  Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
-      "ArborX::Dendrogram::compute_alpha_edges");
-  profile_compute_alpha_edges.start();
-  auto alpha_edge_indices = findAlphaEdges(exec_space, incidence_matrix);
-  profile_compute_alpha_edges.start();
+  Kokkos::View<int *, MemorySpace> num_descendants(
+      "ArborX::Dendrogram::num_descendants", n - 1);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compute_num_descendants",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+      KOKKOS_LAMBDA(int i) {
+        int parent = -1;
 
-  auto num_alpha_edges = alpha_edge_indices.extent_int(0);
-  printf("#alpha edges: %d [%.2f%%]\n", num_alpha_edges,
-         (100.f * num_alpha_edges) / num_edges);
-#ifdef VERBOSE
-  printf("alpha edges:\n");
-  for (int i = 0; i < num_alpha_edges; ++i)
-  {
-    int e = alpha_edge_indices(i);
-    printf("[%i] : %d (%d, %d)\n", i, e, sorted_mst_edges(e).source,
-           sorted_mst_edges(e).target);
-  }
-  printf("\n");
-#endif
+        // Parent of a vertex is the largest incident edge
+        for (int j = incident_offsets(i); j < incident_offsets(i + 1); ++j)
+          if (incident_edges(j) > parent)
+            parent = incident_edges(j);
 
-  // Step 4: assign alpha-vertices
-  Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
-      "ArborX::Dendrogram::alpha_vertices");
-  profile_alpha_vertices.start();
-  auto alpha_vertices =
-      assignAlphaVertices(exec_space, euler_tour, alpha_edge_indices);
-  profile_alpha_vertices.stop();
+        int count = 1;
 
-#if 0
-  // Step 5: construct alpha-MST
-  Kokkos::Profiling::ProfilingSection profile_alpha_mst(
-      "ArborX::Dendrogram::alpha_mst");
-  profile_alpha_mst.start();
-  auto alpha_mst_edges =
-      buildAlphaMST(exec_space, alpha_edge_indices, alpha_vertices);
-  profile_alpha_mst.stop();
+        do
+        {
+          // First thread up would encounter 0 at the parent,
+          // while the second would see stored nonzero count
+          // from the first thread
+          int count_other_child = Kokkos::atomic_compare_exchange(
+              &num_descendants(parent), 0, count);
+          if (count_other_child == 0)
+          {
+            // First thread up
+            break;
+          }
 
-  // Step 6: build dendrogram of the alpha-tree
-  Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
-      "ArborX::Dendrogram::dendrogram_alpha");
-  profile_dendrogram_alpha.start();
-  auto alpha_parents_of_alpha =
-      dendrogramUnionFind(exec_space, alpha_mst_edges);
-  profile_dendrogram_alpha.stop();
-#endif
+          num_descendants(parent) += count;
 
-  // auto alpha_sided_parents =
-  // findAlphaParents(exec_space, sorted_mst_edges, alpha_parents_of_alpha);
+          bool const is_valid_cluster =
+              (num_descendants(parent) >= core_min_size);
+          bool const is_true_cluster =
+              is_valid_cluster &&
+              (count >= core_min_size && count_other_child >= core_min_size);
+          (void)is_valid_cluster;
+          (void)is_true_cluster;
 
-  // auto permute = sortObjects(alpha_sided_parents);
+          count = num_descendants(parent);
+          i = parent;
+          parent = edge_parents(i);
+
+        } while (i != 0);
+      });
 
   Kokkos::Profiling::popRegion();
 }
+#endif
 
 } // namespace ArborX::Details
 

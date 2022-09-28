@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2017-2021 by the ArborX authors                            *
+ * Copyright (c) 2017-2022 by the ArborX authors                            *
  * All rights reserved.                                                     *
  *                                                                          *
  * This file is part of the ArborX library. ArborX is                       *
@@ -8,10 +8,10 @@
  *                                                                          *
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
-
 #ifndef ARBORX_HDBSCAN_HPP
 #define ARBORX_HDBSCAN_HPP
 
+#include <ArborX_Dendrogram.hpp>
 #include <ArborX_DetailsDendrogram.hpp>
 #include <ArborX_DetailsUnionFind.hpp>
 #include <ArborX_LinearBVH.hpp>
@@ -28,13 +28,6 @@ namespace ArborX
 namespace HDBSCAN
 {
 
-enum class Dendrogram
-{
-  UNION_FIND,
-  ALPHA,
-  NONE
-};
-
 struct Parameters
 {
   // Print timers to the standard output
@@ -42,7 +35,7 @@ struct Parameters
   // Print MST to the standard output
   bool _print_mst = false;
   // Dendrogram implementation
-  Dendrogram _dendrogram = Dendrogram::UNION_FIND;
+  DendrogramImplementation _dendrogram = DendrogramImplementation::UNION_FIND;
 
   Parameters &setPrintTimers(bool print_timers)
   {
@@ -54,7 +47,7 @@ struct Parameters
     _print_mst = print_mst;
     return *this;
   }
-  Parameters &setDendrogram(Dendrogram dendrogram)
+  Parameters &setDendrogram(DendrogramImplementation dendrogram)
   {
     _dendrogram = dendrogram;
     return *this;
@@ -87,7 +80,6 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
   Details::MinimumSpanningTree<MemorySpace> mst(exec_space, primitives,
                                                 core_min_size);
-  auto mst_edges = mst.edges;
 
   Kokkos::Profiling::popRegion();
   profile_mst.stop();
@@ -96,7 +88,7 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   if (parameters._print_mst)
   {
     auto mst_edges_host =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, mst_edges);
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, mst.edges);
     std::cout << "=== MST ===" << std::endl;
     std::cout << std::setprecision(std::numeric_limits<float>::max_digits10);
     for (int k = 0; k < n - 1; ++k)
@@ -113,32 +105,14 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   profile_dendrogram.start();
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram");
 
-  Kokkos::Profiling::ProfilingSection profile_edge_sort(
-      "ArborX::HDBSCAN::edge_sort");
-  profile_edge_sort.start();
-  auto sorted_mst_edges = Details::sortEdges(exec_space, mst_edges);
-  profile_edge_sort.stop();
-
-  Kokkos::View<int *, MemorySpace> edge_parents;
-  switch (parameters._dendrogram)
+  if (parameters._dendrogram != DendrogramImplementation::NONE)
   {
-  case HDBSCAN::Dendrogram::UNION_FIND:
-    edge_parents = Details::dendrogramUnionFind(exec_space, sorted_mst_edges);
-    break;
-  case HDBSCAN::Dendrogram::ALPHA:
-    Details::dendrogramAlphaTree(exec_space, sorted_mst_edges);
-    break;
-  case HDBSCAN::Dendrogram::NONE:
-    break;
+    std::cout << "HERE!!!" << std::endl;
+    Dendrogram<MemorySpace> dendrogram(exec_space, mst.edges,
+                                       parameters._dendrogram);
   }
-  profile_dendrogram.stop();
   Kokkos::Profiling::popRegion();
-
-#if 0
-  printf("Dendrogram:\n");
-  for (int i = 0; i < n - 1; ++i)
-    printf("[%d] %d\n", i, edge_parents[i]);
-#endif
+  profile_dendrogram.stop();
 
   Kokkos::Profiling::popRegion();
 
