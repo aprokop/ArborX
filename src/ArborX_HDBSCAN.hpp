@@ -107,7 +107,6 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
   if (parameters._dendrogram != DendrogramImplementation::NONE)
   {
-    std::cout << "HERE!!!" << std::endl;
     Dendrogram<MemorySpace> dendrogram(exec_space, mst.edges,
                                        parameters._dendrogram);
   }

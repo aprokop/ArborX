@@ -52,7 +52,7 @@ struct Dendrogram
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram");
 
     bool const are_edges_sorted = checkEdgesSorted(exec_space, edges);
-    printf("Edges are sorted: %s", (are_edges_sorted ? "yes" : "no"));
+    printf("Edges are sorted: %s\n", (are_edges_sorted ? "yes" : "no"));
 
     Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges;
     Kokkos::View<unsigned int *, MemorySpace> permute;
@@ -207,23 +207,34 @@ struct Dendrogram
                                                        alpha_edge_indices);
     profile_alpha_vertices.stop();
 
-#if 0
     // Step 5: construct alpha-MST
     Kokkos::Profiling::ProfilingSection profile_alpha_mst(
         "ArborX::Dendrogram::alpha_mst");
     profile_alpha_mst.start();
     auto alpha_mst_edges =
-        Details::buildAlphaMST(exec_space, alpha_edge_indices, alpha_vertices);
+        Details::buildAlphaEdges(exec_space, sorted_edges, euler_tour,
+                                 alpha_edge_indices, alpha_vertices);
     profile_alpha_mst.stop();
 
-  // Step 6: build dendrogram of the alpha-tree
-  Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
-      "ArborX::Dendrogram::dendrogram_alpha");
-  profile_dendrogram_alpha.start();
-  auto alpha_parents_of_alpha =
-      dendrogramUnionFind(exec_space, alpha_mst_edges);
-  profile_dendrogram_alpha.stop();
+#define VERBOSE
+#ifdef VERBOSE
+    printf("alpha mst:\n");
+    for (int i = 0; i < num_alpha_edges; ++i)
+    {
+      printf("[%i] : (%d, %d)\n", i, alpha_mst_edges(i).source,
+             alpha_mst_edges(i).target);
+    }
+    printf("\n");
 #endif
+
+    // Step 6: build dendrogram of the alpha-tree
+    Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
+        "ArborX::Dendrogram::dendrogram_alpha");
+    profile_dendrogram_alpha.start();
+    Dendrogram<MemorySpace> dendrogram_alpha(
+        exec_space, alpha_mst_edges, DendrogramImplementation::UNION_FIND);
+    auto alpha_parents_of_alpha = dendrogram_alpha._edge_parents;
+    profile_dendrogram_alpha.stop();
 
     // auto alpha_sided_parents =
     // findAlphaParents(exec_space, sorted_edges, alpha_parents_of_alpha);
@@ -232,7 +243,10 @@ struct Dendrogram
 
     Kokkos::Profiling::popRegion();
 
-    Kokkos::View<int *, MemorySpace> edge_parents;
+    Kokkos::View<int *, MemorySpace> edge_parents(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::edge_parents"),
+        num_edges);
 
     return edge_parents;
   }

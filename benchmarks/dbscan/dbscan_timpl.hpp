@@ -385,14 +385,14 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- alpha edges    : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::compute_alpha_edges"));
-        printf("---- alpha vertcies : %10.3f\n",
+        printf("---- alpha vertices : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::alpha_vertices"));
-        // printf("---- alpha mst      : %10.3f\n",
-        // arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
-        // printf("---- dendrogram (a) : %10.3f\n",
-        // arborx_dbscan_example_get_time(
-        // "ArborX::Dendrogram::dendrogram_alpha"));
+        printf("---- alpha mst      : %10.3f\n",
+               arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
+        printf("---- dendrogram (a) : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::dendrogram_alpha"));
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));
