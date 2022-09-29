@@ -353,6 +353,23 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
       printf("total time          : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::MST::total"));
     }
+
+    if (params.print_mst)
+    {
+      // Kokkos::fence();
+      auto mst_edges_host =
+          Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, mst.edges);
+      // Kokkos::fence();
+      std::cout << "=== MST ===" << std::endl;
+      std::cout << std::setprecision(std::numeric_limits<float>::max_digits10);
+      for (int k = 0; k < (int)mst_edges_host.size(); ++k)
+      {
+        int i = std::min(mst_edges_host(k).source, mst_edges_host(k).target);
+        int j = std::max(mst_edges_host(k).source, mst_edges_host(k).target);
+        float d = mst_edges_host(k).weight;
+        std::cout << i << " " << j << " " << d << std::endl;
+      }
+    }
   }
 
   if (success && !params.filename_labels.empty())

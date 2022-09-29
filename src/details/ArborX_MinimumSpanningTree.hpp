@@ -25,6 +25,8 @@
 #include <Kokkos_Core.hpp>
 #include <Kokkos_Profiling_ProfileSection.hpp>
 
+#include <iomanip>
+
 namespace ArborX
 {
 namespace Details

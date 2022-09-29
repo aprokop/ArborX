@@ -21,6 +21,7 @@ struct Parameters
   bool binary;
   bool verify;
   bool print_dbscan_timers;
+  bool print_mst;
   float eps;
   int cluster_min_size;
   int core_min_size;

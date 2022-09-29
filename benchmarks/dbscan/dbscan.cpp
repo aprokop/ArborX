@@ -78,6 +78,7 @@ int main(int argc, char *argv[])
       ( "labels", bpo::value<std::string>(&params.filename_labels)->default_value(""), "clutering results output" )
       ( "print-dbscan-timers", bpo::bool_switch(&params.print_dbscan_timers)->default_value(false), "print dbscan timers")
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), R"(implementation ("fdbscan" or "fdbscan-densebox"))")
+      ( "print-mst", bpo::bool_switch(&params.print_mst)->default_value(false), "print MST")
       ;
   // clang-format on
   bpo::variables_map vm;
