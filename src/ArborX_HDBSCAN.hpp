@@ -121,6 +121,8 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       n);
   Kokkos::deep_copy(exec_space, labels, 0);
 
+  Kokkos::Profiling::popRegion();
+
   return labels;
 }
 

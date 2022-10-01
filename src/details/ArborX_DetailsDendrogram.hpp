@@ -33,16 +33,24 @@ struct IncidenceMatrix
   IncidenceMatrix(ExecutionSpace const &exec_space, Edges const &edges)
       : _edges(edges)
   {
+    buildIncidenceMatrix(exec_space, edges);
+  }
+
+  template <typename ExecutionSpace, typename Edges>
+  void buildIncidenceMatrix(ExecutionSpace const &exec_space,
+                            Edges const &edges)
+  {
     int const n = edges.extent(0) + 1;
 
     Kokkos::realloc(_incident_offsets, n + 1);
+    auto &incident_offsets = _incident_offsets; // FIXME avoid capture of *this
     Kokkos::parallel_for(
         "ArborX::Dendrogram::compute_incident_counts",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
         KOKKOS_LAMBDA(int const edge_index) {
           auto const &edge = edges(edge_index);
-          Kokkos::atomic_fetch_add(&_incident_offsets(edge.source), 1);
-          Kokkos::atomic_fetch_add(&_incident_offsets(edge.target), 1);
+          Kokkos::atomic_increment(&incident_offsets(edge.source));
+          Kokkos::atomic_increment(&incident_offsets(edge.target));
         });
     exclusivePrefixSum(exec_space, _incident_offsets);
 
@@ -54,14 +62,15 @@ struct IncidenceMatrix
         KokkosExt::lastElement(exec_space, _incident_offsets));
 
     auto offsets = KokkosExt::clone(exec_space, _incident_offsets);
+    auto &incident_edges = _incident_edges; // FIXME avoid capture of *this
     Kokkos::parallel_for(
-        "ArborX::Dendrogram::compute_incident_counts",
+        "ArborX::Dendrogram::compute_incident_edges",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
         KOKKOS_LAMBDA(int const edge_index) {
           auto const &edge = edges(edge_index);
-          _incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.source), 1)) =
+          incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.source), 1)) =
               edge_index;
-          _incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.target), 1)) =
+          incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.target), 1)) =
               edge_index;
         });
   }
@@ -72,11 +81,12 @@ struct IncidenceMatrix
     int const n = _edges.extent(0) + 1;
 
     int max_degree = 0;
+    auto &incident_offsets = _incident_offsets; // FIXME avoid capture of *this
     Kokkos::parallel_reduce(
         "ArborX::HDBSCA::max_offset",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
         KOKKOS_LAMBDA(int i, int &update) {
-          int degree = _incident_offsets(i + 1) - _incident_offsets(i);
+          int degree = incident_offsets(i + 1) - incident_offsets(i);
           if (degree > update)
             update = degree;
         },
@@ -87,7 +97,7 @@ struct IncidenceMatrix
     Kokkos::parallel_for(
         "blah", Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
         KOKKOS_LAMBDA(int i) {
-          int degree = _incident_offsets(i + 1) - _incident_offsets(i);
+          int degree = incident_offsets(i + 1) - incident_offsets(i);
           Kokkos::atomic_fetch_add(&degrees_hist(degree), 1);
         });
     auto degrees_hist_host =
@@ -383,9 +393,10 @@ enum Bracket
 };
 
 template <typename ExecutionSpace, typename MemorySpace>
-auto assignAlphaVertices(ExecutionSpace const &exec_space,
-                         Kokkos::View<int *, MemorySpace> euler_tour,
-                         Kokkos::View<int *, MemorySpace> alpha_edge_indices)
+Kokkos::View<int *, MemorySpace>
+assignAlphaVertices(ExecutionSpace const &exec_space,
+                    Kokkos::View<int *, MemorySpace> euler_tour,
+                    Kokkos::View<int *, MemorySpace> alpha_edge_indices)
 {
   ARBORX_ASSERT(euler_tour.size() % 2 == 0);
 
@@ -498,10 +509,10 @@ auto assignAlphaVertices(ExecutionSpace const &exec_space,
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
-auto assignAlphaVerticesNew(
-    ExecutionSpace const &exec_space,
-    Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges,
-    Kokkos::View<int *, MemorySpace> alpha_edge_indices)
+Kokkos::View<int *, MemorySpace>
+assignAlphaVerticesNew(ExecutionSpace const &exec_space,
+                       Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges,
+                       Kokkos::View<int *, MemorySpace> alpha_edge_indices)
 {
   auto n = sorted_edges.size() + 1;
   auto num_alpha_edges = (int)alpha_edge_indices.size();
@@ -622,11 +633,12 @@ auto assignAlphaVerticesNew(
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
-auto buildAlphaEdges(ExecutionSpace const &exec_space,
-                     Kokkos::View<WeightedEdge *, MemorySpace> edges,
-                     Kokkos::View<int *, MemorySpace> euler_tour,
-                     Kokkos::View<int *, MemorySpace> alpha_edge_indices,
-                     Kokkos::View<int *, MemorySpace> alpha_vertices)
+Kokkos::View<WeightedEdge *, MemorySpace>
+buildAlphaEdges(ExecutionSpace const &exec_space,
+                Kokkos::View<WeightedEdge *, MemorySpace> edges,
+                Kokkos::View<int *, MemorySpace> euler_tour,
+                Kokkos::View<int *, MemorySpace> alpha_edge_indices,
+                Kokkos::View<int *, MemorySpace> alpha_vertices)
 {
 
   Kokkos::View<WeightedEdge *, MemorySpace> alpha_mst_edges(

@@ -140,7 +140,8 @@ struct Dendrogram
   }
 
   template <typename ExecutionSpace, typename Edges>
-  auto alpha(ExecutionSpace const &exec_space, Edges sorted_edges)
+  Kokkos::View<int *, MemorySpace> alpha(ExecutionSpace const &exec_space,
+                                         Edges sorted_edges)
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
@@ -231,6 +232,7 @@ struct Dendrogram
     printf("\n");
 #endif
 
+#if 0
     // Step 6: build dendrogram of the alpha-tree
     Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
         "ArborX::Dendrogram::dendrogram_alpha");
@@ -246,6 +248,7 @@ struct Dendrogram
     // auto permute = sortObjects(alpha_sided_parents);
 
     Kokkos::Profiling::popRegion();
+#endif
 
     Kokkos::View<int *, MemorySpace> edge_parents(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
