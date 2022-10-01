@@ -343,6 +343,8 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
       dendrogram = DendrogramImplementation::UNION_FIND;
     else if (params.dendrogram == "alpha")
       dendrogram = DendrogramImplementation::ALPHA;
+    else if (params.dendrogram == "alpha-new")
+      dendrogram = DendrogramImplementation::ALPHA_NEW;
 
     ArborX::HDBSCAN::Parameters hdbscan_params;
     hdbscan_params.setPrintTimers(params.print_dbscan_timers)
@@ -393,6 +395,25 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- dendrogram (a) : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::dendrogram_alpha"));
+      }
+      if (params.dendrogram == "alpha-new")
+      {
+        printf("---- incidence mat  : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::build_incidence_matrix"));
+        printf("---- alpha edges    : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::compute_alpha_edges"));
+        printf("---- alpha vertices : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::alpha_vertices"));
+#if 0
+        printf("---- alpha mst      : %10.3f\n",
+               arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
+        printf("---- dendrogram (a) : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::dendrogram_alpha"));
+#endif
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));

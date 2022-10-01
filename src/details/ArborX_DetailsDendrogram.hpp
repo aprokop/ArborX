@@ -462,7 +462,7 @@ auto assignAlphaVertices(ExecutionSpace const &exec_space,
         }
       });
 
-#if 1
+#if 0
   auto brackets_host =
       Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, brackets);
   auto opening_brackets_count_host = Kokkos::create_mirror_view_and_copy(
@@ -491,6 +491,130 @@ auto assignAlphaVertices(ExecutionSpace const &exec_space,
   printf("\nalpha vertices:\n");
   for (int i = 0; i < (int)euler_tour.size(); ++i)
     printf("%2d", alpha_vertices_host(i));
+  printf("\n");
+#endif
+
+  return alpha_vertices;
+}
+
+template <typename ExecutionSpace, typename MemorySpace>
+auto assignAlphaVerticesNew(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges,
+    Kokkos::View<int *, MemorySpace> alpha_edge_indices)
+{
+  auto n = sorted_edges.size() + 1;
+  auto num_alpha_edges = (int)alpha_edge_indices.size();
+
+  Kokkos::View<int *, MemorySpace> alpha_vertices(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_vertices"),
+      n);
+
+  {
+    // Do initial union-find on the subgraphs
+
+    Kokkos::View<int *, MemorySpace> mark_alpha_edges(
+        "ArborX::Dendrogram::alpha_vertices", n - 1);
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::mark_alpha_edges",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+        KOKKOS_LAMBDA(int i) { mark_alpha_edges(alpha_edge_indices(i)) = 1; });
+
+    iota(exec_space, alpha_vertices);
+
+    UnionFind<MemorySpace> union_find(alpha_vertices);
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::alpha_vertices_union_find",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
+        KOKKOS_LAMBDA(int e) {
+          if (mark_alpha_edges(e) == 0)
+          {
+            // Not an alpha edge
+            auto &edge = sorted_edges(e);
+            union_find.merge(edge.source, edge.target);
+          }
+        });
+    // finalize union-find
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::finalize_union-find",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int const i) {
+          // ##### ECL license (see LICENSE.ECL) #####
+          int next;
+          int vstat = alpha_vertices(i);
+          int const old = vstat;
+          while (vstat > (next = alpha_vertices(vstat)))
+          {
+            vstat = next;
+          }
+          if (vstat != old)
+            alpha_vertices(i) = vstat;
+        });
+  }
+
+#if 0
+  printf("alpha vertices:\n");
+  for (int i = 0; i < (int)n; ++i)
+    printf(" %d", alpha_vertices(i));
+  printf("\n");
+#endif
+
+  {
+    // Map found alpha-vertices back to [0, #alpha vertices) range
+
+    Kokkos::View<int *, MemorySpace> map(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::map_back"),
+        n);
+    Kokkos::deep_copy(exec_space, map, -1);
+
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::find_unique_entries",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i) {
+          // Assuming atomic store
+          map(alpha_vertices(i)) = 1;
+        });
+#if 0
+    printf("map:\n");
+    for (int i = 0; i < (int)n; ++i)
+      printf(" %d", map(i));
+    printf("\n");
+#endif
+    int num_unique_entries = 0;
+    Kokkos::parallel_scan(
+        "ArborX::Dendrogram::map_scan",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i, int &partial_sum, bool is_final) {
+          if (map(i) != -1)
+          {
+            if (is_final)
+              map(i) = partial_sum;
+            ++partial_sum;
+          }
+        },
+        num_unique_entries);
+    ARBORX_ASSERT(num_unique_entries == num_alpha_edges + 1);
+#if 0
+    printf("map (scanned):\n");
+    for (int i = 0; i < (int)n; ++i)
+      printf(" %d", map(i));
+    printf("\n");
+#endif
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::remap_alpha_vertices",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        KOKKOS_LAMBDA(int i) {
+          // Assuming atomic store
+          alpha_vertices(i) = map(alpha_vertices(i));
+        });
+  }
+
+#if 0
+  printf("alpha vertices (remapped):\n");
+  for (int i = 0; i < (int)n; ++i)
+    printf(" %d", alpha_vertices(i));
   printf("\n");
 #endif
 
