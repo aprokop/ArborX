@@ -658,6 +658,30 @@ buildAlphaEdges(ExecutionSpace const &exec_space,
   return alpha_mst_edges;
 }
 
+template <typename ExecutionSpace, typename MemorySpace>
+Kokkos::View<WeightedEdge *, MemorySpace>
+buildAlphaMST(ExecutionSpace const &exec_space,
+              Kokkos::View<WeightedEdge *, MemorySpace> edges,
+              Kokkos::View<int *, MemorySpace> alpha_edge_indices,
+              Kokkos::View<int *, MemorySpace> alpha_vertices)
+{
+
+  Kokkos::View<WeightedEdge *, MemorySpace> alpha_mst_edges(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_mst_edges"),
+      alpha_edge_indices.size());
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::build_alpha_mst_edges",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0,
+                                          alpha_edge_indices.size()),
+      KOKKOS_LAMBDA(int i) {
+        int e = alpha_edge_indices(i);
+        alpha_mst_edges(i) = {alpha_vertices(edges(e).source),
+                              alpha_vertices(edges(e).target), edges(i).weight};
+      });
+  return alpha_mst_edges;
+}
+
 #if 0
 template <typename ExecutionSpace, typename MST, typename EdgeParents>
 void computeFlatClustering(ExecutionSpace const &exec_space, int core_min_size,

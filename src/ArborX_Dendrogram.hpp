@@ -310,6 +310,23 @@ struct Dendrogram
                            "ArborX::Dendrogram::edge_parents"),
         num_edges);
 
+    // Step 4: construct alpha-MST
+    Kokkos::Profiling::ProfilingSection profile_alpha_mst(
+        "ArborX::Dendrogram::alpha_mst");
+    profile_alpha_mst.start();
+    auto alpha_mst_edges = Details::buildAlphaMST(
+        exec_space, sorted_edges, alpha_edge_indices, alpha_vertices);
+    profile_alpha_mst.stop();
+
+    // Step 5: build dendrogram of the alpha-tree
+    Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
+        "ArborX::Dendrogram::dendrogram_alpha");
+    profile_dendrogram_alpha.start();
+    Dendrogram<MemorySpace> dendrogram_alpha(
+        exec_space, alpha_mst_edges, DendrogramImplementation::UNION_FIND);
+    auto alpha_parents_of_alpha = dendrogram_alpha._edge_parents;
+    profile_dendrogram_alpha.stop();
+
     return edge_parents;
   }
 };
