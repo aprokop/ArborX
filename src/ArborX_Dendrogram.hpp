@@ -148,29 +148,19 @@ struct Dendrogram
     Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
         "ArborX::Dendrogram::compute_alpha_edges");
     profile_compute_alpha_edges.start();
-    auto alpha_edges = Details::findAlphaEdges(exec_space, sorted_edges);
+    auto alpha_edge_indices = Details::findAlphaEdges(exec_space, sorted_edges);
     profile_compute_alpha_edges.stop();
 
-    auto num_alpha_edges = (int)alpha_edges.size();
+    auto num_alpha_edges = (int)alpha_edge_indices.size();
     printf("#alpha edges: %d [%.2f%%]\n", num_alpha_edges,
            (100.f * num_alpha_edges) / num_edges);
-#ifdef VERBOSE
-    printf("alpha edges:\n");
-    for (int i = 0; i < num_alpha_edges; ++i)
-    {
-      int e = alpha_edges(i);
-      printf("[%i] : %d (%d, %d)\n", i, e, sorted_edges(e).source,
-             sorted_edges(e).target);
-    }
-    printf("\n");
-#endif
 
-    // Step 2: assign alpha-vertices through union-find
+    // Step 2: construct virtual alpha-vertices
     Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
         "ArborX::Dendrogram::alpha_vertices");
     profile_alpha_vertices.start();
-    auto alpha_vertices =
-        Details::assignAlphaVertices(exec_space, sorted_edges, alpha_edges);
+    auto alpha_vertices = Details::assignAlphaVertices(exec_space, sorted_edges,
+                                                       alpha_edge_indices);
     profile_alpha_vertices.stop();
 
     Kokkos::View<int *, MemorySpace> edge_parents(
@@ -182,8 +172,8 @@ struct Dendrogram
     Kokkos::Profiling::ProfilingSection profile_alpha_mst(
         "ArborX::Dendrogram::alpha_mst");
     profile_alpha_mst.start();
-    auto alpha_mst_edges = Details::buildAlphaMST(exec_space, sorted_edges,
-                                                  alpha_edges, alpha_vertices);
+    auto alpha_edges = Details::buildAlphaMST(
+        exec_space, sorted_edges, alpha_edge_indices, alpha_vertices);
     profile_alpha_mst.stop();
 
     // Step 4: build dendrogram of the alpha-tree
@@ -191,7 +181,7 @@ struct Dendrogram
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
     Dendrogram<MemorySpace> dendrogram_alpha(
-        exec_space, alpha_mst_edges, DendrogramImplementation::UNION_FIND);
+        exec_space, alpha_edges, DendrogramImplementation::UNION_FIND);
     auto alpha_parents_of_alpha = dendrogram_alpha._edge_parents;
     profile_dendrogram_alpha.stop();
 

@@ -21,61 +21,6 @@
 namespace ArborX::Details
 {
 
-template <typename MemorySpace>
-struct IncidenceMatrix
-{
-  Kokkos::View<WeightedEdge *, MemorySpace> _edges;
-  Kokkos::View<int *, MemorySpace> _incident_offsets;
-  Kokkos::View<int *, MemorySpace>
-      _incident_edges; // edges incident to a specific vertex
-
-  template <typename ExecutionSpace, typename Edges>
-  IncidenceMatrix(ExecutionSpace const &exec_space, Edges const &edges)
-      : _edges(edges)
-  {
-    buildIncidenceMatrix(exec_space, edges);
-  }
-
-  template <typename ExecutionSpace, typename Edges>
-  void buildIncidenceMatrix(ExecutionSpace const &exec_space,
-                            Edges const &edges)
-  {
-    int const n = edges.extent(0) + 1;
-
-    Kokkos::realloc(_incident_offsets, n + 1);
-    auto &incident_offsets = _incident_offsets; // FIXME avoid capture of *this
-    Kokkos::parallel_for(
-        "ArborX::Dendrogram::compute_incident_counts",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
-        KOKKOS_LAMBDA(int const edge_index) {
-          auto const &edge = edges(edge_index);
-          Kokkos::atomic_increment(&incident_offsets(edge.source));
-          Kokkos::atomic_increment(&incident_offsets(edge.target));
-        });
-    exclusivePrefixSum(exec_space, _incident_offsets);
-
-    ARBORX_ASSERT(KokkosExt::lastElement(exec_space, _incident_offsets) ==
-                  2 * (n - 1));
-
-    KokkosExt::reallocWithoutInitializing(
-        exec_space, _incident_edges,
-        KokkosExt::lastElement(exec_space, _incident_offsets));
-
-    auto offsets = KokkosExt::clone(exec_space, _incident_offsets);
-    auto &incident_edges = _incident_edges; // FIXME avoid capture of *this
-    Kokkos::parallel_for(
-        "ArborX::Dendrogram::compute_incident_edges",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
-        KOKKOS_LAMBDA(int const edge_index) {
-          auto const &edge = edges(edge_index);
-          incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.source), 1)) =
-              edge_index;
-          incident_edges(Kokkos::atomic_fetch_add(&offsets(edge.target), 1)) =
-              edge_index;
-        });
-  }
-};
-
 // Sort edges in increasing order
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<unsigned int *, MemorySpace>
@@ -107,13 +52,11 @@ sortEdges(ExecutionSpace const &exec_space,
 
 // Determine alpha edges
 //
-// An alpha-edge is an edge that has both children as edges in the
-// dendrogram. In other words, an edge that is not an alpha edge has at most
-// one child edge.
-// Assuming the edges are sorted in the order of decreasing weights (i.e.,
-// the first edge has the largest weight), an edge e is an alpha-edge if both
-// vertices have an incident edge (different from e) that is larger (in
-// index) than e.
+// An alpha-edge is an edge that has both children as edges in the dendrogram.
+// In other words, an edge that is not an alpha edge has at most one child
+// edge. Assuming the edges are sorted in the order of increasing weights, an
+// edge e is an alpha-edge if both vertices have an incident edge that is
+// smaller than e.
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
 findAlphaEdges(ExecutionSpace const &exec_space,
@@ -167,55 +110,53 @@ findAlphaEdges(ExecutionSpace const &exec_space,
   return alpha_edges;
 }
 
-enum Bracket
-{
-  NO_BRACKET = 0,
-  OPENING_BRACKET = 1,
-  CLOSING_BRACKET = 2
-};
-
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
 assignAlphaVertices(ExecutionSpace const &exec_space,
-                    Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges,
+                    Kokkos::View<WeightedEdge *, MemorySpace> edges,
                     Kokkos::View<int *, MemorySpace> alpha_edges)
 {
-  auto n = sorted_edges.size() + 1;
+  auto const num_edges = edges.size();
+  auto num_vertices = num_edges + 1;
   auto num_alpha_edges = (int)alpha_edges.size();
 
   Kokkos::View<int *, MemorySpace> alpha_vertices(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::alpha_vertices"),
-      n);
+      num_vertices);
 
   {
     // Do initial union-find on the subgraphs
 
-    Kokkos::View<int *, MemorySpace> mark_alpha_edges(
-        "ArborX::Dendrogram::alpha_vertices", n - 1);
+    // TODO: may want to move this map to the higher level dendrom code
+    Kokkos::View<int *, MemorySpace> marked_alpha_edges(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::marked_alpha_edges"),
+        num_edges);
+    Kokkos::deep_copy(exec_space, marked_alpha_edges, -1);
     Kokkos::parallel_for(
         "ArborX::Dendrogram::mark_alpha_edges",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
-        KOKKOS_LAMBDA(int i) { mark_alpha_edges(alpha_edges(i)) = 1; });
+        KOKKOS_LAMBDA(int i) { marked_alpha_edges(alpha_edges(i)) = i; });
 
     iota(exec_space, alpha_vertices);
 
     UnionFind<MemorySpace> union_find(alpha_vertices);
     Kokkos::parallel_for(
         "ArborX::Dendrogram::alpha_vertices_union_find",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n - 1),
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
         KOKKOS_LAMBDA(int e) {
-          if (mark_alpha_edges(e) == 0)
+          if (marked_alpha_edges(e) == -1)
           {
-            // Not an alpha edge
-            auto &edge = sorted_edges(e);
+            // Not an alpha edge, merge edge vertices
+            auto &edge = edges(e);
             union_find.merge(edge.source, edge.target);
           }
         });
     // finalize union-find
     Kokkos::parallel_for(
         "ArborX::Dendrogram::finalize_union-find",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_vertices),
         KOKKOS_LAMBDA(int const i) {
           // ##### ECL license (see LICENSE.ECL) #####
           int next;
@@ -230,39 +171,26 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
         });
   }
 
-#if 0
-  printf("alpha vertices:\n");
-  for (int i = 0; i < (int)n; ++i)
-    printf(" %d", alpha_vertices(i));
-  printf("\n");
-#endif
-
   {
     // Map found alpha-vertices back to [0, #alpha vertices) range
 
     Kokkos::View<int *, MemorySpace> map(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "ArborX::Dendrogram::map_back"),
-        n);
+        num_vertices);
     Kokkos::deep_copy(exec_space, map, -1);
 
     Kokkos::parallel_for(
         "ArborX::Dendrogram::find_unique_entries",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_vertices),
         KOKKOS_LAMBDA(int i) {
           // Assuming atomic store
           map(alpha_vertices(i)) = 1;
         });
-#if 0
-    printf("map:\n");
-    for (int i = 0; i < (int)n; ++i)
-      printf(" %d", map(i));
-    printf("\n");
-#endif
     int num_unique_entries = 0;
     Kokkos::parallel_scan(
         "ArborX::Dendrogram::map_scan",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_vertices),
         KOKKOS_LAMBDA(int i, int &partial_sum, bool is_final) {
           if (map(i) != -1)
           {
@@ -273,77 +201,41 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
         },
         num_unique_entries);
     ARBORX_ASSERT(num_unique_entries == num_alpha_edges + 1);
-#if 0
-    printf("map (scanned):\n");
-    for (int i = 0; i < (int)n; ++i)
-      printf(" %d", map(i));
-    printf("\n");
-#endif
+
     Kokkos::parallel_for(
         "ArborX::Dendrogram::remap_alpha_vertices",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_vertices),
         KOKKOS_LAMBDA(int i) {
           // Assuming atomic store
           alpha_vertices(i) = map(alpha_vertices(i));
         });
   }
 
-#if 0
-  printf("alpha vertices (remapped):\n");
-  for (int i = 0; i < (int)n; ++i)
-    printf(" %d", alpha_vertices(i));
-  printf("\n");
-#endif
-
   return alpha_vertices;
-}
-
-template <typename ExecutionSpace, typename MemorySpace>
-Kokkos::View<WeightedEdge *, MemorySpace>
-buildAlphaEdges(ExecutionSpace const &exec_space,
-                Kokkos::View<WeightedEdge *, MemorySpace> edges,
-                Kokkos::View<int *, MemorySpace> euler_tour,
-                Kokkos::View<int *, MemorySpace> alpha_edges,
-                Kokkos::View<int *, MemorySpace> alpha_vertices)
-{
-
-  Kokkos::View<WeightedEdge *, MemorySpace> alpha_mst_edges(
-      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::alpha_mst_edges"),
-      alpha_edges.size());
-  Kokkos::parallel_for(
-      "ArborX::Dendrogram::build_alpha_mst_edges",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, alpha_edges.size()),
-      KOKKOS_LAMBDA(int i) {
-        int e = alpha_edges(i);
-        alpha_mst_edges(i) = {alpha_vertices(euler_tour(2 * e + 0)),
-                              alpha_vertices(euler_tour(2 * e + 1)),
-                              edges(i).weight};
-      });
-  return alpha_mst_edges;
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<WeightedEdge *, MemorySpace>
 buildAlphaMST(ExecutionSpace const &exec_space,
               Kokkos::View<WeightedEdge *, MemorySpace> edges,
-              Kokkos::View<int *, MemorySpace> alpha_edges,
+              Kokkos::View<int *, MemorySpace> alpha_edge_indices,
               Kokkos::View<int *, MemorySpace> alpha_vertices)
 {
+  auto const num_alpha_edges = alpha_edge_indices.size();
 
-  Kokkos::View<WeightedEdge *, MemorySpace> alpha_mst_edges(
+  Kokkos::View<WeightedEdge *, MemorySpace> alpha_edges(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::alpha_mst_edges"),
-      alpha_edges.size());
+      num_alpha_edges);
   Kokkos::parallel_for(
       "ArborX::Dendrogram::build_alpha_mst_edges",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, alpha_edges.size()),
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
       KOKKOS_LAMBDA(int i) {
-        int e = alpha_edges(i);
-        alpha_mst_edges(i) = {alpha_vertices(edges(e).source),
-                              alpha_vertices(edges(e).target), edges(i).weight};
+        int e = alpha_edge_indices(i);
+        alpha_edges(i) = {alpha_vertices(edges(e).source),
+                          alpha_vertices(edges(e).target), edges(i).weight};
       });
-  return alpha_mst_edges;
+  return alpha_edges;
 }
 
 #if 0
