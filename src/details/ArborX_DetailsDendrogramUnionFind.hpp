@@ -63,37 +63,39 @@ struct WangUnionFind
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
 dendrogramUnionFind(ExecutionSpace const &exec_space,
-                    Kokkos::View<WeightedEdge *, MemorySpace> sorted_mst_edges)
+                    Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges)
 {
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
 
-  int const n = sorted_mst_edges.extent_int(0) + 1;
+  int const num_edges = sorted_edges.extent_int(0);
+  int const num_vertices = num_edges + 1;
 
   Kokkos::View<int *, MemorySpace> edge_parents(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::edge_parents"),
-      n - 1);
+      num_edges);
 
-  Kokkos::View<int *, MemorySpace> representative_edges(
+  constexpr int UNDEFINED = -1;
+  Kokkos::View<int *, MemorySpace> labels(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::representative_edges"),
-      n);
-  Kokkos::deep_copy(representative_edges, -1);
+                         "ArborX::Dendrogram::labels"),
+      num_vertices);
+  Kokkos::deep_copy(labels, UNDEFINED);
 
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram::copy_to_host");
 
-  auto sorted_mst_edges_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, sorted_mst_edges);
+  auto sorted_edges_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sorted_edges);
   auto edge_parents_host = Kokkos::create_mirror_view(edge_parents);
-  auto representative_edges_host = Kokkos::create_mirror_view_and_copy(
-      Kokkos::HostSpace{}, representative_edges);
+  auto labels_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, labels);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram::union_find");
 
 #if 1
   std::cout << "Running Wang's union-find" << std::endl;
-  WangUnionFind union_find(n);
+  WangUnionFind union_find(num_vertices);
   std::ignore = exec_space;
 #else
   std::cout << "Running ArborX's union-find" << std::endl;
@@ -106,23 +108,23 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
       Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, vertex_labels);
   Details::UnionFind<Kokkos::HostSpace> union_find(vertex_labels_host);
 #endif
-  for (int edge_index = n - 2; edge_index >= 0; --edge_index)
+  for (int e = 0; e < num_edges; ++e)
   {
-    int i = sorted_mst_edges_host(edge_index).source;
-    int j = sorted_mst_edges_host(edge_index).target;
+    int i = sorted_edges_host(e).source;
+    int j = sorted_edges_host(e).target;
 
     for (int k : {i, j})
     {
-      auto edge_child = representative_edges_host(union_find.representative(k));
-      if (edge_child != -1)
-        edge_parents_host(edge_child) = edge_index;
+      auto edge_child = labels_host(union_find.representative(k));
+      if (edge_child != UNDEFINED)
+        edge_parents_host(edge_child) = e;
     }
 
     union_find.merge(i, j);
 
-    representative_edges_host(union_find.representative(i)) = edge_index;
+    labels_host(union_find.representative(i)) = e;
   }
-  edge_parents_host(0) = -1;
+  edge_parents_host(num_edges - 1) = UNDEFINED; // root
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion(

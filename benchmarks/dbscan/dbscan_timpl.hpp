@@ -378,9 +378,9 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
              arborx_dbscan_example_get_time("ArborX::Dendrogram::edge_sort"));
       if (params.dendrogram == "alpha")
       {
-        printf("---- incidence mat  : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::build_incidence_matrix"));
+        // printf("---- incidence mat  : %10.3f\n",
+        // arborx_dbscan_example_get_time(
+        // "ArborX::Dendrogram::build_incidence_matrix"));
         printf("---- alpha edges    : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::compute_alpha_edges"));
