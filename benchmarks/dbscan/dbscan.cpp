@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     return 2;
   }
 
-  if (std::set<std::string>{"none", "alpha", "alpha-new", "union-find"}.count(
+  if (std::set<std::string>{"none", "alpha", "union-find"}.count(
           params.dendrogram) == 0)
   {
     std::cerr << "Dendrogram must be \"none\", \"alpha\" or \"union-find\"\n";

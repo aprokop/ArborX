@@ -12,8 +12,6 @@
 #define ARBORX_HDBSCAN_HPP
 
 #include <ArborX_Dendrogram.hpp>
-#include <ArborX_DetailsDendrogram.hpp>
-#include <ArborX_DetailsUnionFind.hpp>
 #include <ArborX_LinearBVH.hpp>
 #include <ArborX_MinimumSpanningTree.hpp>
 
