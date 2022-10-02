@@ -149,7 +149,7 @@ struct Dendrogram
         "ArborX::Dendrogram::compute_alpha_edges");
     profile_compute_alpha_edges.start();
     auto alpha_edges = Details::findAlphaEdges(exec_space, sorted_edges);
-    profile_compute_alpha_edges.start();
+    profile_compute_alpha_edges.stop();
 
     auto num_alpha_edges = (int)alpha_edges.size();
     printf("#alpha edges: %d [%.2f%%]\n", num_alpha_edges,
