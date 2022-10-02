@@ -395,6 +395,9 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- alpha matrix   : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::alpha_incidence_matrix"));
+        printf("---- sided parents  : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::sided_parents"));
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));

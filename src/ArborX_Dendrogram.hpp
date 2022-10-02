@@ -74,18 +74,21 @@ struct Dendrogram
       profile_edge_sort.stop();
     }
 
-    Kokkos::View<int *, MemorySpace> edge_parents;
+    Kokkos::View<int *, MemorySpace> sided_edge_parents;
     switch (impl)
     {
     case DendrogramImplementation::UNION_FIND:
-      edge_parents = unionFind(exec_space, sorted_edges);
+      sided_edge_parents = unionFind(exec_space, sorted_edges);
       break;
     case DendrogramImplementation::ALPHA:
-      edge_parents = alpha(exec_space, sorted_edges);
+      sided_edge_parents = alpha(exec_space, sorted_edges);
       break;
     case DendrogramImplementation::NONE:
       ARBORX_ASSERT(false);
     }
+
+    // TODO: convert sided parents to unsided
+    auto &edge_parents = sided_edge_parents;
 
     if (are_edges_sorted == true)
       _edge_parents = edge_parents;
@@ -162,11 +165,6 @@ struct Dendrogram
                                                        alpha_edge_indices);
     profile_alpha_vertices.stop();
 
-    Kokkos::View<int *, MemorySpace> edge_parents(
-        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                           "ArborX::Dendrogram::edge_parents"),
-        num_edges);
-
     // Step 3: construct alpha-MST
     Kokkos::Profiling::ProfilingSection profile_alpha_mst(
         "ArborX::Dendrogram::alpha_mst");
@@ -179,16 +177,14 @@ struct Dendrogram
     Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
-    Dendrogram<MemorySpace> dendrogram_alpha(
-        exec_space, alpha_edges, DendrogramImplementation::UNION_FIND);
-    auto alpha_parents_of_alpha = dendrogram_alpha._edge_parents;
+    auto sided_alpha_parents_of_alpha = Details::dendrogramUnionFind(
+        exec_space, alpha_edges, alpha_edge_indices);
     profile_dendrogram_alpha.stop();
 
     // Step 5: build alpha incidence matrix
     Kokkos::Profiling::ProfilingSection profile_build_alpha_incidence_matrix(
         "ArborX::Dendrogram::alpha_incidence_matrix");
     profile_build_alpha_incidence_matrix.start();
-    Kokkos::Profiling::pushRegion("ArborX::Dendrogram::alpha_incidence_matrix");
     Kokkos::View<int *, MemorySpace> alpha_mat_offsets(
         "ArborX::Dendrogram::alpha_mat_offsets", 0);
     Kokkos::View<int *, MemorySpace> alpha_mat_edges(
@@ -196,17 +192,24 @@ struct Dendrogram
     Details::buildAlphaIncidenceMatrix(exec_space, sorted_edges,
                                        alpha_edge_indices, alpha_vertices,
                                        alpha_mat_offsets, alpha_mat_edges);
-    Kokkos::Profiling::popRegion();
     profile_build_alpha_incidence_matrix.stop();
 
-#if 0
-    // Step 7: insert edges (no sideness yet)
-    auto alpha_sided_parents =
-        findAlphaParents(exec_space, sorted_edges, alpha_incidence_matrix,
-                         alpha_vertices, alpha_parents_of_alpha);
-#endif
+    // Step 6: compute sided parents
+    Kokkos::Profiling::ProfilingSection profile_compute_sided_parents(
+        "ArborX::Dendrogram::sided_parents");
+    profile_compute_sided_parents.start();
+    auto sided_alpha_parents = computeSidedAlphaParents(
+        exec_space, sorted_edges, alpha_vertices, sided_alpha_parents_of_alpha,
+        alpha_mat_offsets, alpha_mat_edges);
+    profile_compute_sided_parents.stop();
 
-    return edge_parents;
+    // Step 7: produce unsided parents
+    Kokkos::View<int *, MemorySpace> sided_edge_parents(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::edge_parents"),
+        num_edges);
+
+    return sided_edge_parents;
   }
 };
 

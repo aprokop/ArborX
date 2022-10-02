@@ -284,71 +284,162 @@ void buildAlphaIncidenceMatrix(
   Kokkos::parallel_for(
       "ArborX::Dendrogram::compute_alpha_mat_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
-      KOKKOS_LAMBDA(int const e) {
-        auto const &edge = edges(alpha_edge_indices(e));
-        auto const i = alpha_vertices(edge.source);
-        auto const j = alpha_vertices(edge.target);
-        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(i), 1)) = e;
-        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(j), 1)) = e;
+      KOKKOS_LAMBDA(int const ee) {
+        using KokkosExt::swap;
+
+        auto const e = alpha_edge_indices(ee); // original edge index
+        auto const &edge = edges(e);
+
+        // We map alpha-vertices to the sided edge indices
+        auto i = alpha_vertices(edge.source);
+        auto j = alpha_vertices(edge.target);
+        if (i < j)
+          swap(i, j);
+
+        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(i), 1)) = 2 * e + 0;
+        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(j), 1)) = 2 * e + 1;
       });
 }
 
-#if 0
 template <typename ExecutionSpace, typename MemorySpace>
-Kokkos::View<WeightedEdge *, MemorySpace>
-findAlphaParents(ExecutionSpace const &exec_space,
-                 Kokkos::View<WeightedEdge *, MemorySpace> edges,
-                 IncidenceMatrix<MemorySpace> const &alpha_indidence_matrix,
-                 Kokkos::View<int *, MemorySpace> alpha_vertices,
-                 Kokkos::View<int *, MemorySpace> alpha_parents_of_alpha)
+Kokkos::View<int *, MemorySpace>
+dendrogramUnionFind(ExecutionSpace const &exec_space,
+                    Kokkos::View<WeightedEdge *, MemorySpace> alpha_edges,
+                    Kokkos::View<int *, MemorySpace> alpha_edge_indices)
+{
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
+
+  int const num_alpha_edges = alpha_edges.extent_int(0);
+  int const num_alpha_vertices = num_alpha_edges + 1;
+
+  Kokkos::View<int *, MemorySpace> sided_edge_parents(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::sided_edge_parents"),
+      num_alpha_edges);
+
+  constexpr int UNDEFINED = -1;
+  Kokkos::View<int *, MemorySpace> labels(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::labels"),
+      num_alpha_vertices);
+  Kokkos::deep_copy(labels, UNDEFINED);
+
+  Kokkos::View<int *, MemorySpace> vertex_labels(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::vertex_labels"),
+      num_alpha_vertices);
+  iota(exec_space, vertex_labels);
+  Details::UnionFind<MemorySpace> union_find(vertex_labels);
+
+  // Run on a single thread
+  Kokkos::parallel_for(
+      "ArborX::dendrogram::union_find",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, 1),
+      KOKKOS_LAMBDA(int) {
+        for (int e = 0; e < num_alpha_edges; ++e)
+        {
+          int i = alpha_edges(e).source;
+          int j = alpha_edges(e).target;
+
+          assert(i < j);
+
+          auto edge_child = labels(union_find.representative(i));
+          if (edge_child != UNDEFINED)
+            sided_edge_parents(edge_child) = 2 * alpha_edge_indices(e) + 0;
+
+          edge_child = labels(union_find.representative(j));
+          if (edge_child != UNDEFINED)
+            sided_edge_parents(edge_child) = 2 * alpha_edge_indices(e) + 1;
+
+          union_find.merge(i, j);
+
+          labels(union_find.representative(i)) = e;
+        }
+        sided_edge_parents(num_alpha_edges - 1) = UNDEFINED; // root
+      });
+
+  Kokkos::Profiling::popRegion();
+
+  return sided_edge_parents;
+}
+
+template <typename ExecutionSpace, typename MemorySpace>
+Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<WeightedEdge *, MemorySpace> edges,
+    Kokkos::View<int *, MemorySpace> alpha_vertices,
+    Kokkos::View<int *, MemorySpace> sided_alpha_parents_of_alpha,
+    Kokkos::View<int *, MemorySpace> alpha_mat_offsets,
+    Kokkos::View<int *, MemorySpace> alpha_mat_edges)
 
 {
   auto num_edges = edges.size();
 
+  Kokkos::View<int *, MemorySpace> sided_alpha_parents(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::DBSCAN::sided_alpha_parents"),
+      num_edges);
   Kokkos::parallel_for(
       "ArborX::Dendrogram::insert_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int e) {
         auto const &edge = edges(e);
-        // Determine alpha-neighborhood
+
         auto alpha_vertex = alpha_vertices(edge.source);
-        if (alpha_vertices(edge.target) == alpha)
+        if (alpha_vertices(edge.target) != alpha_vertex)
         {
-          // Edge is not an alpha-edge
-
-          int largest_smaller = inf;
-          int smallest_larger = -1;
-          for (int k = alpha_incidence_matrix._incident_offsets(alpha_vertex);
-               k < alpha_incidence_matrix._incident_offsets(alpha_vertex + 1);
-               ++k)
-          {
-            auto alpha_e = alpha_incidence_matrix._incident_edge(k);
-            if (alpha_e > e && alpha_e < largest_smaller)
-              largest_smaller = alpha_e;
-            if (alpha_e < e && alpha_e > smallest_larger)
-              smallest_larger = alpha_e;
-          }
-
-          if (largest_smaller == inf)
-          {
-            if (smallest_larger >= 0)
-              alpha_parents(e) = smallest_larger;
-            else
-              alpha_parents(e) = -1;
-          }
-          else
-          {
-            do
-            {
-              largest_smaller = alpha_parents(largest_smaller);
-            } while (largest_smaller != -1 &&
-                     largest_smaller < smallest_larger);
-            // FIXME
-          }
+          // This is an alpha-edge
+          return;
         }
+
+        auto e_sided = 2 * e; // make it sided for comparison
+
+        int largest_smaller = INT_MAX;
+        int smallest_larger = -1;
+        for (int k = alpha_mat_offsets(alpha_vertex);
+             k < alpha_mat_offsets(alpha_vertex + 1); ++k)
+        {
+          auto alpha_e = alpha_mat_edges(k); // already sided
+
+          if (alpha_e > e_sided && alpha_e < largest_smaller)
+            largest_smaller = alpha_e;
+          if (alpha_e < e_sided && alpha_e > smallest_larger)
+            smallest_larger = alpha_e;
+        }
+
+        assert(largest_smaller != INT_MAX || smallest_larger != -1);
+
+        if (smallest_larger == -1)
+        {
+          // No larger incident alpha-edge.
+          // This edge will at the top chain of the dendrogram.
+          sided_alpha_parents(e) = -1;
+          return;
+        }
+
+        if (largest_smaller == INT_MAX)
+        {
+          // No smaller incident alpha-edge.
+          // Can immediately assign the parent.
+          sided_alpha_parents(e) = smallest_larger;
+          return;
+        }
+
+        assert(largest_smaller < smallest_larger);
+
+        do
+        {
+          largest_smaller = sided_alpha_parents_of_alpha(largest_smaller / 2);
+        } while (largest_smaller < smallest_larger && largest_smaller != -1);
+
+        if (largest_smaller == -1 || largest_smaller > smallest_larger)
+          sided_alpha_parents(e) = smallest_larger;
+        else
+          sided_alpha_parents(e) = largest_smaller;
       });
+
+  return sided_alpha_parents;
 }
-#endif
 
 } // namespace ArborX::Details
 
