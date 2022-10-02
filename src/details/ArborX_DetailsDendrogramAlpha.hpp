@@ -12,6 +12,7 @@
 #ifndef ARBORX_DETAILS_DENDROGRAM_ALPHA_HPP
 #define ARBORX_DETAILS_DENDROGRAM_ALPHA_HPP
 
+#include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_MinimumSpanningTree.hpp> // WeightedEdge
@@ -230,10 +231,19 @@ buildAlphaMST(ExecutionSpace const &exec_space,
   Kokkos::parallel_for(
       "ArborX::Dendrogram::build_alpha_mst_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
-      KOKKOS_LAMBDA(int i) {
-        int e = alpha_edge_indices(i);
-        alpha_edges(i) = {alpha_vertices(edges(e).source),
-                          alpha_vertices(edges(e).target), edges(i).weight};
+      KOKKOS_LAMBDA(int k) {
+        using KokkosExt::swap;
+
+        int e = alpha_edge_indices(k);
+
+        // Make sure that the smaller vertex is first, and the larger one is
+        // second. This will be helpful when working with sideness.
+        auto i = alpha_vertices(edges(e).source);
+        auto j = alpha_vertices(edges(e).target);
+        if (i > j)
+          swap(i, j);
+
+        alpha_edges(k) = {i, j, edges(k).weight};
       });
   return alpha_edges;
 }
