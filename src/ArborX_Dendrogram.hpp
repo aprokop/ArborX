@@ -13,7 +13,6 @@
 
 #include <ArborX_DetailsDendrogramAlpha.hpp>
 #include <ArborX_DetailsDendrogramUnionFind.hpp>
-#include <ArborX_DetailsEulerTour.hpp>
 #include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
@@ -185,18 +184,22 @@ struct Dendrogram
     auto alpha_parents_of_alpha = dendrogram_alpha._edge_parents;
     profile_dendrogram_alpha.stop();
 
-#if 0
-    // Step 6: build alpha incidence matrix
-    Kokkos::Profiling::ProfilingSection profile_build_incidence_matrix(
-        "ArborX::Dendrogram::build_alpha_incidence_matrix");
+    // Step 5: build alpha incidence matrix
+    Kokkos::Profiling::ProfilingSection profile_build_alpha_incidence_matrix(
+        "ArborX::Dendrogram::alpha_incidence_matrix");
     profile_build_alpha_incidence_matrix.start();
-    Kokkos::Profiling::pushRegion(
-        "ArborX::Dendrogram::build_alpha_incidence_matrix");
-    Details::IncidenceMatrix<MemorySpace> incidence_matrix(exec_space,
-                                                           alpha_mst_edges);
+    Kokkos::Profiling::pushRegion("ArborX::Dendrogram::alpha_incidence_matrix");
+    Kokkos::View<int *, MemorySpace> alpha_mat_offsets(
+        "ArborX::Dendrogram::alpha_mat_offsets", 0);
+    Kokkos::View<int *, MemorySpace> alpha_mat_edges(
+        "ArborX::Dendrogram::alpha_mat_edges", 0);
+    Details::buildAlphaIncidenceMatrix(exec_space, sorted_edges,
+                                       alpha_edge_indices, alpha_vertices,
+                                       alpha_mat_offsets, alpha_mat_edges);
     Kokkos::Profiling::popRegion();
     profile_build_alpha_incidence_matrix.stop();
 
+#if 0
     // Step 7: insert edges (no sideness yet)
     auto alpha_sided_parents =
         findAlphaParents(exec_space, sorted_edges, alpha_incidence_matrix,

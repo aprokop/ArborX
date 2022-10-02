@@ -392,6 +392,9 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- dendrogram (a) : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::dendrogram_alpha"));
+        printf("---- alpha matrix   : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::alpha_incidence_matrix"));
       }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));

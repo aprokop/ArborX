@@ -238,6 +238,51 @@ buildAlphaMST(ExecutionSpace const &exec_space,
   return alpha_edges;
 }
 
+template <typename ExecutionSpace, typename MemorySpace>
+void buildAlphaIncidenceMatrix(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<WeightedEdge *, MemorySpace> edges,
+    Kokkos::View<int *, MemorySpace> alpha_edge_indices,
+    Kokkos::View<int *, MemorySpace> alpha_vertices,
+    Kokkos::View<int *, MemorySpace> &alpha_mat_offsets,
+    Kokkos::View<int *, MemorySpace> &alpha_mat_edges)
+{
+  auto num_alpha_edges = alpha_edge_indices.size();
+  auto num_vertices = num_alpha_edges + 1;
+
+  Kokkos::realloc(alpha_mat_offsets, num_vertices + 1);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compute_alpha_mat_counts",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int const e) {
+        auto const &edge = edges(alpha_edge_indices(e));
+        auto const i = alpha_vertices(edge.source);
+        auto const j = alpha_vertices(edge.target);
+        Kokkos::atomic_increment(&alpha_mat_offsets(i));
+        Kokkos::atomic_increment(&alpha_mat_offsets(j));
+      });
+  exclusivePrefixSum(exec_space, alpha_mat_offsets);
+
+  ARBORX_ASSERT(KokkosExt::lastElement(exec_space, alpha_mat_offsets) ==
+                2 * (int)num_alpha_edges);
+
+  KokkosExt::reallocWithoutInitializing(
+      exec_space, alpha_mat_edges,
+      KokkosExt::lastElement(exec_space, alpha_mat_offsets));
+
+  auto offsets = KokkosExt::clone(exec_space, alpha_mat_offsets);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compute_alpha_mat_edges",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int const e) {
+        auto const &edge = edges(alpha_edge_indices(e));
+        auto const i = alpha_vertices(edge.source);
+        auto const j = alpha_vertices(edge.target);
+        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(i), 1)) = e;
+        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(j), 1)) = e;
+      });
+}
+
 #if 0
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<WeightedEdge *, MemorySpace>
