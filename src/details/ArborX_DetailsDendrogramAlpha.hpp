@@ -103,7 +103,6 @@ findAlphaEdges(ExecutionSpace const &exec_space,
         }
       },
       num_alpha_edges);
-  --num_alpha_edges;
   Kokkos::resize(alpha_edges, num_alpha_edges);
 
   Kokkos::Profiling::popRegion();
@@ -235,15 +234,16 @@ buildAlphaMST(ExecutionSpace const &exec_space,
         using KokkosExt::swap;
 
         int e = alpha_edge_indices(k);
+        auto &edge = edges(e);
 
         // Make sure that the smaller vertex is first, and the larger one is
         // second. This will be helpful when working with sideness.
-        auto i = alpha_vertices(edges(e).source);
-        auto j = alpha_vertices(edges(e).target);
+        auto i = alpha_vertices(edge.source);
+        auto j = alpha_vertices(edge.target);
         if (i > j)
           swap(i, j);
 
-        alpha_edges(k) = {i, j, edges(k).weight};
+        alpha_edges(k) = {i, j, edge.weight};
       });
   return alpha_edges;
 }
@@ -264,10 +264,13 @@ void buildAlphaIncidenceMatrix(
   Kokkos::parallel_for(
       "ArborX::Dendrogram::compute_alpha_mat_counts",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
-      KOKKOS_LAMBDA(int const e) {
-        auto const &edge = edges(alpha_edge_indices(e));
+      KOKKOS_LAMBDA(int const ee) {
+        auto const e = alpha_edge_indices(ee); // original edge index
+        auto const &edge = edges(e);
+
         auto const i = alpha_vertices(edge.source);
         auto const j = alpha_vertices(edge.target);
+
         Kokkos::atomic_increment(&alpha_mat_offsets(i));
         Kokkos::atomic_increment(&alpha_mat_offsets(j));
       });
@@ -293,7 +296,7 @@ void buildAlphaIncidenceMatrix(
         // We map alpha-vertices to the sided edge indices
         auto i = alpha_vertices(edge.source);
         auto j = alpha_vertices(edge.target);
-        if (i < j)
+        if (i > j)
           swap(i, j);
 
         alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(i), 1)) = 2 * e + 0;
@@ -367,6 +370,7 @@ template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
     ExecutionSpace const &exec_space,
     Kokkos::View<WeightedEdge *, MemorySpace> edges,
+    Kokkos::View<int *, MemorySpace> alpha_edge_indices,
     Kokkos::View<int *, MemorySpace> alpha_vertices,
     Kokkos::View<int *, MemorySpace> sided_alpha_parents_of_alpha,
     Kokkos::View<int *, MemorySpace> alpha_mat_offsets,
@@ -374,68 +378,97 @@ Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
 
 {
   auto num_edges = edges.size();
+  auto num_alpha_edges = alpha_edge_indices.size();
+
+  Kokkos::View<int *, MemorySpace> inverse_alpha_map(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::DBSCAN::inverse_alpha_map"),
+      num_edges);
+  Kokkos::deep_copy(exec_space, inverse_alpha_map, -1);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::build_inverse_alpha_map",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int alpha_e) {
+        inverse_alpha_map(alpha_edge_indices(alpha_e)) = alpha_e;
+      });
 
   Kokkos::View<int *, MemorySpace> sided_alpha_parents(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::DBSCAN::sided_alpha_parents"),
       num_edges);
   Kokkos::parallel_for(
-      "ArborX::Dendrogram::insert_edges",
+      "ArborX::Dendrogram::compute_sided_alpha_parents",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int e) {
         auto const &edge = edges(e);
+
+        // printf("e = %d: ", e);
 
         auto alpha_vertex = alpha_vertices(edge.source);
         if (alpha_vertices(edge.target) != alpha_vertex)
         {
           // This is an alpha-edge
+          // printf("skipping alpha-edge\n");
+          sided_alpha_parents(e) =
+              sided_alpha_parents_of_alpha(inverse_alpha_map(e));
           return;
         }
+        // printf("processing non alpha-edge\n");
 
         auto e_sided = 2 * e; // make it sided for comparison
 
-        int largest_smaller = INT_MAX;
-        int smallest_larger = -1;
+        int largest_smaller = -1;
+        int smallest_larger = INT_MAX;
         for (int k = alpha_mat_offsets(alpha_vertex);
              k < alpha_mat_offsets(alpha_vertex + 1); ++k)
         {
           auto alpha_e = alpha_mat_edges(k); // already sided
 
-          if (alpha_e > e_sided && alpha_e < largest_smaller)
+          if (alpha_e < e_sided && alpha_e > largest_smaller)
             largest_smaller = alpha_e;
-          if (alpha_e < e_sided && alpha_e > smallest_larger)
+          if (alpha_e > e_sided && alpha_e < smallest_larger)
             smallest_larger = alpha_e;
         }
+        // printf("largest_smaller = %d, smallest_larger = %d\n",
+        // largest_smaller, smallest_larger);
 
         assert(largest_smaller != INT_MAX || smallest_larger != -1);
 
-        if (smallest_larger == -1)
-        {
-          // No larger incident alpha-edge.
-          // This edge will at the top chain of the dendrogram.
-          sided_alpha_parents(e) = -1;
-          return;
-        }
-
-        if (largest_smaller == INT_MAX)
+        if (largest_smaller == -1)
         {
           // No smaller incident alpha-edge.
           // Can immediately assign the parent.
-          sided_alpha_parents(e) = smallest_larger;
+
+          if (smallest_larger == INT_MAX)
+          {
+            // No larger incident alpha-edge.
+            // This edge will at the top chain of the dendrogram.
+            sided_alpha_parents(e) = -1;
+          }
+          else
+          {
+            sided_alpha_parents(e) = smallest_larger;
+          }
           return;
         }
 
-        assert(largest_smaller < smallest_larger);
-
         do
         {
-          largest_smaller = sided_alpha_parents_of_alpha(largest_smaller / 2);
-        } while (largest_smaller < smallest_larger && largest_smaller != -1);
+          // std::cout << largest_smaller << " -> "
+          // << sided_alpha_parents_of_alpha(
+          // inverse_alpha_map(largest_smaller / 2))
+          // << std::endl;
+          largest_smaller = sided_alpha_parents_of_alpha(
+              inverse_alpha_map(largest_smaller / 2));
+        } while (largest_smaller < e_sided && largest_smaller != -1);
 
-        if (largest_smaller == -1 || largest_smaller > smallest_larger)
+        if (largest_smaller > smallest_larger)
           sided_alpha_parents(e) = smallest_larger;
-        else
+        else if (largest_smaller != -1)
           sided_alpha_parents(e) = largest_smaller;
+        else
+          sided_alpha_parents(e) =
+              (smallest_larger == INT_MAX ? -1 : smallest_larger);
       });
 
   return sided_alpha_parents;
