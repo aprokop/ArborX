@@ -20,8 +20,6 @@
 
 #include <Kokkos_Core.hpp>
 
-// #define VERBOSE
-
 namespace ArborX::Details
 {
 
@@ -119,6 +117,8 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
                     Kokkos::View<WeightedEdge *, MemorySpace> edges,
                     Kokkos::View<int *, MemorySpace> alpha_edges)
 {
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::assign_alpha_vertices");
+
   auto const num_edges = edges.size();
   auto num_vertices = num_edges + 1;
   auto num_alpha_edges = (int)alpha_edges.size();
@@ -132,6 +132,7 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
     // Do initial union-find on the subgraphs
 
     // TODO: may want to move this map to the higher level dendrom code
+    // We do the same in computeAlphaParents
     Kokkos::View<int *, MemorySpace> marked_alpha_edges(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "ArborX::Dendrogram::marked_alpha_edges"),
@@ -214,6 +215,8 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
         });
   }
 
+  Kokkos::Profiling::popRegion();
+
   return alpha_vertices;
 }
 
@@ -224,6 +227,8 @@ buildAlphaMST(ExecutionSpace const &exec_space,
               Kokkos::View<int *, MemorySpace> alpha_edge_indices,
               Kokkos::View<int *, MemorySpace> alpha_vertices)
 {
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::build_alpha_mst");
+
   auto const num_alpha_edges = alpha_edge_indices.size();
 
   Kokkos::View<WeightedEdge *, MemorySpace> alpha_edges(
@@ -234,20 +239,13 @@ buildAlphaMST(ExecutionSpace const &exec_space,
       "ArborX::Dendrogram::build_alpha_mst_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
       KOKKOS_LAMBDA(int k) {
-        using KokkosExt::swap;
-
-        int e = alpha_edge_indices(k);
-        auto &edge = edges(e);
-
-        // Make sure that the smaller vertex is first, and the larger one is
-        // second. This will be helpful when working with sideness.
-        auto i = alpha_vertices(edge.source);
-        auto j = alpha_vertices(edge.target);
-        if (i > j)
-          swap(i, j);
-
-        alpha_edges(k) = {i, j, edge.weight};
+        auto &edge = edges(alpha_edge_indices(k));
+        alpha_edges(k) = {alpha_vertices(edge.source),
+                          alpha_vertices(edge.target), edge.weight};
       });
+
+  Kokkos::Profiling::popRegion();
+
   return alpha_edges;
 }
 
@@ -260,6 +258,9 @@ void buildAlphaIncidenceMatrix(
     Kokkos::View<int *, MemorySpace> &alpha_mat_offsets,
     Kokkos::View<int *, MemorySpace> &alpha_mat_edges)
 {
+  Kokkos::Profiling::pushRegion(
+      "ArborX::Dendrogram::build_alpha_incidence_matrix");
+
   auto num_alpha_edges = alpha_edge_indices.size();
   auto num_vertices = num_alpha_edges + 1;
 
@@ -268,8 +269,7 @@ void buildAlphaIncidenceMatrix(
       "ArborX::Dendrogram::compute_alpha_mat_counts",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
       KOKKOS_LAMBDA(int const ee) {
-        auto const e = alpha_edge_indices(ee); // original edge index
-        auto const &edge = edges(e);
+        auto const &edge = edges(alpha_edge_indices(ee));
 
         auto const i = alpha_vertices(edge.source);
         auto const j = alpha_vertices(edge.target);
@@ -291,8 +291,6 @@ void buildAlphaIncidenceMatrix(
       "ArborX::Dendrogram::compute_alpha_mat_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
       KOKKOS_LAMBDA(int const ee) {
-        using KokkosExt::swap;
-
         auto const e = alpha_edge_indices(ee); // original edge index
         auto const &edge = edges(e);
 
@@ -301,6 +299,8 @@ void buildAlphaIncidenceMatrix(
         alpha_mat_edges(Kokkos::atomic_fetch_add(
             &offsets(alpha_vertices(edge.target)), 1)) = e;
       });
+
+  Kokkos::Profiling::popRegion();
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -314,9 +314,13 @@ computeAlphaParents(ExecutionSpace const &exec_space,
                     Kokkos::View<int *, MemorySpace> alpha_mat_edges)
 
 {
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_alpha_parents");
+
   auto num_edges = edges.size();
   auto num_alpha_edges = alpha_edge_indices.size();
 
+  // TODO: may want to move this map to the higher level dendrom code
+  // We do the same in assignAlphaVertices
   Kokkos::View<int *, MemorySpace> inverse_alpha_map(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::DBSCAN::inverse_alpha_map"),
@@ -362,15 +366,6 @@ computeAlphaParents(ExecutionSpace const &exec_space,
           } while (alpha_parent != -1 && k < COMPRESSION_STEP);
           compressed_alpha_parents_of_alpha(e, level) = alpha_parent;
         });
-#ifdef VERBOSE
-    printf("-------------------------------------\n");
-    printf("[4] Parents of alpha edges (%d):\n",
-           (int)std::pow(COMPRESSION_STEP, level));
-    for (int i = 0; i < (int)num_alpha_edges; ++i)
-      printf("%5d [%5d] -> %5d\n", i, alpha_edge_indices(i),
-             compressed_alpha_parents_of_alpha(i, level));
-    fflush(stdout);
-#endif
   }
 
   Kokkos::View<int *, MemorySpace> alpha_parents(
@@ -449,6 +444,8 @@ computeAlphaParents(ExecutionSpace const &exec_space,
               (smallest_larger == INT_MAX ? -1 : smallest_larger);
       });
 
+  Kokkos::Profiling::popRegion();
+
   return alpha_parents;
 }
 
@@ -458,11 +455,10 @@ computeParents(ExecutionSpace const &exec_space,
                Kokkos::View<WeightedEdge *, MemorySpace> edges,
                Kokkos::View<int *, MemorySpace> alpha_parents)
 {
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_parents");
+
   auto num_edges = alpha_parents.size();
 
-  Kokkos::Profiling::ProfilingSection profile_euler_tour(
-      "ArborX::Dendrogram::euler_tour");
-  profile_euler_tour.start();
   // The returned Euler tour is of size twice the number of edges. Each pair
   // of entries {2*i, 2*i+1} correspond to the edge i, in two directions
   // (one going down, one up).
@@ -480,8 +476,6 @@ computeParents(ExecutionSpace const &exec_space,
         if (euler_tour(i) > euler_tour(i + 1))
           swap(euler_tour(i), euler_tour(i + 1));
       });
-
-  profile_euler_tour.stop();
 
   // Encode both sided parent and edge into long long
   // This way, once we sort based on this value, edges with the same sided
@@ -516,15 +510,6 @@ computeParents(ExecutionSpace const &exec_space,
         sided_alpha_parents(e) = (sided_alpha_parent << shift) + e;
       });
 
-#ifdef VERBOSE
-  printf("-------------------------------------\n");
-  printf("Sided alpha parents:\n");
-  for (int i = 0; i < (int)num_edges; ++i)
-    printf("%5d -> %5d\n", i, (int)(sided_alpha_parents(i) >> shift));
-  fflush(stdout);
-#endif
-
-  // FIXME: use weights
   auto permute = sortObjects(exec_space, sided_alpha_parents);
 
   Kokkos::View<int *, MemorySpace> parents(
@@ -544,6 +529,9 @@ computeParents(ExecutionSpace const &exec_space,
         else
           parents(e) = (sided_alpha_parents(i) >> shift) / 2;
       });
+
+  Kokkos::Profiling::popRegion();
+
   return parents;
 }
 

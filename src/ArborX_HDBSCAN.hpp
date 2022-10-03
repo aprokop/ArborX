@@ -35,7 +35,7 @@ struct Parameters
   // Verify dendrogram
   bool _verify_dendrogram = false;
   // Dendrogram implementation
-  DendrogramImplementation _dendrogram = DendrogramImplementation::UNION_FIND;
+  DendrogramImplementation _dendrogram = DendrogramImplementation::ALPHA;
 
   Parameters &setPrintTimers(bool print_timers)
   {
@@ -77,16 +77,10 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   // minpts > 2.
   // ARBORX_ASSERT(core_min_size > 2);
 
-  int const n = primitives.extent_int(0);
-
   Kokkos::Profiling::ProfilingSection profile_mst("ArborX::HDBSCAN::mst");
   profile_mst.start();
-  Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::mst");
-
   Details::MinimumSpanningTree<MemorySpace> mst(exec_space, primitives,
                                                 core_min_size);
-
-  Kokkos::Profiling::popRegion();
   profile_mst.stop();
 
   // Print MST
@@ -96,7 +90,8 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
         Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, mst.edges);
     std::cout << "=== MST ===" << std::endl;
     std::cout << std::setprecision(std::numeric_limits<float>::max_digits10);
-    for (int k = 0; k < n - 1; ++k)
+    int const n = primitives.extent_int(0);
+    for (int k = 0; k < (int)n - 1; ++k)
     {
       int i = std::min(mst_edges_host(k).source, mst_edges_host(k).target);
       int j = std::max(mst_edges_host(k).source, mst_edges_host(k).target);
@@ -128,7 +123,7 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::View<int *, MemorySpace> labels(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::HDBSCAN::labels"),
-      n);
+      primitives.size());
   Kokkos::deep_copy(exec_space, labels, 0);
 
   Kokkos::Profiling::popRegion();

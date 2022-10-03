@@ -375,36 +375,6 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::mst"));
       printf("-- dendrogram       : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
-      printf("---- edge sort      : %10.3f\n",
-             arborx_dbscan_example_get_time("ArborX::Dendrogram::edge_sort"));
-      if (params.dendrogram == "alpha")
-      {
-        // printf("---- incidence mat  : %10.3f\n",
-        // arborx_dbscan_example_get_time(
-        // "ArborX::Dendrogram::build_incidence_matrix"));
-        printf("---- alpha edges    : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::compute_alpha_edges"));
-        printf("---- alpha vertices : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_vertices"));
-        printf("---- alpha mst      : %10.3f\n",
-               arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
-        printf("---- a-dendrogram   : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::dendrogram_alpha"));
-        printf("---- alpha matrix   : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_incidence_matrix"));
-        printf("---- alpha parents  : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_parents"));
-        printf("---- parents        : %10.3f\n",
-               arborx_dbscan_example_get_time("ArborX::Dendrogram::parents"));
-        printf(
-            "------ euler tour   : %10.3f\n",
-            arborx_dbscan_example_get_time("ArborX::Dendrogram::euler_tour"));
-      }
       printf("-- postprocess      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::postprocess"));
       printf("total time          : %10.3f\n",
