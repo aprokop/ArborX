@@ -12,6 +12,7 @@
 #ifndef ARBORX_DETAILS_DENDROGRAM_ALPHA_HPP
 #define ARBORX_DETAILS_DENDROGRAM_ALPHA_HPP
 
+#include <ArborX_DetailsEulerTour.hpp>
 #include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
@@ -293,14 +294,10 @@ void buildAlphaIncidenceMatrix(
         auto const e = alpha_edge_indices(ee); // original edge index
         auto const &edge = edges(e);
 
-        // We map alpha-vertices to the sided edge indices
-        auto i = alpha_vertices(edge.source);
-        auto j = alpha_vertices(edge.target);
-        if (i > j)
-          swap(i, j);
-
-        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(i), 1)) = 2 * e + 0;
-        alpha_mat_edges(Kokkos::atomic_fetch_add(&offsets(j), 1)) = 2 * e + 1;
+        alpha_mat_edges(Kokkos::atomic_fetch_add(
+            &offsets(alpha_vertices(edge.source)), 1)) = e;
+        alpha_mat_edges(Kokkos::atomic_fetch_add(
+            &offsets(alpha_vertices(edge.target)), 1)) = e;
       });
 }
 
@@ -315,9 +312,9 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
   int const num_alpha_edges = alpha_edges.extent_int(0);
   int const num_alpha_vertices = num_alpha_edges + 1;
 
-  Kokkos::View<int *, MemorySpace> sided_edge_parents(
+  Kokkos::View<int *, MemorySpace> edge_parents(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::sided_edge_parents"),
+                         "ArborX::Dendrogram::edge_parents"),
       num_alpha_edges);
 
   constexpr int UNDEFINED = -1;
@@ -343,38 +340,34 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
         {
           int i = alpha_edges(e).source;
           int j = alpha_edges(e).target;
-
-          assert(i < j);
-
-          auto edge_child = labels(union_find.representative(i));
-          if (edge_child != UNDEFINED)
-            sided_edge_parents(edge_child) = 2 * alpha_edge_indices(e) + 0;
-
-          edge_child = labels(union_find.representative(j));
-          if (edge_child != UNDEFINED)
-            sided_edge_parents(edge_child) = 2 * alpha_edge_indices(e) + 1;
+          for (int k : {i, j})
+          {
+            auto edge_child = labels(union_find.representative(k));
+            if (edge_child != UNDEFINED)
+              edge_parents(edge_child) = alpha_edge_indices(e);
+          }
 
           union_find.merge(i, j);
 
           labels(union_find.representative(i)) = e;
         }
-        sided_edge_parents(num_alpha_edges - 1) = UNDEFINED; // root
+        edge_parents(num_alpha_edges - 1) = UNDEFINED; // root
       });
 
   Kokkos::Profiling::popRegion();
 
-  return sided_edge_parents;
+  return edge_parents;
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
-Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
-    ExecutionSpace const &exec_space,
-    Kokkos::View<WeightedEdge *, MemorySpace> edges,
-    Kokkos::View<int *, MemorySpace> alpha_edge_indices,
-    Kokkos::View<int *, MemorySpace> alpha_vertices,
-    Kokkos::View<int *, MemorySpace> sided_alpha_parents_of_alpha,
-    Kokkos::View<int *, MemorySpace> alpha_mat_offsets,
-    Kokkos::View<int *, MemorySpace> alpha_mat_edges)
+Kokkos::View<int *, MemorySpace>
+computeAlphaParents(ExecutionSpace const &exec_space,
+                    Kokkos::View<WeightedEdge *, MemorySpace> edges,
+                    Kokkos::View<int *, MemorySpace> alpha_edge_indices,
+                    Kokkos::View<int *, MemorySpace> alpha_vertices,
+                    Kokkos::View<int *, MemorySpace> alpha_parents_of_alpha,
+                    Kokkos::View<int *, MemorySpace> alpha_mat_offsets,
+                    Kokkos::View<int *, MemorySpace> alpha_mat_edges)
 
 {
   auto num_edges = edges.size();
@@ -392,45 +385,42 @@ Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
         inverse_alpha_map(alpha_edge_indices(alpha_e)) = alpha_e;
       });
 
-  Kokkos::View<int *, MemorySpace> sided_alpha_parents(
+  Kokkos::View<int *, MemorySpace> alpha_parents(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                         "ArborX::DBSCAN::sided_alpha_parents"),
+                         "ArborX::DBSCAN::alpha_parents"),
       num_edges);
   Kokkos::parallel_for(
-      "ArborX::Dendrogram::compute_sided_alpha_parents",
+      "ArborX::Dendrogram::compute_alpha_parents",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int e) {
         auto const &edge = edges(e);
 
-        // printf("e = %d: ", e);
+        printf("e = %d: ", e);
 
         auto alpha_vertex = alpha_vertices(edge.source);
         if (alpha_vertices(edge.target) != alpha_vertex)
         {
           // This is an alpha-edge
-          // printf("skipping alpha-edge\n");
-          sided_alpha_parents(e) =
-              sided_alpha_parents_of_alpha(inverse_alpha_map(e));
+          printf("skipping alpha-edge\n");
+          alpha_parents(e) = alpha_parents_of_alpha(inverse_alpha_map(e));
           return;
         }
-        // printf("processing non alpha-edge\n");
-
-        auto e_sided = 2 * e; // make it sided for comparison
+        printf("processing non alpha-edge\n");
 
         int largest_smaller = -1;
         int smallest_larger = INT_MAX;
         for (int k = alpha_mat_offsets(alpha_vertex);
              k < alpha_mat_offsets(alpha_vertex + 1); ++k)
         {
-          auto alpha_e = alpha_mat_edges(k); // already sided
+          auto alpha_e = alpha_mat_edges(k);
 
-          if (alpha_e < e_sided && alpha_e > largest_smaller)
+          if (alpha_e < e && alpha_e > largest_smaller)
             largest_smaller = alpha_e;
-          if (alpha_e > e_sided && alpha_e < smallest_larger)
+          if (alpha_e > e && alpha_e < smallest_larger)
             smallest_larger = alpha_e;
         }
-        // printf("largest_smaller = %d, smallest_larger = %d\n",
-        // largest_smaller, smallest_larger);
+        printf("largest_smaller = %d, smallest_larger = %d\n", largest_smaller,
+               smallest_larger);
 
         assert(largest_smaller != INT_MAX || smallest_larger != -1);
 
@@ -443,65 +433,115 @@ Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
           {
             // No larger incident alpha-edge.
             // This edge will at the top chain of the dendrogram.
-            sided_alpha_parents(e) = -1;
+            alpha_parents(e) = -1;
           }
           else
           {
-            sided_alpha_parents(e) = smallest_larger;
+            alpha_parents(e) = smallest_larger;
           }
           return;
         }
 
         do
         {
-          // std::cout << largest_smaller << " -> "
-          // << sided_alpha_parents_of_alpha(
-          // inverse_alpha_map(largest_smaller / 2))
-          // << std::endl;
-          largest_smaller = sided_alpha_parents_of_alpha(
-              inverse_alpha_map(largest_smaller / 2));
-        } while (largest_smaller < e_sided && largest_smaller != -1);
+          std::cout << largest_smaller << " -> "
+                    << alpha_parents_of_alpha(
+                           inverse_alpha_map(largest_smaller))
+                    << std::endl;
+          largest_smaller =
+              alpha_parents_of_alpha(inverse_alpha_map(largest_smaller));
+        } while (largest_smaller < e && largest_smaller != -1);
 
         if (largest_smaller > smallest_larger)
-          sided_alpha_parents(e) = smallest_larger;
+          alpha_parents(e) = smallest_larger;
         else if (largest_smaller != -1)
-          sided_alpha_parents(e) = largest_smaller;
+          alpha_parents(e) = largest_smaller;
         else
-          sided_alpha_parents(e) =
+          alpha_parents(e) =
               (smallest_larger == INT_MAX ? -1 : smallest_larger);
       });
 
-  return sided_alpha_parents;
+  return alpha_parents;
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
-computeSidedParents(ExecutionSpace const &exec_space,
-                    Kokkos::View<int *, MemorySpace> sided_alpha_parents)
+computeParents(ExecutionSpace const &exec_space,
+               Kokkos::View<WeightedEdge *, MemorySpace> edges,
+               Kokkos::View<int *, MemorySpace> alpha_parents)
 {
-  auto num_edges = sided_alpha_parents.size();
+  auto num_edges = alpha_parents.size();
 
-  auto sided_alpha_parents_clone =
-      KokkosExt::clone(exec_space, sided_alpha_parents);
-  auto permute = sortObjects(exec_space, sided_alpha_parents_clone);
+  Kokkos::Profiling::ProfilingSection profile_euler_tour(
+      "ArborX::Dendrogram::euler_tour");
+  profile_euler_tour.start();
+  // The returned Euler tour is of size twice the number of edges. Each pair of
+  // entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
+  // going down, one up).
+  auto euler_tour = eulerTour(exec_space, edges);
 
-  Kokkos::View<int *, MemorySpace> sided_parents(
+  // Make sure the first entry for every edge is the start entry (i.e., the
+  // smaller one)
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::order_start_end_in_euler_tour",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0,
+                                          euler_tour.extent(0) / 2),
+      KOKKOS_LAMBDA(int k) {
+        using KokkosExt::swap;
+        int i = 2 * k;
+        if (euler_tour(i) > euler_tour(i + 1))
+          swap(euler_tour(i), euler_tour(i + 1));
+      });
+
+  profile_euler_tour.stop();
+
+  auto sided_alpha_parents = KokkosExt::clone(exec_space, alpha_parents);
+
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compute_sided_alpha_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const e) {
+        auto alpha_parent = alpha_parents(e);
+        if (alpha_parent == -1)
+        {
+          sided_alpha_parents(e) = INT_MAX;
+          return;
+        }
+
+        if (euler_tour(2 * e) > euler_tour(2 * alpha_parent) &&
+            euler_tour(2 * e + 1) < euler_tour(2 * alpha_parent + 1))
+          sided_alpha_parents(e) = 2 * alpha_parent + 1;
+        else
+          sided_alpha_parents(e) = 2 * alpha_parent + 0;
+      });
+
+#if 1
+  printf("-------------------------------------\n");
+  printf("Sided alpha parents:\n");
+  for (int i = 0; i < (int)num_edges; ++i)
+    printf("%5d -> %5d\n", i, sided_alpha_parents(i));
+  fflush(stdout);
+#endif
+
+  auto permute = sortObjects(exec_space, sided_alpha_parents);
+
+  Kokkos::View<int *, MemorySpace> parents(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::sided_parents"),
       num_edges);
   Kokkos::parallel_for(
-      "ArborX::Dendrogram::compute_sided_parents",
+      "ArborX::Dendrogram::compute_parents",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const i) {
         int e = permute(i);
-        if (i < (int)num_edges - 1 &&
-            sided_alpha_parents_clone(i) == sided_alpha_parents_clone(i + 1))
-          sided_parents(e) =
-              2 * permute(i + 1); // this is actually incorrect sideness
+        if (i == (int)num_edges - 1)
+          parents(e) = -1;
+        else if (sided_alpha_parents(i) == sided_alpha_parents(i + 1))
+          parents(e) = permute(i + 1);
         else
-          sided_parents(e) = sided_alpha_parents_clone(i);
+          parents(e) = sided_alpha_parents(i) / 2;
       });
-  return sided_parents;
+  return parents;
 }
 
 } // namespace ArborX::Details

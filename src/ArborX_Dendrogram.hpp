@@ -74,21 +74,18 @@ struct Dendrogram
       profile_edge_sort.stop();
     }
 
-    Kokkos::View<int *, MemorySpace> sided_edge_parents;
+    Kokkos::View<int *, MemorySpace> edge_parents;
     switch (impl)
     {
     case DendrogramImplementation::UNION_FIND:
-      sided_edge_parents = unionFind(exec_space, sorted_edges);
+      edge_parents = unionFind(exec_space, sorted_edges);
       break;
     case DendrogramImplementation::ALPHA:
-      sided_edge_parents = alpha(exec_space, sorted_edges);
+      edge_parents = alpha(exec_space, sorted_edges);
       break;
     case DendrogramImplementation::NONE:
       ARBORX_ASSERT(false);
     }
-
-    // TODO: convert sided parents to unsided
-    auto &edge_parents = sided_edge_parents;
 
     if (are_edges_sorted == true)
       _edge_parents = edge_parents;
@@ -144,16 +141,16 @@ struct Dendrogram
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
-    auto const num_edges = sorted_edges.extent_int(0);
-
-#define VERBOSE
+    // #define VERBOSE
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[0] edges:\n");
+    auto const num_edges = sorted_edges.extent_int(0);
     for (int i = 0; i < num_edges; ++i)
       printf("%5d %5d %10.2f\n", sorted_edges(i).source, sorted_edges(i).target,
              sorted_edges(i).weight);
+    fflush(stdout);
 #endif
 
     // Step 1: find alpha edges of the original MST
@@ -172,6 +169,7 @@ struct Dendrogram
     for (int i = 0; i < (int)alpha_edge_indices.size(); ++i)
       printf(" %d", alpha_edge_indices(i));
     printf("\n");
+    fflush(stdout);
 #endif
 
     // Step 2: construct virtual alpha-vertices
@@ -188,6 +186,7 @@ struct Dendrogram
     for (int i = 0; i < (int)alpha_vertices.size(); ++i)
       printf(" %d", alpha_vertices(i));
     printf("\n");
+    fflush(stdout);
 #endif
 
     // Step 3: construct alpha-MST
@@ -204,22 +203,24 @@ struct Dendrogram
     for (int i = 0; i < (int)alpha_edges.size(); ++i)
       printf("%5d %5d %10.2f\n", alpha_edges(i).source, alpha_edges(i).target,
              alpha_edges(i).weight);
+    fflush(stdout);
 #endif
 
     // Step 4: build dendrogram of the alpha-tree
     Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
-    auto sided_alpha_parents_of_alpha = Details::dendrogramUnionFind(
+    auto alpha_parents_of_alpha = Details::dendrogramUnionFind(
         exec_space, alpha_edges, alpha_edge_indices);
     profile_dendrogram_alpha.stop();
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
-    printf("[4] Sided parents of alpha edges:\n");
+    printf("[4] Parents of alpha edges:\n");
     for (int i = 0; i < num_alpha_edges; ++i)
       printf("%5d [%5d] -> %5d\n", i, alpha_edge_indices(i),
-             sided_alpha_parents_of_alpha(i));
+             alpha_parents_of_alpha(i));
+    fflush(stdout);
 #endif
 
     // Step 5: build alpha incidence matrix
@@ -245,40 +246,43 @@ struct Dendrogram
         printf(" %5d", alpha_mat_edges(j));
       printf("\n");
     }
+    fflush(stdout);
 #endif
 
-    // Step 6: compute sided alpha_parents
-    Kokkos::Profiling::ProfilingSection profile_compute_sided_alpha_parents(
-        "ArborX::Dendrogram::sided_alpha_parents");
-    profile_compute_sided_alpha_parents.start();
-    auto sided_alpha_parents = computeSidedAlphaParents(
+    // Step 6: compute alpha_parents
+    Kokkos::Profiling::ProfilingSection profile_compute_alpha_parents(
+        "ArborX::Dendrogram::alpha_parents");
+    profile_compute_alpha_parents.start();
+    auto alpha_parents = computeAlphaParents(
         exec_space, sorted_edges, alpha_edge_indices, alpha_vertices,
-        sided_alpha_parents_of_alpha, alpha_mat_offsets, alpha_mat_edges);
-    profile_compute_sided_alpha_parents.stop();
+        alpha_parents_of_alpha, alpha_mat_offsets, alpha_mat_edges);
+    profile_compute_alpha_parents.stop();
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
-    printf("[6] Sided alpha parents:\n");
+    printf("[6] alpha parents:\n");
     for (int i = 0; i < num_edges; ++i)
-      printf("%5d -> %5d\n", i, sided_alpha_parents(i));
+      printf("%5d -> %5d\n", i, alpha_parents(i));
+    fflush(stdout);
 #endif
 
     // Step 7: build full dendrogram
-    Kokkos::Profiling::ProfilingSection profile_compute_sided_parents(
-        "ArborX::Dendrogram::sided_parents");
-    profile_compute_sided_parents.start();
-    auto sided_parents =
-        Details::computeSidedParents(exec_space, sided_alpha_parents);
-    profile_compute_sided_parents.stop();
+    Kokkos::Profiling::ProfilingSection profile_compute_parents(
+        "ArborX::Dendrogram::parents");
+    profile_compute_parents.start();
+    auto parents =
+        Details::computeParents(exec_space, sorted_edges, alpha_parents);
+    profile_compute_parents.stop();
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
-    printf("[7] Sided parents:\n");
+    printf("[7] parents:\n");
     for (int i = 0; i < num_edges; ++i)
-      printf("%5d -> %5d\n", i, sided_parents(i));
+      printf("%5d -> %5d\n", i, parents(i));
+    fflush(stdout);
 #endif
 
-    return sided_parents;
+    return parents;
   }
 };
 
