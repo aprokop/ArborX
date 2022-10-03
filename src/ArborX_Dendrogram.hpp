@@ -146,7 +146,7 @@ struct Dendrogram
 
     auto const num_edges = sorted_edges.extent_int(0);
 
-    // #define VERBOSE
+#define VERBOSE
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
@@ -247,14 +247,14 @@ struct Dendrogram
     }
 #endif
 
-    // Step 6: compute sided parents
-    Kokkos::Profiling::ProfilingSection profile_compute_sided_parents(
-        "ArborX::Dendrogram::sided_parents");
-    profile_compute_sided_parents.start();
+    // Step 6: compute sided alpha_parents
+    Kokkos::Profiling::ProfilingSection profile_compute_sided_alpha_parents(
+        "ArborX::Dendrogram::sided_alpha_parents");
+    profile_compute_sided_alpha_parents.start();
     auto sided_alpha_parents = computeSidedAlphaParents(
         exec_space, sorted_edges, alpha_edge_indices, alpha_vertices,
         sided_alpha_parents_of_alpha, alpha_mat_offsets, alpha_mat_edges);
-    profile_compute_sided_parents.stop();
+    profile_compute_sided_alpha_parents.stop();
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
@@ -263,17 +263,22 @@ struct Dendrogram
       printf("%5d -> %5d\n", i, sided_alpha_parents(i));
 #endif
 
-    // Step 7: produce unsided parents
-    Kokkos::View<int *, MemorySpace> sided_edge_parents(
-        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                           "ArborX::Dendrogram::edge_parents"),
-        num_edges);
+    // Step 7: build full dendrogram
+    Kokkos::Profiling::ProfilingSection profile_compute_sided_parents(
+        "ArborX::Dendrogram::sided_parents");
+    profile_compute_sided_parents.start();
+    auto sided_parents =
+        Details::computeSidedParents(exec_space, sided_alpha_parents);
+    profile_compute_sided_parents.stop();
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
+    printf("[7] Sided parents:\n");
+    for (int i = 0; i < num_edges; ++i)
+      printf("%5d -> %5d\n", i, sided_parents(i));
 #endif
 
-    return sided_edge_parents;
+    return sided_parents;
   }
 };
 

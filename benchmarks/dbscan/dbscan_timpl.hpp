@@ -389,12 +389,15 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
                    "ArborX::Dendrogram::alpha_vertices"));
         printf("---- alpha mst      : %10.3f\n",
                arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst"));
-        printf("---- dendrogram (a) : %10.3f\n",
+        printf("---- a-dendrogram   : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::dendrogram_alpha"));
         printf("---- alpha matrix   : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::alpha_incidence_matrix"));
+        printf("---- sided a-parents: %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::sided_alpha_parents"));
         printf("---- sided parents  : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::sided_parents"));

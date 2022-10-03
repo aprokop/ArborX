@@ -474,6 +474,36 @@ Kokkos::View<int *, MemorySpace> computeSidedAlphaParents(
   return sided_alpha_parents;
 }
 
+template <typename ExecutionSpace, typename MemorySpace>
+Kokkos::View<int *, MemorySpace>
+computeSidedParents(ExecutionSpace const &exec_space,
+                    Kokkos::View<int *, MemorySpace> sided_alpha_parents)
+{
+  auto num_edges = sided_alpha_parents.size();
+
+  auto sided_alpha_parents_clone =
+      KokkosExt::clone(exec_space, sided_alpha_parents);
+  auto permute = sortObjects(exec_space, sided_alpha_parents_clone);
+
+  Kokkos::View<int *, MemorySpace> sided_parents(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::sided_parents"),
+      num_edges);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compute_sided_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const i) {
+        int e = permute(i);
+        if (i < (int)num_edges - 1 &&
+            sided_alpha_parents_clone(i) == sided_alpha_parents_clone(i + 1))
+          sided_parents(e) =
+              2 * permute(i + 1); // this is actually incorrect sideness
+        else
+          sided_parents(e) = sided_alpha_parents_clone(i);
+      });
+  return sided_parents;
+}
+
 } // namespace ArborX::Details
 
 #endif
