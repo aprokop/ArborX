@@ -139,9 +139,10 @@ struct Dendrogram
   template <typename ExecutionSpace>
   Kokkos::View<int *, MemorySpace>
   alpha(ExecutionSpace const &exec_space,
-        Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges)
+        Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges, int level = 0)
   {
-    Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
+    Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha_" +
+                                  std::to_string(level));
 
     auto const num_edges = sorted_edges.size();
 
@@ -216,7 +217,7 @@ struct Dendrogram
     profile_dendrogram_alpha.start();
     auto alpha_parents_of_alpha =
         (num_alpha_edges > 1000
-             ? alpha(exec_space, alpha_edges)
+             ? alpha(exec_space, alpha_edges, level + 1)
              : Details::dendrogramUnionFind(exec_space, alpha_edges));
     {
       auto alpha_parents_of_alpha_copy =
@@ -300,6 +301,8 @@ struct Dendrogram
       printf("%5d -> %5d\n", i, parents(i));
     fflush(stdout);
 #endif
+
+    Kokkos::Profiling::popRegion();
 
     return parents;
   }

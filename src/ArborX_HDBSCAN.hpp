@@ -111,8 +111,6 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::Profiling::popRegion();
   profile_dendrogram.stop();
 
-  Kokkos::Profiling::popRegion();
-
   Kokkos::View<int *, MemorySpace> labels(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::HDBSCAN::labels"),
