@@ -126,7 +126,8 @@ struct Dendrogram
   }
 
   template <typename ExecutionSpace, typename Edges>
-  auto unionFind(ExecutionSpace const &exec_space, Edges sorted_edges)
+  Kokkos::View<int *, MemorySpace> unionFind(ExecutionSpace const &exec_space,
+                                             Edges sorted_edges)
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
     auto edge_parents = Details::dendrogramUnionFind(exec_space, sorted_edges);
@@ -136,14 +137,15 @@ struct Dendrogram
   }
 
   template <typename ExecutionSpace>
-  auto alpha(ExecutionSpace const &exec_space,
-             Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges)
+  Kokkos::View<int *, MemorySpace>
+  alpha(ExecutionSpace const &exec_space,
+        Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges)
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
     auto const num_edges = sorted_edges.size();
 
-#define VERBOSE
+    // #define VERBOSE
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
@@ -213,7 +215,9 @@ struct Dendrogram
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
     auto alpha_parents_of_alpha =
-        Details::dendrogramUnionFind(exec_space, alpha_edges);
+        (num_alpha_edges > 1000
+             ? alpha(exec_space, alpha_edges)
+             : Details::dendrogramUnionFind(exec_space, alpha_edges));
     {
       auto alpha_parents_of_alpha_copy =
           KokkosExt::clone(exec_space, alpha_parents_of_alpha);

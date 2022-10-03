@@ -337,17 +337,17 @@ computeAlphaParents(ExecutionSpace const &exec_space,
       KOKKOS_LAMBDA(int e) {
         auto const &edge = edges(e);
 
-        printf("e = %d: ", e);
+        // printf("e = %d: ", e);
 
         auto alpha_vertex = alpha_vertices(edge.source);
         if (alpha_vertices(edge.target) != alpha_vertex)
         {
           // This is an alpha-edge
-          printf("skipping alpha-edge\n");
+          // printf("skipping alpha-edge\n");
           alpha_parents(e) = alpha_parents_of_alpha(inverse_alpha_map(e));
           return;
         }
-        printf("processing non alpha-edge\n");
+        // printf("processing non alpha-edge\n");
 
         int largest_smaller = -1;
         int smallest_larger = INT_MAX;
@@ -361,8 +361,8 @@ computeAlphaParents(ExecutionSpace const &exec_space,
           if (alpha_e > e && alpha_e < smallest_larger)
             smallest_larger = alpha_e;
         }
-        printf("largest_smaller = %d, smallest_larger = %d\n", largest_smaller,
-               smallest_larger);
+        // printf("largest_smaller = %d, smallest_larger = %d\n",
+        // largest_smaller, smallest_larger);
 
         assert(largest_smaller != INT_MAX || smallest_larger != -1);
 
@@ -386,10 +386,10 @@ computeAlphaParents(ExecutionSpace const &exec_space,
 
         do
         {
-          std::cout << largest_smaller << " -> "
-                    << alpha_parents_of_alpha(
-                           inverse_alpha_map(largest_smaller))
-                    << std::endl;
+          // std::cout << largest_smaller << " -> "
+          // << alpha_parents_of_alpha(
+          // inverse_alpha_map(largest_smaller))
+          // << std::endl;
           largest_smaller =
               alpha_parents_of_alpha(inverse_alpha_map(largest_smaller));
         } while (largest_smaller < e && largest_smaller != -1);
@@ -457,7 +457,7 @@ computeParents(ExecutionSpace const &exec_space,
           sided_alpha_parents(e) = 2 * alpha_parent + 0;
       });
 
-#if 1
+#if 0
   printf("-------------------------------------\n");
   printf("Sided alpha parents:\n");
   for (int i = 0; i < (int)num_edges; ++i)
