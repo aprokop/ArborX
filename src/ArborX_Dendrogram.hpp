@@ -141,13 +141,14 @@ struct Dendrogram
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
-    // #define VERBOSE
+    auto const num_edges = sorted_edges.size();
+
+#define VERBOSE
 
 #ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[0] edges:\n");
-    auto const num_edges = sorted_edges.extent_int(0);
-    for (int i = 0; i < num_edges; ++i)
+    for (int i = 0; i < (int)num_edges; ++i)
       printf("%5d %5d %10.2f\n", sorted_edges(i).source, sorted_edges(i).target,
              sorted_edges(i).weight);
     fflush(stdout);
@@ -160,11 +161,12 @@ struct Dendrogram
     auto alpha_edge_indices = Details::findAlphaEdges(exec_space, sorted_edges);
     profile_compute_alpha_edges.stop();
 
-#ifdef VERBOSE
-    printf("-------------------------------------\n");
     auto num_alpha_edges = (int)alpha_edge_indices.size();
     printf("#alpha edges: %d [%.2f%%]\n", num_alpha_edges,
            (100.f * num_alpha_edges) / num_edges);
+
+#ifdef VERBOSE
+    printf("-------------------------------------\n");
     printf("[1] Alpha edge indices:\n");
     for (int i = 0; i < (int)alpha_edge_indices.size(); ++i)
       printf(" %d", alpha_edge_indices(i));
@@ -210,8 +212,21 @@ struct Dendrogram
     Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
-    auto alpha_parents_of_alpha = Details::dendrogramUnionFind(
-        exec_space, alpha_edges, alpha_edge_indices);
+    auto alpha_parents_of_alpha =
+        Details::dendrogramUnionFind(exec_space, alpha_edges);
+    {
+      auto alpha_parents_of_alpha_copy =
+          KokkosExt::clone(exec_space, alpha_parents_of_alpha);
+      Kokkos::parallel_for(
+          "ArborX::Dendrogram::transform_alpha_dendrogram",
+          Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+          KOKKOS_LAMBDA(int const e) {
+            alpha_parents_of_alpha(e) =
+                (alpha_parents_of_alpha_copy(e) != -1
+                     ? alpha_edge_indices(alpha_parents_of_alpha_copy(e))
+                     : -1);
+          });
+    }
     profile_dendrogram_alpha.stop();
 
 #ifdef VERBOSE
@@ -261,7 +276,7 @@ struct Dendrogram
 #ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[6] alpha parents:\n");
-    for (int i = 0; i < num_edges; ++i)
+    for (int i = 0; i < (int)num_edges; ++i)
       printf("%5d -> %5d\n", i, alpha_parents(i));
     fflush(stdout);
 #endif
@@ -277,7 +292,7 @@ struct Dendrogram
 #ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[7] parents:\n");
-    for (int i = 0; i < num_edges; ++i)
+    for (int i = 0; i < (int)num_edges; ++i)
       printf("%5d -> %5d\n", i, parents(i));
     fflush(stdout);
 #endif

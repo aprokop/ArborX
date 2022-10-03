@@ -80,7 +80,7 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::labels"),
       num_vertices);
-  Kokkos::deep_copy(labels, UNDEFINED);
+  Kokkos::deep_copy(exec_space, labels, UNDEFINED);
 
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram::copy_to_host");
 
@@ -102,7 +102,7 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
   Kokkos::View<int *, MemorySpace> vertex_labels(
       Kokkos::view_alloc(Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::vertex_labels"),
-      n);
+      num_vertices);
   iota(exec_space, vertex_labels);
   auto vertex_labels_host =
       Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, vertex_labels);
@@ -130,7 +130,7 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
   Kokkos::Profiling::pushRegion(
       "ArborX::Dendrogram::dendrogram::copy_to_device");
 
-  Kokkos::deep_copy(edge_parents, edge_parents_host);
+  Kokkos::deep_copy(exec_space, edge_parents, edge_parents_host);
 
   Kokkos::Profiling::popRegion();
 

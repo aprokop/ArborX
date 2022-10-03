@@ -303,64 +303,6 @@ void buildAlphaIncidenceMatrix(
 
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
-dendrogramUnionFind(ExecutionSpace const &exec_space,
-                    Kokkos::View<WeightedEdge *, MemorySpace> alpha_edges,
-                    Kokkos::View<int *, MemorySpace> alpha_edge_indices)
-{
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
-
-  int const num_alpha_edges = alpha_edges.extent_int(0);
-  int const num_alpha_vertices = num_alpha_edges + 1;
-
-  Kokkos::View<int *, MemorySpace> edge_parents(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::edge_parents"),
-      num_alpha_edges);
-
-  constexpr int UNDEFINED = -1;
-  Kokkos::View<int *, MemorySpace> labels(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::labels"),
-      num_alpha_vertices);
-  Kokkos::deep_copy(labels, UNDEFINED);
-
-  Kokkos::View<int *, MemorySpace> vertex_labels(
-      Kokkos::view_alloc(Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::vertex_labels"),
-      num_alpha_vertices);
-  iota(exec_space, vertex_labels);
-  Details::UnionFind<MemorySpace> union_find(vertex_labels);
-
-  // Run on a single thread
-  Kokkos::parallel_for(
-      "ArborX::dendrogram::union_find",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, 1),
-      KOKKOS_LAMBDA(int) {
-        for (int e = 0; e < num_alpha_edges; ++e)
-        {
-          int i = alpha_edges(e).source;
-          int j = alpha_edges(e).target;
-          for (int k : {i, j})
-          {
-            auto edge_child = labels(union_find.representative(k));
-            if (edge_child != UNDEFINED)
-              edge_parents(edge_child) = alpha_edge_indices(e);
-          }
-
-          union_find.merge(i, j);
-
-          labels(union_find.representative(i)) = e;
-        }
-        edge_parents(num_alpha_edges - 1) = UNDEFINED; // root
-      });
-
-  Kokkos::Profiling::popRegion();
-
-  return edge_parents;
-}
-
-template <typename ExecutionSpace, typename MemorySpace>
-Kokkos::View<int *, MemorySpace>
 computeAlphaParents(ExecutionSpace const &exec_space,
                     Kokkos::View<WeightedEdge *, MemorySpace> edges,
                     Kokkos::View<int *, MemorySpace> alpha_edge_indices,
