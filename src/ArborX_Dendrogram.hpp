@@ -66,10 +66,28 @@ struct Dendrogram
           "ArborX::Dendrogram::edge_sort");
       profile_edge_sort.start();
 
+#ifdef VERBOSE
+      auto const num_edges = edges.size();
+      printf("-------------------------------------\n");
+      printf("edges:\n");
+      for (int i = 0; i < (int)num_edges; ++i)
+        printf("[%5d] %5d %5d %10.2f\n", i, edges(i).source, edges(i).target,
+               edges(i).weight);
+      fflush(stdout);
+#endif
+
       Kokkos::Profiling::pushRegion("ArborX::Dendrogram::edge_sort");
       sorted_edges = KokkosExt::clone(exec_space, edges);
       permute = Details::sortEdges(exec_space, sorted_edges);
       Kokkos::Profiling::popRegion();
+
+#ifdef VERBOSE
+      printf("-------------------------------------\n");
+      printf("permute:\n");
+      for (int i = 0; i < (int)num_edges; ++i)
+        printf("[%5d] %5d\n", i, permute(i));
+      fflush(stdout);
+#endif
 
       profile_edge_sort.stop();
     }
@@ -146,14 +164,12 @@ struct Dendrogram
 
     auto const num_edges = sorted_edges.size();
 
-    // #define VERBOSE
-
 #ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[0] edges:\n");
     for (int i = 0; i < (int)num_edges; ++i)
-      printf("%5d %5d %10.2f\n", sorted_edges(i).source, sorted_edges(i).target,
-             sorted_edges(i).weight);
+      printf("[%5d] %5d %5d %10.2f\n", i, sorted_edges(i).source,
+             sorted_edges(i).target, sorted_edges(i).weight);
     fflush(stdout);
 #endif
 
@@ -216,7 +232,7 @@ struct Dendrogram
         "ArborX::Dendrogram::dendrogram_alpha");
     profile_dendrogram_alpha.start();
     auto alpha_parents_of_alpha =
-        (num_alpha_edges > 1000
+        (level < 3 && num_alpha_edges > 3
              ? alpha(exec_space, alpha_edges, level + 1)
              : Details::dendrogramUnionFind(exec_space, alpha_edges));
     {

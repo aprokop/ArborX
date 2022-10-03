@@ -349,7 +349,8 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
     ArborX::HDBSCAN::Parameters hdbscan_params;
     hdbscan_params.setPrintTimers(params.print_dbscan_timers)
         .setPrintMST(params.print_mst)
-        .setDendrogram(dendrogram);
+        .setDendrogram(dendrogram)
+        .setVerifyDendrogram(params.verify);
 
     Kokkos::Profiling::ProfilingSection profile_total("ArborX::HDBSCAN::total");
     profile_total.start();

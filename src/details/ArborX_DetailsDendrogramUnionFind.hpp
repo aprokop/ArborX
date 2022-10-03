@@ -139,6 +139,64 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
   return edge_parents;
 }
 
+template <typename ExecutionSpace, typename MemorySpace>
+bool verifyDendrogram(ExecutionSpace const &exec_space,
+                      Kokkos::View<WeightedEdge *, MemorySpace> edges,
+                      Kokkos::View<int *, MemorySpace> parents)
+{
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::verification");
+
+  auto const num_edges = edges.size();
+
+  Kokkos::View<float *, MemorySpace> weights(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::verification::weights"),
+      num_edges);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::verification::copy_weights",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const edge_index) {
+        weights(edge_index) = edges(edge_index).weight;
+      });
+
+  auto permute = Details::sortObjects(exec_space, weights);
+
+  Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::verification::sorted_edges"),
+      num_edges);
+  Kokkos::deep_copy(exec_space, sorted_edges, edges);
+  Details::applyPermutation(exec_space, permute, sorted_edges);
+
+  auto correct_parents = dendrogramUnionFind(exec_space, sorted_edges);
+  {
+    auto correct_parents_copy = KokkosExt::clone(exec_space, correct_parents);
+    Kokkos::parallel_for(
+        "ArborX::Dendrogram::verification::permute_results_back",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+        KOKKOS_LAMBDA(int i) {
+          correct_parents(permute(i)) = correct_parents_copy(i);
+        });
+  }
+
+  int num_different = 0;
+  Kokkos::parallel_reduce(
+      "ArborX::Dendrogram::verify",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int i, int &update) {
+        if (parents(i) != correct_parents(i))
+        {
+          printf("[%d] %d vs %d\n", i, parents(i), correct_parents(i));
+          ++update;
+        }
+      },
+      num_different);
+
+  Kokkos::Profiling::popRegion();
+
+  return (num_different == 0);
+}
+
 } // namespace ArborX::Details
 
 #endif

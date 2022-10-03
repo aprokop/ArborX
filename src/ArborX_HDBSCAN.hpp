@@ -32,6 +32,8 @@ struct Parameters
   bool _print_timers = false;
   // Print MST to the standard output
   bool _print_mst = false;
+  // Verify dendrogram
+  bool _verify_dendrogram = false;
   // Dendrogram implementation
   DendrogramImplementation _dendrogram = DendrogramImplementation::UNION_FIND;
 
@@ -43,6 +45,11 @@ struct Parameters
   Parameters &setPrintMST(bool print_mst)
   {
     _print_mst = print_mst;
+    return *this;
+  }
+  Parameters &setVerifyDendrogram(bool verify_dendrogram)
+  {
+    _verify_dendrogram = verify_dendrogram;
     return *this;
   }
   Parameters &setDendrogram(DendrogramImplementation dendrogram)
@@ -107,6 +114,13 @@ hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   {
     Dendrogram<MemorySpace> dendrogram(exec_space, mst.edges,
                                        parameters._dendrogram);
+
+    if (parameters._verify_dendrogram)
+    {
+      auto success = ArborX::Details::verifyDendrogram(
+          exec_space, mst.edges, dendrogram._edge_parents);
+      printf("Verification %s\n", (success ? "passed" : "failed"));
+    }
   }
   Kokkos::Profiling::popRegion();
   profile_dendrogram.stop();

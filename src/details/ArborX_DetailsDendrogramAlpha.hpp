@@ -20,6 +20,8 @@
 
 #include <Kokkos_Core.hpp>
 
+// #define VERBOSE
+
 namespace ArborX::Details
 {
 
@@ -330,7 +332,7 @@ computeAlphaParents(ExecutionSpace const &exec_space,
   constexpr int COMPRESSION_LEVEL = 10;
   constexpr int COMPRESSION_STEP = 10;
 
-  Kokkos::View<int *[COMPRESSION_LEVEL], MemorySpace>
+  Kokkos::View<int * [COMPRESSION_LEVEL + 1], MemorySpace>
       compressed_alpha_parents_of_alpha(
           Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                              "ArborX::Dendrogram::compressed_alpha_parents"),
@@ -342,7 +344,7 @@ computeAlphaParents(ExecutionSpace const &exec_space,
       KOKKOS_LAMBDA(int e) {
         compressed_alpha_parents_of_alpha(e, 0) = alpha_parents_of_alpha(e);
       });
-  for (int level = 1; level < COMPRESSION_LEVEL; ++level)
+  for (int level = 1; level < COMPRESSION_LEVEL + 1; ++level)
   {
     Kokkos::parallel_for(
         "ArborX::Dendrogram::compress_alpha_tree_" + std::to_string(level),
@@ -360,7 +362,7 @@ computeAlphaParents(ExecutionSpace const &exec_space,
           } while (alpha_parent != -1 && k < COMPRESSION_STEP);
           compressed_alpha_parents_of_alpha(e, level) = alpha_parent;
         });
-#if 0
+#ifdef VERBOSE
     printf("-------------------------------------\n");
     printf("[4] Parents of alpha edges (%d):\n",
            (int)std::pow(COMPRESSION_STEP, level));
@@ -381,17 +383,13 @@ computeAlphaParents(ExecutionSpace const &exec_space,
       KOKKOS_LAMBDA(int e) {
         auto const &edge = edges(e);
 
-        // printf("e = %d: ", e);
-
         auto alpha_vertex = alpha_vertices(edge.source);
         if (alpha_vertices(edge.target) != alpha_vertex)
         {
           // This is an alpha-edge
-          // printf("skipping alpha-edge\n");
           alpha_parents(e) = alpha_parents_of_alpha(inverse_alpha_map(e));
           return;
         }
-        // printf("processing non alpha-edge\n");
 
         int largest_smaller = -1;
         int smallest_larger = INT_MAX;
@@ -430,12 +428,8 @@ computeAlphaParents(ExecutionSpace const &exec_space,
 
         do
         {
-          // std::cout << largest_smaller << " -> "
-          // << alpha_parents_of_alpha(
-          // inverse_alpha_map(largest_smaller))
-          // << std::endl;
           auto a_e = inverse_alpha_map(largest_smaller);
-          for (int level = COMPRESSION_LEVEL - 1; level >= 0; --level)
+          for (int level = COMPRESSION_LEVEL; level >= 0; --level)
           {
             auto candidate = compressed_alpha_parents_of_alpha(a_e, level);
             if (level == 0 || (candidate != -1 && candidate < e))
@@ -522,14 +516,15 @@ computeParents(ExecutionSpace const &exec_space,
         sided_alpha_parents(e) = (sided_alpha_parent << shift) + e;
       });
 
-#if 0
+#ifdef VERBOSE
   printf("-------------------------------------\n");
   printf("Sided alpha parents:\n");
   for (int i = 0; i < (int)num_edges; ++i)
-    printf("%5d -> %5d\n", i, sided_alpha_parents(i));
+    printf("%5d -> %5d\n", i, (int)(sided_alpha_parents(i) >> shift));
   fflush(stdout);
 #endif
 
+  // FIXME: use weights
   auto permute = sortObjects(exec_space, sided_alpha_parents);
 
   Kokkos::View<int *, MemorySpace> parents(
