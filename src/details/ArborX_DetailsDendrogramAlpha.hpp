@@ -489,24 +489,37 @@ computeParents(ExecutionSpace const &exec_space,
 
   profile_euler_tour.stop();
 
-  auto sided_alpha_parents = KokkosExt::clone(exec_space, alpha_parents);
+  // Encode both sided parent and edge into long long
+  // This way, once we sort based on this value, edges with the same sided
+  // parent will already be sorted in increasing order.
+  Kokkos::View<long long *, MemorySpace> sided_alpha_parents(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::sided_parents"),
+      num_edges);
+
+  constexpr int shift = 32;
 
   Kokkos::parallel_for(
       "ArborX::Dendrogram::compute_sided_alpha_parents",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const e) {
         auto alpha_parent = alpha_parents(e);
+
+        long long sided_alpha_parent;
         if (alpha_parent == -1)
         {
-          sided_alpha_parents(e) = INT_MAX;
-          return;
+          sided_alpha_parent = INT_MAX;
+        }
+        else
+        {
+          if (euler_tour(2 * e) > euler_tour(2 * alpha_parent) &&
+              euler_tour(2 * e + 1) < euler_tour(2 * alpha_parent + 1))
+            sided_alpha_parent = 2 * alpha_parent + 1;
+          else
+            sided_alpha_parent = 2 * alpha_parent + 0;
         }
 
-        if (euler_tour(2 * e) > euler_tour(2 * alpha_parent) &&
-            euler_tour(2 * e + 1) < euler_tour(2 * alpha_parent + 1))
-          sided_alpha_parents(e) = 2 * alpha_parent + 1;
-        else
-          sided_alpha_parents(e) = 2 * alpha_parent + 0;
+        sided_alpha_parents(e) = (sided_alpha_parent << shift) + e;
       });
 
 #if 0
@@ -530,10 +543,11 @@ computeParents(ExecutionSpace const &exec_space,
         int e = permute(i);
         if (i == (int)num_edges - 1)
           parents(e) = -1;
-        else if (sided_alpha_parents(i) == sided_alpha_parents(i + 1))
+        else if ((sided_alpha_parents(i) >> shift) ==
+                 (sided_alpha_parents(i + 1) >> shift))
           parents(e) = permute(i + 1);
         else
-          parents(e) = sided_alpha_parents(i) / 2;
+          parents(e) = (sided_alpha_parents(i) >> shift) / 2;
       });
   return parents;
 }
