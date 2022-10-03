@@ -327,6 +327,64 @@ computeAlphaParents(ExecutionSpace const &exec_space,
         inverse_alpha_map(alpha_edge_indices(alpha_e)) = alpha_e;
       });
 
+  Kokkos::View<int *, MemorySpace> alpha_parents_of_alpha_2(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_parents_2"),
+      num_alpha_edges);
+  Kokkos::View<int *, MemorySpace> alpha_parents_of_alpha_4(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_parents_4"),
+      num_alpha_edges);
+  Kokkos::View<int *, MemorySpace> alpha_parents_of_alpha_8(
+      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::alpha_parents_8"),
+      num_alpha_edges);
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compress_alpha_tree_2",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int e) {
+        alpha_parents_of_alpha_2(e) =
+            (alpha_parents_of_alpha(e) != -1
+                 ? alpha_parents_of_alpha(
+                       inverse_alpha_map(alpha_parents_of_alpha(e)))
+                 : -1);
+      });
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compress_alpha_tree_4",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int e) {
+        alpha_parents_of_alpha_4(e) =
+            (alpha_parents_of_alpha_2(e) != -1
+                 ? alpha_parents_of_alpha_2(
+                       inverse_alpha_map(alpha_parents_of_alpha_2(e)))
+                 : -1);
+      });
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::compress_alpha_tree_8",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int e) {
+        alpha_parents_of_alpha_8(e) =
+            (alpha_parents_of_alpha_4(e) != -1
+                 ? alpha_parents_of_alpha_4(
+                       inverse_alpha_map(alpha_parents_of_alpha_4(e)))
+                 : -1);
+      });
+#if 0
+  printf("-------------------------------------\n");
+  printf("[4] Parents of alpha edges (2):\n");
+  for (int i = 0; i < (int)num_alpha_edges; ++i)
+    printf("%5d [%5d] -> %5d\n", i, alpha_edge_indices(i),
+           alpha_parents_of_alpha_2(i));
+  printf("[4] Parents of alpha edges (4):\n");
+  for (int i = 0; i < (int)num_alpha_edges; ++i)
+    printf("%5d [%5d] -> %5d\n", i, alpha_edge_indices(i),
+           alpha_parents_of_alpha_4(i));
+  printf("[4] Parents of alpha edges (8):\n");
+  for (int i = 0; i < (int)num_alpha_edges; ++i)
+    printf("%5d [%5d] -> %5d\n", i, alpha_edge_indices(i),
+           alpha_parents_of_alpha_8(i));
+  fflush(stdout);
+#endif
   Kokkos::View<int *, MemorySpace> alpha_parents(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::DBSCAN::alpha_parents"),
@@ -390,8 +448,18 @@ computeAlphaParents(ExecutionSpace const &exec_space,
           // << alpha_parents_of_alpha(
           // inverse_alpha_map(largest_smaller))
           // << std::endl;
-          largest_smaller =
-              alpha_parents_of_alpha(inverse_alpha_map(largest_smaller));
+          auto a_e = inverse_alpha_map(largest_smaller);
+          if (alpha_parents_of_alpha_8(a_e) != -1 &&
+              alpha_parents_of_alpha_8(a_e) < e)
+            largest_smaller = alpha_parents_of_alpha_8(a_e);
+          else if (alpha_parents_of_alpha_4(a_e) != -1 &&
+                   alpha_parents_of_alpha_4(a_e) < e)
+            largest_smaller = alpha_parents_of_alpha_4(a_e);
+          else if (alpha_parents_of_alpha_2(a_e) != -1 &&
+                   alpha_parents_of_alpha_2(a_e) < e)
+            largest_smaller = alpha_parents_of_alpha_2(a_e);
+          else
+            largest_smaller = alpha_parents_of_alpha(a_e);
         } while (largest_smaller < e && largest_smaller != -1);
 
         if (largest_smaller > smallest_larger)
@@ -417,8 +485,8 @@ computeParents(ExecutionSpace const &exec_space,
   Kokkos::Profiling::ProfilingSection profile_euler_tour(
       "ArborX::Dendrogram::euler_tour");
   profile_euler_tour.start();
-  // The returned Euler tour is of size twice the number of edges. Each pair of
-  // entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
+  // The returned Euler tour is of size twice the number of edges. Each pair
+  // of entries {2*i, 2*i+1} correspond to the edge i, in two directions (one
   // going down, one up).
   auto euler_tour = eulerTour(exec_space, edges);
 
