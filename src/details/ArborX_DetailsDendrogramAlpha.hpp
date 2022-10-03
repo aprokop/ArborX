@@ -327,8 +327,8 @@ computeAlphaParents(ExecutionSpace const &exec_space,
         inverse_alpha_map(alpha_edge_indices(alpha_e)) = alpha_e;
       });
 
-  constexpr int COMPRESSION_LEVEL = 3;
-  constexpr int COMPRESSION_STEP = 2;
+  constexpr int COMPRESSION_LEVEL = 10;
+  constexpr int COMPRESSION_STEP = 10;
 
   Kokkos::View<int *[COMPRESSION_LEVEL], MemorySpace>
       compressed_alpha_parents_of_alpha(
