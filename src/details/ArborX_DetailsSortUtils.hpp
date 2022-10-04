@@ -242,6 +242,32 @@ sortObjects(Kokkos::Serial const &space, ViewType &view)
 }
 #endif
 
+#if defined(KOKKOS_ENABLE_OPENMP)
+// NOTE returns the permutation indices **and** sorts the input view
+template <typename ViewType, class SizeType = unsigned int>
+Kokkos::View<SizeType *, typename ViewType::device_type>
+sortObjects(Kokkos::OpenMP const &space, ViewType &view)
+{
+  static_assert(KokkosExt::is_accessible_from<typename ViewType::memory_space,
+                                              Kokkos::OpenMP>::value);
+
+  int const n = view.extent(0);
+
+  Kokkos::View<SizeType *, typename ViewType::device_type> permute(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         "ArborX::Sorting::permutation"),
+      n);
+  ArborX::iota(space, permute);
+
+  std::sort(permute.data(), permute.data() + n,
+            [&view](auto i, auto j) { return view(i) < view(j); });
+
+  applyPermutation(space, permute, view);
+
+  return permute;
+}
+#endif
+
 #if defined(KOKKOS_ENABLE_CUDA) ||                                             \
     (defined(KOKKOS_ENABLE_HIP) && defined(ARBORX_ENABLE_ROCTHRUST))
 // NOTE returns the permutation indices **and** sorts the input view
