@@ -146,21 +146,37 @@ struct Dendrogram
     auto const num_edges = sorted_edges.size();
 
     // Step 1: find alpha edges of the original MST
+    Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
+        "ArborX::Dendrogram::compute_alpha_edges_" + std::to_string(level));
+
+    profile_compute_alpha_edges.start();
     auto alpha_edge_indices = Details::findAlphaEdges(exec_space, sorted_edges);
+    profile_compute_alpha_edges.stop();
 
     auto num_alpha_edges = (int)alpha_edge_indices.size();
     printf("#alpha edges: %d [%.2f%%]\n", num_alpha_edges,
            (100.f * num_alpha_edges) / num_edges);
 
     // Step 2: construct virtual alpha-vertices
+    Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
+        "ArborX::Dendrogram::alpha_vertices_" + std::to_string(level));
+    profile_alpha_vertices.start();
     auto alpha_vertices = Details::assignAlphaVertices(exec_space, sorted_edges,
                                                        alpha_edge_indices);
+    profile_alpha_vertices.stop();
 
     // Step 3: construct alpha-MST
+    Kokkos::Profiling::ProfilingSection profile_alpha_mst(
+        "ArborX::Dendrogram::alpha_mst_" + std::to_string(level));
+    profile_alpha_mst.start();
     auto alpha_edges = Details::buildAlphaMST(
         exec_space, sorted_edges, alpha_edge_indices, alpha_vertices);
+    profile_alpha_mst.stop();
 
     // Step 4: build dendrogram of the alpha-tree
+    Kokkos::Profiling::ProfilingSection profile_dendrogram_alpha(
+        "ArborX::Dendrogram::dendrogram_alpha_" + std::to_string(level));
+    profile_dendrogram_alpha.start();
     auto alpha_parents_of_alpha =
         (level < 5 && num_alpha_edges > 100
              ? alpha(exec_space, alpha_edges, level + 1)
@@ -178,10 +194,14 @@ struct Dendrogram
                      : -1);
           });
     }
+    profile_dendrogram_alpha.stop();
 
     Kokkos::resize(alpha_edges, 0); // deallocate
 
     // Step 5: build alpha incidence matrix
+    Kokkos::Profiling::ProfilingSection profile_build_alpha_incidence_matrix(
+        "ArborX::Dendrogram::alpha_incidence_matrix_" + std::to_string(level));
+    profile_build_alpha_incidence_matrix.start();
     Kokkos::View<int *, MemorySpace> alpha_mat_offsets(
         "ArborX::Dendrogram::alpha_mat_offsets", 0);
     Kokkos::View<int *, MemorySpace> alpha_mat_edges(
@@ -189,11 +209,16 @@ struct Dendrogram
     Details::buildAlphaIncidenceMatrix(exec_space, sorted_edges,
                                        alpha_edge_indices, alpha_vertices,
                                        alpha_mat_offsets, alpha_mat_edges);
+    profile_build_alpha_incidence_matrix.stop();
 
     // Step 6: compute alpha_parents
+    Kokkos::Profiling::ProfilingSection profile_compute_alpha_parents(
+        "ArborX::Dendrogram::alpha_parents_" + std::to_string(level));
+    profile_compute_alpha_parents.start();
     auto alpha_parents = computeAlphaParents(
         exec_space, sorted_edges, alpha_edge_indices, alpha_vertices,
         alpha_parents_of_alpha, alpha_mat_offsets, alpha_mat_edges);
+    profile_compute_alpha_parents.stop();
 
     Kokkos::resize(alpha_edge_indices, 0);     // deallocate
     Kokkos::resize(alpha_vertices, 0);         // deallocate
@@ -202,8 +227,17 @@ struct Dendrogram
     Kokkos::resize(alpha_mat_edges, 0);        // deallocate
 
     // Step 7: build full dendrogram
+    Kokkos::Profiling::ProfilingSection profile_compute_parents(
+        "ArborX::Dendrogram::parents_" + std::to_string(level));
+    profile_compute_parents.start();
+    Kokkos::Profiling::ProfilingSection profile_euler_tour(
+        "ArborX::Dendrogram::euler_tour_" + std::to_string(level));
+    profile_euler_tour.start();
+    auto euler_tour = eulerTour(exec_space, sorted_edges);
+    profile_euler_tour.stop();
     auto parents =
-        Details::computeParents(exec_space, sorted_edges, alpha_parents);
+        Details::computeParents(exec_space, euler_tour, alpha_parents);
+    profile_compute_parents.stop();
 
     Kokkos::Profiling::popRegion();
 

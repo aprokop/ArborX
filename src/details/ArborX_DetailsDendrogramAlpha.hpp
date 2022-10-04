@@ -452,17 +452,12 @@ computeAlphaParents(ExecutionSpace const &exec_space,
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace>
 computeParents(ExecutionSpace const &exec_space,
-               Kokkos::View<WeightedEdge *, MemorySpace> edges,
+               Kokkos::View<int *, MemorySpace> euler_tour,
                Kokkos::View<int *, MemorySpace> alpha_parents)
 {
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_parents");
 
   auto num_edges = alpha_parents.size();
-
-  // The returned Euler tour is of size twice the number of edges. Each pair
-  // of entries {2*i, 2*i+1} correspond to the edge i, in two directions
-  // (one going down, one up).
-  auto euler_tour = eulerTour(exec_space, edges);
 
   // Make sure the first entry for every edge is the start entry (i.e., the
   // smaller one)
