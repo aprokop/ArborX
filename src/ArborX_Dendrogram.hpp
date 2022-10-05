@@ -163,6 +163,17 @@ struct Dendrogram
     int global_num_edges = sorted_edges.size();
 #endif
 
+    Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
+        "ArborX::Dendrogram::alpha_edges");
+    Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
+        "ArborX::Dendrogram::alpha_vertices");
+    Kokkos::Profiling::ProfilingSection profile_build_alpha_incidence_matrix(
+        "ArborX::Dendrogram::alpha_incidence_matrix");
+    Kokkos::Profiling::ProfilingSection profile_update_sided_parents(
+        "ArborX::Dendrogram::sided_parents");
+    Kokkos::Profiling::ProfilingSection profile_compress_edges(
+        "ArborX::Dendrogram::compress_edges");
+
     int level = 0;
     do
     {
@@ -180,8 +191,6 @@ struct Dendrogram
 #endif
 
       // Step 1: find alpha edges of the current MST
-      Kokkos::Profiling::ProfilingSection profile_compute_alpha_edges(
-          "ArborX::Dendrogram::alpha_edges_" + std::to_string(level));
       profile_compute_alpha_edges.start();
       auto alpha_edge_indices = Details::findAlphaEdges(exec_space, edges);
       profile_compute_alpha_edges.stop();
@@ -228,8 +237,6 @@ struct Dendrogram
           KokkosExt::lastElement(exec_space, alpha_edge_indices);
 
       // Step 2: construct virtual alpha-vertices
-      Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
-          "ArborX::Dendrogram::alpha_vertices_" + std::to_string(level));
       profile_alpha_vertices.start();
       auto alpha_vertices =
           Details::assignAlphaVertices(exec_space, edges, alpha_edge_indices);
@@ -245,9 +252,6 @@ struct Dendrogram
 #endif
 
       // Step 3: build alpha incidence matrix
-      Kokkos::Profiling::ProfilingSection profile_build_alpha_incidence_matrix(
-          "ArborX::Dendrogram::alpha_incidence_matrix_" +
-          std::to_string(level));
       profile_build_alpha_incidence_matrix.start();
       Kokkos::View<int *, MemorySpace> alpha_mat_offsets(
           "ArborX::Dendrogram::alpha_mat_offsets", 0);
@@ -274,8 +278,6 @@ struct Dendrogram
 #endif
 
       // Step 4: update sided parents
-      Kokkos::Profiling::ProfilingSection profile_update_sided_parents(
-          "ArborX::Dendrogram::sided_parents_" + std::to_string(level));
       profile_update_sided_parents.start();
       Details::updateSidedParents(
           exec_space, edges, largest_alpha_index, alpha_vertices,
@@ -295,8 +297,6 @@ struct Dendrogram
 #endif
 
       // Step 5: compress edges
-      Kokkos::Profiling::ProfilingSection profile_compress_edges(
-          "ArborX::Dendrogram::compress_edges_" + std::to_string(level));
       profile_compress_edges.start();
       auto [compressed_edges, compressed_global_map] =
           Details::compressEdgesAndGlobalMap(exec_space, edges,

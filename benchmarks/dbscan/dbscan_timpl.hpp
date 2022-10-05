@@ -373,25 +373,25 @@ bool runImpl(ExecutionSpace const &exec_space,
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::mst"));
       printf("-- dendrogram       : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::HDBSCAN::dendrogram"));
-      printf("---0 edge sort      : %10.3f\n",
+      printf("---- edge sort      : %10.3f\n",
              arborx_dbscan_example_get_time("ArborX::Dendrogram::edge_sort"));
       if (params.dendrogram == "alpha")
       {
-        printf("---0 alpha edges    : %10.3f\n",
+        printf(
+            "---- alpha edges    : %10.3f\n",
+            arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_edges"));
+        printf("---- alpha vertices : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_edges_0"));
-        printf("---0 alpha vertices : %10.3f\n",
+                   "ArborX::Dendrogram::alpha_vertices"));
+        printf("---- alpha matrix   : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_vertices_0"));
-        printf("---0 alpha matrix   : %10.3f\n",
+                   "ArborX::Dendrogram::alpha_incidence_matrix"));
+        printf("---- sided parents  : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::alpha_incidence_matrix_0"));
-        printf("---0 sided parents  : %10.3f\n",
+                   "ArborX::Dendrogram::sided_parents"));
+        printf("---- compression    : %10.3f\n",
                arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::sided_parents_0"));
-        printf("---0 compression    : %10.3f\n",
-               arborx_dbscan_example_get_time(
-                   "ArborX::Dendrogram::compress_edges_0"));
+                   "ArborX::Dendrogram::compress_edges"));
         printf("---- parents        : %10.3f\n",
                arborx_dbscan_example_get_time("ArborX::Dendrogram::parents"));
       }
