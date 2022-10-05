@@ -149,12 +149,6 @@ struct Dendrogram
         sorted_edges.size());
     Kokkos::deep_copy(exec_space, sided_level_parents, ROOT_VALUE);
 
-    Kokkos::View<int *, MemorySpace> follow(
-        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                           "ArborX::Dendrogram::follow"),
-        sorted_edges.size());
-    Kokkos::deep_copy(exec_space, follow, -1);
-
     Kokkos::View<int *, MemorySpace> global_map(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "ArborX::Dendrogram::sided_parents"),
@@ -258,9 +252,10 @@ struct Dendrogram
       profile_update_sided_parents.start();
       Details::updateSidedParents(exec_space, edges, alpha_vertices,
                                   alpha_mat_offsets, alpha_mat_edges,
-                                  global_map, sided_level_parents, follow);
+                                  global_map, sided_level_parents);
       profile_update_sided_parents.stop();
 
+      Kokkos::resize(alpha_vertices, 0);    // deallocate
       Kokkos::resize(alpha_mat_offsets, 0); // deallocate
       Kokkos::resize(alpha_mat_edges, 0);   // deallocate
 
@@ -270,39 +265,43 @@ struct Dendrogram
       for (int i = 0; i < (int)global_num_edges; ++i)
         printf("%5d -> %5d\n", i, sided_level_parents(i));
       fflush(stdout);
-      printf("-------------------------------------\n");
-      printf("[%d] follow:\n", level);
-      for (int i = 0; i < (int)global_num_edges; ++i)
-        printf("%5d -> %5d\n", i, follow(i));
-      fflush(stdout);
 #endif
 
-      // Step 5: construct alpha-MST
-      Kokkos::Profiling::ProfilingSection profile_alpha_mst(
-          "ArborX::Dendrogram::alpha_mst_" + std::to_string(level));
-      profile_alpha_mst.start();
-      auto alpha_edges = Details::buildAlphaMST(
-          exec_space, edges, alpha_edge_indices, alpha_vertices);
-      profile_alpha_mst.stop();
-
-      Kokkos::resize(alpha_vertices, 0); // deallocate
-
-#ifdef VERBOSE
-      printf("-------------------------------------\n");
-      printf("[%d] Alpha edges:\n", level);
-      for (int i = 0; i < (int)alpha_edges.size(); ++i)
-        printf("%5d %5d %10.2f\n", alpha_edges(i).source, alpha_edges(i).target,
-               alpha_edges(i).weight);
-      fflush(stdout);
-#endif
-
-      // Step 6: update_global_map
-      Kokkos::Profiling::ProfilingSection profile_update_global_map(
-          "ArborX::Dendrogram::global_map_" + std::to_string(level));
-      profile_update_global_map.start();
-      global_map =
-          Details::updateGlobalMap(exec_space, global_map, alpha_edge_indices);
-      profile_update_global_map.stop();
+      // Step 5: compress edges
+      Kokkos::Profiling::ProfilingSection profile_compress_edges(
+          "ArborX::Dendrogram::compress_edges_" + std::to_string(level));
+      profile_compress_edges.start();
+      Kokkos::View<int *, MemorySpace> compressed_edge_indices(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "ArborX::Dendrogram::compression_indices"),
+          num_edges);
+      Kokkos::View<int *, MemorySpace> compressed_global_map(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "ArborX::Dendrogram::global_map"),
+          num_edges);
+      int num_compressed_edges;
+      Kokkos::parallel_scan(
+          "ArborX::Dendrogram::find_compression_indices",
+          Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+          KOKKOS_LAMBDA(int e, int &update, bool is_final) {
+            if (sided_level_parents(global_map(e)) == ROOT_VALUE)
+            {
+              if (is_final)
+              {
+                compressed_edge_indices(update) = e;
+                compressed_global_map(update) = global_map(e);
+              }
+              ++update;
+            }
+          },
+          num_compressed_edges);
+      Kokkos::resize(compressed_edge_indices, num_compressed_edges);
+      Kokkos::resize(compressed_global_map, num_compressed_edges);
+      auto compressed_vertices = Details::assignAlphaVertices(
+          exec_space, edges, compressed_edge_indices);
+      auto compressed_edges = Details::buildAlphaMST(
+          exec_space, edges, compressed_edge_indices, compressed_vertices);
+      profile_compress_edges.stop();
 
 #ifdef VERBOSE
       printf("-------------------------------------\n");
@@ -314,34 +313,10 @@ struct Dendrogram
 #endif
 
       // Prepare for the next iteration
-      edges = alpha_edges;
+      global_map = compressed_global_map;
+      edges = compressed_edges;
 
     } while (true);
-
-    Kokkos::parallel_for(
-        "ArborX::Dendrogram::reconcile_followed",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, follow.size()),
-        KOKKOS_LAMBDA(int e) {
-          auto current_parent = sided_level_parents(e);
-          if (current_parent != -1)
-          {
-            while (follow(e) != -1)
-            {
-              e = follow(e);
-              auto candidate_parent = sided_level_parents(e);
-              if (candidate_parent != -1 && (e < candidate_parent / 2 &&
-                                             candidate_parent < current_parent))
-                current_parent = candidate_parent;
-            }
-          }
-        });
-#ifdef VERBOSE
-    printf("-------------------------------------\n");
-    printf("[%d] reconciled sided parents:\n", level);
-    for (int i = 0; i < (int)global_num_edges; ++i)
-      printf("%5d -> %5d\n", i, sided_level_parents(i));
-    fflush(stdout);
-#endif
 
     // Step 7: build full dendrogram
     Kokkos::Profiling::ProfilingSection profile_compute_parents(

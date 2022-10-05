@@ -391,12 +391,9 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---0 sided parents  : %10.3f\n",
                arborx_dbscan_example_get_time(
                    "ArborX::Dendrogram::sided_parents_0"));
-        printf(
-            "---0 alpha mst      : %10.3f\n",
-            arborx_dbscan_example_get_time("ArborX::Dendrogram::alpha_mst_0"));
-        printf(
-            "---0 global map     : %10.3f\n",
-            arborx_dbscan_example_get_time("ArborX::Dendrogram::global_map_0"));
+        printf("---0 compression    : %10.3f\n",
+               arborx_dbscan_example_get_time(
+                   "ArborX::Dendrogram::compress_edges_0"));
         printf("---- parents        : %10.3f\n",
                arborx_dbscan_example_get_time("ArborX::Dendrogram::parents"));
       }

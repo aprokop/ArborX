@@ -20,7 +20,7 @@
 
 #include <Kokkos_Core.hpp>
 
-#define VERBOSE
+// #define VERBOSE
 
 namespace ArborX::Details
 {
@@ -311,8 +311,7 @@ void updateSidedParents(ExecutionSpace const &exec_space,
                         Kokkos::View<int *, MemorySpace> &alpha_mat_offsets,
                         Kokkos::View<int *, MemorySpace> &alpha_mat_edges,
                         Kokkos::View<int *, MemorySpace> global_map,
-                        Kokkos::View<int *, MemorySpace> &sided_level_parents,
-                        Kokkos::View<int *, MemorySpace> &follow)
+                        Kokkos::View<int *, MemorySpace> &sided_level_parents)
 {
   Kokkos::Profiling::pushRegion(
       "ArborX::Dendrogram::compute_alpha_inverse_map");
@@ -364,22 +363,6 @@ void updateSidedParents(ExecutionSpace const &exec_space,
 #endif
           sided_level_parents(global_map(e)) =
               2 * global_map(smallest_larger) + static_cast<int>(is_left_side);
-        }
-        else if (largest_smaller != -1)
-        {
-#ifdef VERBOSE
-          printf("%d => %d\n", global_map(e), global_map(largest_smaller));
-#endif
-          if (smallest_larger != INT_MAX)
-          {
-            // Store the current candidate and follow the other
-            bool is_left_side =
-                (alpha_vertices(edges(smallest_larger).source) == alpha_vertex);
-            sided_level_parents(global_map(e)) =
-                2 * global_map(smallest_larger) +
-                static_cast<int>(is_left_side);
-          }
-          follow(global_map(e)) = global_map(largest_smaller);
         }
       });
   Kokkos::Profiling::popRegion();
