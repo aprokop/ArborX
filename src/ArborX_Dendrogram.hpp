@@ -142,12 +142,14 @@ struct Dendrogram
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
+    using Details::ROOT_CHAIN_VALUE;
+    using Details::UNDEFINED_CHAIN_VALUE;
+
     Kokkos::View<int *, MemorySpace> sided_level_parents(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "ArborX::Dendrogram::sided_parents"),
         sorted_edges.size());
-    Kokkos::deep_copy(exec_space, sided_level_parents,
-                      Details::ROOT_CHAIN_VALUE);
+    Kokkos::deep_copy(exec_space, sided_level_parents, UNDEFINED_CHAIN_VALUE);
 
     Kokkos::View<int *, MemorySpace> global_map(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
@@ -171,7 +173,7 @@ struct Dendrogram
 #ifdef VERBOSE
       printf("-------------------------------------\n");
       printf("[%d] edges:\n", level);
-      for (int i = 0; i < (int)num_edges; ++i)
+      for (int i = 0; i < num_edges; ++i)
         printf("[%5d] %5d %5d %10.2f\n", i, edges(i).source, edges(i).target,
                edges(i).weight);
       fflush(stdout);
@@ -201,9 +203,29 @@ struct Dendrogram
       {
         // Done with recursion. The edges that haven't been assigned yet
         // automatically have ROOT_CHAIN_VALUE from the initialization.
+        Kokkos::parallel_for(
+            "ArborX::Dendrogram::assign_remaining_side_parents",
+            Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+            KOKKOS_LAMBDA(int const e) {
+              int &sided_level_parent = sided_level_parents(global_map(e));
+              if (sided_level_parent == UNDEFINED_CHAIN_VALUE)
+                sided_level_parent = ROOT_CHAIN_VALUE;
+            });
+
+#ifdef VERBOSE
+        printf("-------------------------------------\n");
+        printf("[%d] sided parents:\n", level);
+        for (int i = 0; i < (int)global_num_edges; ++i)
+          printf("%5d -> %5d\n", i, sided_level_parents(i));
+        fflush(stdout);
+#endif
+
         Kokkos::Profiling::popRegion();
         break;
       }
+
+      auto const largest_alpha_index =
+          KokkosExt::lastElement(exec_space, alpha_edge_indices);
 
       // Step 2: construct virtual alpha-vertices
       Kokkos::Profiling::ProfilingSection profile_alpha_vertices(
@@ -236,6 +258,8 @@ struct Dendrogram
                                          alpha_mat_edges);
       profile_build_alpha_incidence_matrix.stop();
 
+      Kokkos::resize(alpha_edge_indices, 0); // deallocate
+
 #ifdef VERBOSE
       printf("-------------------------------------\n");
       printf("[%d] Alpha incidence matrix:\n", level);
@@ -253,9 +277,9 @@ struct Dendrogram
       Kokkos::Profiling::ProfilingSection profile_update_sided_parents(
           "ArborX::Dendrogram::sided_parents_" + std::to_string(level));
       profile_update_sided_parents.start();
-      Details::updateSidedParents(exec_space, edges, alpha_vertices,
-                                  alpha_mat_offsets, alpha_mat_edges,
-                                  global_map, sided_level_parents);
+      Details::updateSidedParents(
+          exec_space, edges, largest_alpha_index, alpha_vertices,
+          alpha_mat_offsets, alpha_mat_edges, global_map, sided_level_parents);
       profile_update_sided_parents.stop();
 
       Kokkos::resize(alpha_vertices, 0);    // deallocate

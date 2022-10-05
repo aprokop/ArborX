@@ -25,7 +25,8 @@
 namespace ArborX::Details
 {
 
-constexpr int ROOT_CHAIN_VALUE = -1;
+constexpr int ROOT_CHAIN_VALUE = -2;
+constexpr int UNDEFINED_CHAIN_VALUE = -1;
 
 // Sort edges in increasing order
 template <typename ExecutionSpace, typename MemorySpace>
@@ -307,6 +308,7 @@ void buildAlphaIncidenceMatrix(
 template <typename ExecutionSpace, typename MemorySpace>
 void updateSidedParents(ExecutionSpace const &exec_space,
                         Kokkos::View<WeightedEdge *, MemorySpace> edges,
+                        int largest_alpha_index,
                         Kokkos::View<int *, MemorySpace> alpha_vertices,
                         Kokkos::View<int *, MemorySpace> &alpha_mat_offsets,
                         Kokkos::View<int *, MemorySpace> &alpha_mat_edges,
@@ -364,6 +366,10 @@ void updateSidedParents(ExecutionSpace const &exec_space,
           sided_level_parents(global_map(e)) =
               2 * global_map(smallest_larger) + static_cast<int>(is_left_side);
         }
+        else if (smallest_larger == INT_MAX && e > largest_alpha_index)
+        {
+          sided_level_parents(global_map(e)) = ROOT_CHAIN_VALUE;
+        }
       });
   Kokkos::Profiling::popRegion();
 }
@@ -394,7 +400,7 @@ compressEdgesAndGlobalMap(ExecutionSpace const &exec_space,
       "ArborX::Dendrogram::find_compression_indices",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int e, int &update, bool is_final) {
-        if (sided_level_parents(global_map(e)) == ROOT_CHAIN_VALUE)
+        if (sided_level_parents(global_map(e)) == UNDEFINED_CHAIN_VALUE)
         {
           if (is_final)
           {
