@@ -320,6 +320,7 @@ struct Dendrogram
       // Prepare for the next iteration
       global_map = compressed_global_map;
       edges = compressed_edges;
+      ++level;
 
       Kokkos::Profiling::popRegion();
 
