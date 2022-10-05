@@ -142,12 +142,12 @@ struct Dendrogram
   {
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_alpha");
 
-    constexpr int ROOT_VALUE = -1;
     Kokkos::View<int *, MemorySpace> sided_level_parents(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "ArborX::Dendrogram::sided_parents"),
         sorted_edges.size());
-    Kokkos::deep_copy(exec_space, sided_level_parents, ROOT_VALUE);
+    Kokkos::deep_copy(exec_space, sided_level_parents,
+                      Details::ROOT_CHAIN_VALUE);
 
     Kokkos::View<int *, MemorySpace> global_map(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
@@ -164,7 +164,9 @@ struct Dendrogram
     int level = 0;
     do
     {
-      auto num_edges = edges.size();
+      Kokkos::Profiling::pushRegion("ArborX::Dendrogram::level_" +
+                                    std::to_string(level));
+      int num_edges = edges.size();
 
 #ifdef VERBOSE
       printf("-------------------------------------\n");
@@ -183,8 +185,8 @@ struct Dendrogram
       profile_compute_alpha_edges.stop();
 
       auto num_alpha_edges = (int)alpha_edge_indices.size();
-      printf("[%d] #alpha edges: %d [%.2f%%]\n", level, num_alpha_edges,
-             (100.f * num_alpha_edges) / num_edges);
+      printf("[%d] #alpha edges: %d / %d [%.2f%%]\n", level, num_alpha_edges,
+             num_edges, (100.f * num_alpha_edges) / num_edges);
 
 #ifdef VERBOSE
       printf("-------------------------------------\n");
@@ -198,7 +200,8 @@ struct Dendrogram
       if (num_alpha_edges == 0)
       {
         // Done with recursion. The edges that haven't been assigned yet
-        // automatically have ROOT_VALUE from the initialization.
+        // automatically have ROOT_CHAIN_VALUE from the initialization.
+        Kokkos::Profiling::popRegion();
         break;
       }
 
@@ -271,37 +274,15 @@ struct Dendrogram
       Kokkos::Profiling::ProfilingSection profile_compress_edges(
           "ArborX::Dendrogram::compress_edges_" + std::to_string(level));
       profile_compress_edges.start();
-      Kokkos::View<int *, MemorySpace> compressed_edge_indices(
-          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                             "ArborX::Dendrogram::compression_indices"),
-          num_edges);
-      Kokkos::View<int *, MemorySpace> compressed_global_map(
-          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                             "ArborX::Dendrogram::global_map"),
-          num_edges);
-      int num_compressed_edges;
-      Kokkos::parallel_scan(
-          "ArborX::Dendrogram::find_compression_indices",
-          Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
-          KOKKOS_LAMBDA(int e, int &update, bool is_final) {
-            if (sided_level_parents(global_map(e)) == ROOT_VALUE)
-            {
-              if (is_final)
-              {
-                compressed_edge_indices(update) = e;
-                compressed_global_map(update) = global_map(e);
-              }
-              ++update;
-            }
-          },
-          num_compressed_edges);
-      Kokkos::resize(compressed_edge_indices, num_compressed_edges);
-      Kokkos::resize(compressed_global_map, num_compressed_edges);
-      auto compressed_vertices = Details::assignAlphaVertices(
-          exec_space, edges, compressed_edge_indices);
-      auto compressed_edges = Details::buildAlphaMST(
-          exec_space, edges, compressed_edge_indices, compressed_vertices);
+      auto [compressed_edges, compressed_global_map] =
+          Details::compressEdgesAndGlobalMap(exec_space, edges,
+                                             sided_level_parents, global_map);
       profile_compress_edges.stop();
+
+      auto num_compressed_edges = (int)compressed_edges.size();
+      printf("[%d] #compressed edges: %d / %d [%.2f%%]\n", level,
+             num_compressed_edges, num_edges,
+             (100.f * num_compressed_edges) / num_edges);
 
 #ifdef VERBOSE
       printf("-------------------------------------\n");
@@ -316,9 +297,11 @@ struct Dendrogram
       global_map = compressed_global_map;
       edges = compressed_edges;
 
+      Kokkos::Profiling::popRegion();
+
     } while (true);
 
-    // Step 7: build full dendrogram
+    // Step 6: build full dendrogram
     Kokkos::Profiling::ProfilingSection profile_compute_parents(
         "ArborX::Dendrogram::parents");
     profile_compute_parents.start();
