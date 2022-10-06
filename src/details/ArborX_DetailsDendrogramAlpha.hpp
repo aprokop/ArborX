@@ -331,6 +331,13 @@ void updateSidedParents(ExecutionSpace const &exec_space,
           return;
         }
 
+        if (e > largest_alpha_index)
+        {
+          // No alpha-ancestors, assign to the root chain
+          sided_level_parents(global_map(e)) = ROOT_CHAIN_VALUE;
+          return;
+        }
+
         int largest_smaller = -1;
         int smallest_larger = INT_MAX;
         for (int k = alpha_mat_offsets(alpha_vertex);
@@ -365,10 +372,6 @@ void updateSidedParents(ExecutionSpace const &exec_space,
 #endif
           sided_level_parents(global_map(e)) =
               2 * global_map(smallest_larger) + static_cast<int>(is_left_side);
-        }
-        else if (smallest_larger == INT_MAX && e > largest_alpha_index)
-        {
-          sided_level_parents(global_map(e)) = ROOT_CHAIN_VALUE;
         }
       });
   Kokkos::Profiling::popRegion();
