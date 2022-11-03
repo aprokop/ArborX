@@ -70,7 +70,7 @@
 namespace ArborX::Details
 {
 
-template <typename ExecutionSpace, typename MemorySpace>
+template <typename MemorySpace, bool Serial = false>
 struct UnionFind
 {
   Kokkos::View<int *, MemorySpace> _labels;
@@ -131,15 +131,12 @@ struct UnionFind
   KOKKOS_FUNCTION
   void merge(int i, int j) const
   {
-#ifdef KOKKOS_ENABLE_SERIAL
-    if constexpr (std::is_same_v<ExecutionSpace, Kokkos::Serial>)
+    if constexpr (Serial)
       mergeSerial(i, j);
     else
-#endif
       mergeParallel(i, j);
   }
 
-#ifdef KOKKOS_ENABLE_SERIAL
   KOKKOS_FUNCTION
   void mergeSerial(int i, int j) const
   {
@@ -151,7 +148,6 @@ struct UnionFind
     else
       _labels(vstat) = ostat;
   }
-#endif
 
   KOKKOS_FUNCTION
   void mergeParallel(int i, int j) const
