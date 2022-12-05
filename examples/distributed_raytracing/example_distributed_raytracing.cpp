@@ -486,123 +486,120 @@ int main(int argc, char *argv[])
   // Distributed raytracing approach
   Kokkos::View<float *, MemorySpace> energy_distributed_intersects;
   int rank; // needed for post-processing
-    MPI_Init(NULL, NULL);
+  MPI_Init(NULL, NULL);
+  {
+    int nranks, num_boxes_per_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &nranks);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (rank == 0)
     {
-      int nranks, num_boxes_per_rank;
-      MPI_Comm_size(MPI_COMM_WORLD, &nranks);
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      if (rank == 0)
-      {
-        std::cout << "Running with " << nranks << " MPI ranks" << std::endl;
-        if (num_boxes % nranks != 0)
-          std::cerr << "WARNING: Number of boxes (" << num_boxes
-                    << ") indivisible by number of ranks (" << nranks << ")"
-                    << std::endl;
-      }
-      num_boxes_per_rank = num_boxes / nranks;
+      std::cout << "Running with " << nranks << " MPI ranks" << std::endl;
+      if (num_boxes % nranks != 0)
+        std::cerr << "WARNING: Number of boxes (" << num_boxes
+                  << ") indivisible by number of ranks (" << nranks << ")"
+                  << std::endl;
+    }
+    num_boxes_per_rank = num_boxes / nranks;
 
-      // Distributed BVH: This rank gets only a subsect of the overall boxes
-      // TODO: avoid unecessarily duplicating all of the boxes for all of the
-      // ranks
-      auto boxes_for_rank = Kokkos::subview(
-          boxes, std::pair<int, int>(num_boxes_per_rank * rank,
-                                     num_boxes_per_rank * (rank + 1)));
-      ArborX::DistributedTree<MemorySpace> distributed_bvh{
-          MPI_COMM_WORLD, exec_space, boxes_for_rank};
+    // Distributed BVH: This rank gets only a subsect of the overall boxes
+    // TODO: avoid unecessarily duplicating all of the boxes for all of the
+    // ranks
+    auto boxes_for_rank = Kokkos::subview(
+        boxes, std::pair<int, int>(num_boxes_per_rank * rank,
+                                   num_boxes_per_rank * (rank + 1)));
+    ArborX::DistributedTree<MemorySpace> distributed_bvh{
+        MPI_COMM_WORLD, exec_space, boxes_for_rank};
 
-      // Init Rays
-      // TODO: avoid unecessary duplication, as above
-      auto rays_for_rank = Kokkos::subview(
-          rays,
-          std::pair<int, int>(num_boxes_per_rank * rays_per_box * rank,
-                              num_boxes_per_rank * rays_per_box * (rank + 1)));
+    // Init Rays
+    // TODO: avoid unecessary duplication, as above
+    auto rays_for_rank = Kokkos::subview(
+        rays,
+        std::pair<int, int>(num_boxes_per_rank * rays_per_box * rank,
+                            num_boxes_per_rank * rays_per_box * (rank + 1)));
 
-      // TODO: is there ordered traversal with distributedTree?
-      Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values("values",
-                                                                    0);
-      Kokkos::View<int *, MemorySpace> offsets("offsets", 0);
-      distributed_bvh.query(
-          exec_space, MPIbased::Rays<MemorySpace>{rays_for_rank},
-          MPIbased::AccumulateRayRankIntersections<MemorySpace>{boxes_for_rank,
-                                                                rank},
-          values, offsets);
+    // TODO: is there ordered traversal with distributedTree?
+    Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values("values", 0);
+    Kokkos::View<int *, MemorySpace> offsets("offsets", 0);
+    distributed_bvh.query(exec_space,
+                          MPIbased::Rays<MemorySpace>{rays_for_rank},
+                          MPIbased::AccumulateRayRankIntersections<MemorySpace>{
+                              boxes_for_rank, rank},
+                          values, offsets);
 
-      // Ray IDs from originating rank need to be applied for sorting
-      Kokkos::parallel_for(
-          "Applying ray IDs", rays_for_rank.extent(0),
-          KOKKOS_LAMBDA(int const i) {
-            for (int j = offsets(i); j < offsets(i + 1); j++)
-            {
-              values(j).ray_id = i;
-            }
-          });
+    // Ray IDs from originating rank need to be applied for sorting
+    Kokkos::parallel_for(
+        "Applying ray IDs", rays_for_rank.extent(0),
+        KOKKOS_LAMBDA(int const i) {
+          for (int j = offsets(i); j < offsets(i + 1); j++)
+          {
+            values(j).ray_id = i;
+          }
+        });
 
-      // Sorting ranks by intersection length
-      Kokkos::View<MPIbased::IntersectedRankForSorting *, MemorySpace>
-          sort_array(Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                                        "Example::sort_array"),
-                     values.size());
-      Kokkos::parallel_for(
-          "Example::copy sort_array",
-          Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, values.size()),
-          KOKKOS_LAMBDA(int i) { sort_array(i) = values(i); });
+    // Sorting ranks by intersection length
+    Kokkos::View<MPIbased::IntersectedRankForSorting *, MemorySpace> sort_array(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "Example::sort_array"),
+        values.size());
+    Kokkos::parallel_for(
+        "Example::copy sort_array",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, values.size()),
+        KOKKOS_LAMBDA(int i) { sort_array(i) = values(i); });
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) ||               \
     defined(KOKKOS_ENABLE_SYCL)
-      auto permutation = ArborX::Details::sortObjects(exec_space, sort_array);
+    auto permutation = ArborX::Details::sortObjects(exec_space, sort_array);
 #else
-      auto sort_array_host =
-          Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sort_array);
-      Kokkos::View<int *, Kokkos::HostSpace> permutation_host(
-          Kokkos::view_alloc("Example::permutation",
-                             Kokkos::WithoutInitializing),
-          sort_array_host.size());
-      std::iota(permutation_host.data(),
-                permutation_host.data() + sort_array_host.size(), 0);
-      std::sort(permutation_host.data(),
-                permutation_host.data() + sort_array_host.size(),
-                [&](int const &a, int const &b) {
-                  return (sort_array_host(a) < sort_array_host(b));
-                });
-      auto permutation =
-          Kokkos::create_mirror_view_and_copy(MemorySpace{}, permutation_host);
+    auto sort_array_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sort_array);
+    Kokkos::View<int *, Kokkos::HostSpace> permutation_host(
+        Kokkos::view_alloc("Example::permutation", Kokkos::WithoutInitializing),
+        sort_array_host.size());
+    std::iota(permutation_host.data(),
+              permutation_host.data() + sort_array_host.size(), 0);
+    std::sort(permutation_host.data(),
+              permutation_host.data() + sort_array_host.size(),
+              [&](int const &a, int const &b) {
+                return (sort_array_host(a) < sort_array_host(b));
+              });
+    auto permutation =
+        Kokkos::create_mirror_view_and_copy(MemorySpace{}, permutation_host);
 #endif
-      energy_distributed_intersects = Kokkos::View<float *, MemorySpace>(
-          "Example::energy_distributed_intersects", num_boxes);
+    energy_distributed_intersects = Kokkos::View<float *, MemorySpace>(
+        "Example::energy_distributed_intersects", num_boxes);
 
-      Kokkos::parallel_for(
-          "Evaluating ray intensities", rays_for_rank.extent(0),
-          KOKKOS_LAMBDA(int const i) {
+    Kokkos::parallel_for(
+        "Evaluating ray intensities", rays_for_rank.extent(0),
+        KOKKOS_LAMBDA(int const i) {
 #if KOKKOS_VERSION >= 30700
-            using Kokkos::exp;
+          using Kokkos::exp;
 #else
-            using Kokkos::Experimental::exp;
+          using Kokkos::Experimental::exp;
 #endif
-            float accum_opt_dist = 0, ray_intensity = 0;
-            for (int j = offsets(i); j < offsets(i + 1); ++j)
-            { // each intersected rank
-              const auto &v = values(permutation(j));
-              ray_intensity += exp(-accum_opt_dist) * v.intensity_contribution;
-              accum_opt_dist += v.optical_path_length;
-            }
-            int startbox = num_boxes_per_rank * rank;   // for this rank
-            int bid = (int)i / rays_per_box + startbox; // global box ID
-            Kokkos::atomic_add(&energy_distributed_intersects(bid),
-                               ray_intensity * 4 * pi * kappa / rays_per_box);
-          });
+          float accum_opt_dist = 0, ray_intensity = 0;
+          for (int j = offsets(i); j < offsets(i + 1); ++j)
+          { // each intersected rank
+            const auto &v = values(permutation(j));
+            ray_intensity += exp(-accum_opt_dist) * v.intensity_contribution;
+            accum_opt_dist += v.optical_path_length;
+          }
+          int startbox = num_boxes_per_rank * rank;   // for this rank
+          int bid = (int)i / rays_per_box + startbox; // global box ID
+          Kokkos::atomic_add(&energy_distributed_intersects(bid),
+                             ray_intensity * 4 * pi * kappa / rays_per_box);
+        });
 
-      // Combine all results to the root
-      MPI_Reduce(rank == 0 ? MPI_IN_PLACE
-                           : energy_distributed_intersects.data(),
-                 energy_distributed_intersects.data(), num_boxes, MPI_FLOAT,
-                 MPI_SUM, 0, MPI_COMM_WORLD);
-      if (rank == 0 and print)
-      {
-        printf("Net radiative absorptions:\n");
-        printoutput(energy_distributed_intersects, boxes, 1, 1, 1);
-        printf("\n\n");
-      }
+    // Combine all results to the root
+    MPI_Reduce(rank == 0 ? MPI_IN_PLACE : energy_distributed_intersects.data(),
+               energy_distributed_intersects.data(), num_boxes, MPI_FLOAT,
+               MPI_SUM, 0, MPI_COMM_WORLD);
+    if (rank == 0 and print)
+    {
+      printf("Net radiative absorptions:\n");
+      printoutput(energy_distributed_intersects, boxes, 1, 1, 1);
+      printf("\n\n");
     }
-    MPI_Finalize();
+  }
+  MPI_Finalize();
 
   return EXIT_SUCCESS;
 }
