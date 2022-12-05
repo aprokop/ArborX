@@ -41,10 +41,7 @@
 
 #include <mpi.h>
 
-// Kokkos math functions and constants
-using Kokkos::Experimental::expm1;
-using Kokkos::Experimental::pow;
-using Kokkos::Experimental::pi_v<float>;
+constexpr auto pi = Kokkos::Experimental::pi_v<float>;
 
 // The total energy that is distributed across all rays.
 constexpr float temp = 2000.f;   // medium temperature [Kelvin]
@@ -58,8 +55,25 @@ constexpr float box_emission = 4 * kappa * sigma * pow(temp, 4.f);
 // Energy a rays loses when passing through a cell.
 KOKKOS_INLINE_FUNCTION float lost_energy(float ray_energy, float path_length)
 {
+#if KOKKOS_VERSION >= 30700
+  using Kokkos::expm1;
+#else
+  using Kokkos::Experimental::expm1;
+#endif
   return -ray_energy * expm1(-path_length);
 }
+
+namespace IntersectsBased
+{
+
+/*
+ * Storage for the rays and access traits used in the query/traverse.
+ */
+template <typename MemorySpace>
+struct Rays
+{
+  Kokkos::View<ArborX::Experimental::Ray *, MemorySpace> _rays;
+};
 
 /*
  * IntersectedCell is a storage container for all intersections between rays and
@@ -119,6 +133,8 @@ struct AccumulateRaySphereIntersections
                         /*ray_id*/ predicate_index});
   }
 };
+
+} // namespace IntersectsBased
 
 template <typename MemorySpace>
 struct ArborX::AccessTraits<IntersectsBased::Rays<MemorySpace>,
@@ -470,8 +486,6 @@ int main(int argc, char *argv[])
   // Distributed raytracing approach
   Kokkos::View<float *, MemorySpace> energy_distributed_intersects;
   int rank; // needed for post-processing
-  if (parallel)
-  {
     MPI_Init(NULL, NULL);
     {
       int nranks, num_boxes_per_rank;
@@ -589,75 +603,6 @@ int main(int argc, char *argv[])
       }
     }
     MPI_Finalize();
-  }
-
-  // Now check that the results we got are the same apart from numerical errors
-  // introduced by depositing energy to a particular cell from separate rays
-  // in different order.
-  int n_errors = 0;
-  float rel_tol = 1.e-5;
-  Kokkos::parallel_reduce(
-      "Example::compare",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_boxes),
-      KOKKOS_LAMBDA(int i, int &error) {
-#if KOKKOS_VERSION >= 30700
-        using Kokkos::fabs;
-#else
-        using Kokkos::Experimental::fabs;
-#endif
-        float const abs_error =
-            fabs(energy_ordered_intersects(i) - energy_intersects(i));
-        if (abs_error > rel_tol * fabs(energy_intersects(i)))
-        {
-#ifndef KOKKOS_ENABLE_SYCL
-          printf("%d: %f != %f, relative error: %f\n", i,
-                 energy_ordered_intersects(i), energy_intersects(i),
-                 abs_error / fabs(energy_intersects(i)));
-#endif
-          ++error;
-        }
-      },
-      n_errors);
-
-  // Check again with MPI parallelization
-  int n_errors_mpi = 0;
-  if (parallel and rank == 0)
-  {
-    Kokkos::parallel_reduce(
-        "Example::compare",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_boxes),
-        KOKKOS_LAMBDA(int i, int &error) {
-#if KOKKOS_VERSION >= 30700
-          using Kokkos::fabs;
-#else
-          using Kokkos::Experimental::fabs;
-#endif
-          float const abs_error = // RMCRT results in units of W/m^3, here we
-                                  // convert to W
-              fabs(energy_distributed_intersects(i) * dx * dy * dz -
-                   energy_intersects(i));
-          if (abs_error > rel_tol * fabs(energy_intersects(i)))
-          {
-#ifndef KOKKOS_ENABLE_SYCL
-            printf("%d: %f != %f, relative error: %f\n", i,
-                   energy_distributed_intersects(i) * dx * dy * dz,
-                   energy_intersects(i),
-                   abs_error / fabs(energy_intersects(i)));
-#endif
-            ++error;
-          }
-        },
-        n_errors_mpi);
-  }
-
-  if ((!parallel or rank == 0) and print)
-    printoutput(energy_intersects, boxes, dx, dy, dz);
-
-  std::cerr << "errors intersects-based = " << n_errors << '\n';
-  if (parallel & rank == 0)
-    std::cerr << "errors MPI intersects based = " << n_errors_mpi << '\n';
-  if (n_errors > 0 or (parallel and rank == 0 and n_errors_mpi > 0))
-    return EXIT_FAILURE;
 
   return EXIT_SUCCESS;
 }
