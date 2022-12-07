@@ -40,54 +40,18 @@
 constexpr float temp = 2000.f;   // medium temperature [Kelvin]
 constexpr float sigma = 5.67e-8; // stefan-boltzmann constant [W/m^2K]
 constexpr float pi = Kokkos::Experimental::pi_v<float>;
-constexpr float sigmaT4overPi = sigma * pow(temp, 4.f) / pi;
 constexpr float kappa = 10.f;    // radiative absorption coefficient [1/m]
 
-namespace IntersectsBased
+KOKKOS_INLINE_FUNCTION float sigmaT4overPi()
 {
+  #if KOKKOS_VERSION >= 30700
+            using Kokkos::pow;
+  #else
+            using Kokkos::Experimental::pow;
+  #endif
+  return sigma * pow(temp, 4.f) / pi;
+}
 
-/*
- * Storage for the rays and access traits used in the query/traverse.
- */
-template <typename MemorySpace>
-struct Rays
-{
-  Kokkos::View<ArborX::Experimental::Ray *, MemorySpace> _rays;
-};
-
-/*
- * IntersectedBox is a storage container for all intersections between rays and
- * boxes. The member variables that are relevant for sorting the intersection
- * according to box and ray are contained in the base class
- * IntersectedBoxForSorting as performance improvement.
- */
-struct IntersectedBoxForSorting
-{
-  float entrylength;
-  int ray_id;
-  friend KOKKOS_FUNCTION bool operator<(IntersectedBoxForSorting const &l,
-                                        IntersectedBoxForSorting const &r)
-  {
-    if (l.ray_id == r.ray_id)
-      return l.entrylength < r.entrylength;
-    return l.ray_id < r.ray_id;
-  }
-};
-
-struct IntersectedBox : public IntersectedBoxForSorting
-{
-  float optical_path_length; // optical distance through box
-  int box_id;               // box ID
-  KOKKOS_FUNCTION IntersectedBox() = default;
-  KOKKOS_FUNCTION IntersectedBox(float entry_length, float path_length,
-                                  int primitive_index, int predicate_index)
-      : IntersectedBoxForSorting{entry_length, predicate_index}
-      , optical_path_length(path_length)
-      , box_id(primitive_index)
-  {}
-};
-
-} // namespace IntersectsBased
 
 namespace MPIbased
 {
@@ -99,7 +63,7 @@ struct Rays
 };
 
 /*
- * IntersectedRank is similar to IntersectedBox but applies for all
+ * IntersectedRank applies for all
  * intersections between rays and overall MPI ranks that are detected when
  * calling AccumulateRayRankIntersectionData struct. The member variables that are
  * relevant for sorting the intersection according to rank and ray are contained
@@ -143,29 +107,40 @@ template <typename MemorySpace>
 struct AccumulateRayRankIntersectionData
 {
   using tag = ArborX::Details::PostCallbackTag;
-  Kokkos::View<ArborX::Box *, MemorySpace> boxes;
+  Kokkos::View<ArborX::Box *, MemorySpace> _boxes;
   Kokkos::View<float *, MemorySpace> _optical_path_lengths;
   Kokkos::View<float *, MemorySpace> _intensity_contributions;
+  Kokkos::View<float *, MemorySpace> _rank_entry_lengths;
   int rank;
 
   /*
-   * Callback to accumulate optical distance (kappa*length) and intensity contribution for use in AccumulateRayRankIntersectionData.
+   * Callback to accumulate optical distance (kappa*length) and intensity contribution from boxes.
    */
   template <typename Predicate>
   KOKKOS_FUNCTION void operator()(Predicate const &predicate,
                                   int const primitive_index) const
   {
+    // TODO: how do we set _optical_path_lengths and _intensity_contributions to be the correct lengths?
+   
+#if KOKKOS_VERSION >= 30700
+    using Kokkos::exp;
+#else
+    using Kokkos::Experimental::exp;
+#endif
+
     float length;
     float entrylength;
     auto const &ray = ArborX::getGeometry(predicate);
-    auto const &box = boxes(primitive_index);
+    auto const &box = _boxes(primitive_index);
     int const predicate_index = ArborX::getData(predicate);
     overlapDistance(ray, box, length, entrylength);
     float const optical_path_length = kappa * length;
     float const optical_path_length_in = _optical_path_lengths(predicate_index);
     
+    // FIXME better approach for these? Only used in regular callback
     _optical_path_lengths(predicate_index) += optical_path_length;
     _intensity_contributions(predicate_index) += sigmaT4overPi*(exp(optical_path_length_in)-exp(_optical_path_lengths(predicate_index)));
+    _rank_entry_lengths(predicate_index) = _rank_entry_lengths(predicate_index)=0 ? entrylength : _rank_entry_lengths(predicate_index);
   }
 
   template <typename Predicates, typename InOutView, typename InView,
@@ -176,103 +151,18 @@ struct AccumulateRayRankIntersectionData
     auto const n = offset.extent(0) - 1;
     auto const num_rays = queries.extent(0);
     auto const num_intersections = in.extent(0);
-    auto const &boxes_ = boxes;
     Kokkos::realloc(out, n);    // one for each ray
     constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
-
-    /* Because the rank's boxes are not defined in order of intersection
-     * within the "in" view, then we must first iterate through each ray-box
-     * intersection to determine the entrancelength and optical distance,
-     * then sort by entrancelength, then iterate through to determine the
-     * radiation intensity contributions.
-     *
-     * An ordered intersects traversal of the bottom_tree would be better
-     * I think
-     */
-    Kokkos::View<float *, MemorySpace> optical_path_lengths(
-        Kokkos::view_alloc("Example::optical_path_lengths",
-                           Kokkos::WithoutInitializing),
-        num_intersections);
-    Kokkos::View<IntersectsBased::IntersectedBoxForSorting *, MemorySpace>
-        sort_array(Kokkos::view_alloc("Example::IntersectedBoxes",
-                                      Kokkos::WithoutInitializing),
-                   num_intersections);
-    Kokkos::parallel_for(
-        "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
-          auto const &ray = ArborX::getGeometry(queries(i));
-          float length, entrylength;
-          for (int j = offset(i); j < offset(i + 1); ++j)
-          {
-            auto const &box = boxes_(in(j));
-            overlapDistance(ray, box, length, entrylength);
-            optical_path_lengths(j) = length * kappa;
-            sort_array(j) =
-                IntersectsBased::IntersectedBoxForSorting{entrylength, i};
-          }
-        });
-
-    // Sorting box intersections within rank (TODO OrderedIntersects for this?)
-    Kokkos::Profiling::pushRegion("Example::sorting by key");
-#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) ||               \
-    defined(KOKKOS_ENABLE_SYCL)
-    auto permutation = ArborX::Details::sortObjects(exec_space, sort_array);
-#else
-    auto sort_array_host =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sort_array);
-    Kokkos::View<int *, Kokkos::HostSpace> permutation_host(
-        Kokkos::view_alloc("Example::permutation", Kokkos::WithoutInitializing),
-        sort_array.size());
-    std::iota(permutation_host.data(),
-              permutation_host.data() + sort_array_host.size(), 0);
-    std::sort(permutation_host.data(),
-              permutation_host.data() + sort_array_host.size(),
-              [&](int const &a, int const &b) {
-                return (sort_array_host(a) < sort_array_host(b));
-              });
-    auto permutation =
-        Kokkos::create_mirror_view_and_copy(MemorySpace{}, permutation_host);
-#endif
-    Kokkos::Profiling::popRegion();
-
-
-
-
-
-
 
     // Accumulating two ouputted values for this rank
     Kokkos::parallel_for(
         "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
-#if KOKKOS_VERSION >= 30700
-          using Kokkos::exp;
-          using Kokkos::pow;
-#else
-        using Kokkos::Experimental::exp;
-        using Kokkos::Experimental::pow;
-#endif
-          float accum_optical_length = 0., rankentrylength = inf;
-          float intensity_contribution = 0., optical_length_in;
-          auto const &ray = ArborX::getGeometry(queries(i));
-
-          // Iterating through rank's boxes in order of intersection
-          for (int j = offset(i); j < offset(i + 1); ++j)
-          {
-            auto const &box = boxes_(in(permutation(j)));
-            optical_length_in = accum_optical_length;
-            accum_optical_length += optical_path_lengths(permutation(j));
-            intensity_contribution +=
-                sigmaT4overPi *
-                (exp(-optical_length_in) - exp(-accum_optical_length));
-          }
-
-          // Rank entrance length
-          rankentrylength = sort_array(permutation(offset(i))).entrylength;
 
           // Rank output data structure
           out(i) = IntersectedRank{
-              /*entrylength*/ rankentrylength,
-              /*optical_path_length*/ accum_optical_length,
-              /*intensity contr*/ intensity_contribution,
+              /*entrylength*/ _rank_entry_lengths(i),
+              /*optical_path_length*/ _optical_path_lengths(i),
+              /*intensity contr*/ _optical_path_lengths(i),
               /*ray_id*/ 0}; // ray ID on originating rank is tracked by
                              // distributedTree and will be applied later for
                              // sorting
@@ -521,11 +411,14 @@ int main(int argc, char *argv[])
     ArborX::DistributedTree<MemorySpace> distributed_bvh{MPI_COMM_WORLD,
                                                          exec_space, boxes};
 
-    Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values("values", 0);
-    Kokkos::View<int *, MemorySpace> offsets("offsets", 0);
+    Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values("Example::values", 0);
+    Kokkos::View<int *, MemorySpace> offsets("Example::offsets", 0);
+    Kokkos::View<float *, MemorySpace> optical_path_lengths("Example::optical_path_lengths",0);
+    Kokkos::View<float *, MemorySpace> intensity_contributions("Example::intensity_contributions",0);
+    Kokkos::View<float *, MemorySpace> rank_entry_lengths("Example::rank_entry_lengths",0);
     distributed_bvh.query(
         exec_space, MPIbased::Rays<MemorySpace>{rays},
-        MPIbased::AccumulateRayRankIntersectionData<MemorySpace>{boxes, comm_rank},
+        MPIbased::AccumulateRayRankIntersectionData<MemorySpace>{boxes, optical_path_lengths, intensity_contributions, rank_entry_lengths, comm_rank},
         values, offsets);
 
     // Ray IDs from originating rank need to be applied for sorting
