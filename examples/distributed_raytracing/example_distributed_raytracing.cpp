@@ -38,9 +38,10 @@
 
 // The total energy that is distributed across all rays.
 constexpr float temp = 2000.f;   // medium temperature [Kelvin]
-constexpr float kappa = 10.f;    // radiative absorption coefficient [1/m]
 constexpr float sigma = 5.67e-8; // stefan-boltzmann constant [W/m^2K]
 constexpr float pi = Kokkos::Experimental::pi_v<float>;
+constexpr float sigmaT4overPi = sigma * pow(temp, 4.f) / pi;
+constexpr float kappa = 10.f;    // radiative absorption coefficient [1/m]
 
 namespace IntersectsBased
 {
@@ -55,17 +56,17 @@ struct Rays
 };
 
 /*
- * IntersectedCell is a storage container for all intersections between rays and
+ * IntersectedBox is a storage container for all intersections between rays and
  * boxes. The member variables that are relevant for sorting the intersection
  * according to box and ray are contained in the base class
- * IntersectedCellForSorting as performance improvement.
+ * IntersectedBoxForSorting as performance improvement.
  */
-struct IntersectedCellForSorting
+struct IntersectedBoxForSorting
 {
   float entrylength;
   int ray_id;
-  friend KOKKOS_FUNCTION bool operator<(IntersectedCellForSorting const &l,
-                                        IntersectedCellForSorting const &r)
+  friend KOKKOS_FUNCTION bool operator<(IntersectedBoxForSorting const &l,
+                                        IntersectedBoxForSorting const &r)
   {
     if (l.ray_id == r.ray_id)
       return l.entrylength < r.entrylength;
@@ -73,16 +74,16 @@ struct IntersectedCellForSorting
   }
 };
 
-struct IntersectedCell : public IntersectedCellForSorting
+struct IntersectedBox : public IntersectedBoxForSorting
 {
   float optical_path_length; // optical distance through box
-  int cell_id;               // box ID
-  KOKKOS_FUNCTION IntersectedCell() = default;
-  KOKKOS_FUNCTION IntersectedCell(float entry_length, float path_length,
+  int box_id;               // box ID
+  KOKKOS_FUNCTION IntersectedBox() = default;
+  KOKKOS_FUNCTION IntersectedBox(float entry_length, float path_length,
                                   int primitive_index, int predicate_index)
-      : IntersectedCellForSorting{entry_length, predicate_index}
+      : IntersectedBoxForSorting{entry_length, predicate_index}
       , optical_path_length(path_length)
-      , cell_id(primitive_index)
+      , box_id(primitive_index)
   {}
 };
 
@@ -98,9 +99,9 @@ struct Rays
 };
 
 /*
- * IntersectedRank is similar to IntersectedCell but applies for all
+ * IntersectedRank is similar to IntersectedBox but applies for all
  * intersections between rays and overall MPI ranks that are detected when
- * calling AccumulateRayRankIntersections struct. The member variables that are
+ * calling AccumulateRayRankIntersectionData struct. The member variables that are
  * relevant for sorting the intersection according to rank and ray are contained
  * in the base class IntersectedRankForSorting as performance improvement.
  */
@@ -139,11 +140,33 @@ struct IntersectedRank : public IntersectedRankForSorting
  *
  */
 template <typename MemorySpace>
-struct AccumulateRayRankIntersections
+struct AccumulateRayRankIntersectionData
 {
   using tag = ArborX::Details::PostCallbackTag;
   Kokkos::View<ArborX::Box *, MemorySpace> boxes;
+  Kokkos::View<float *, MemorySpace> _optical_path_lengths;
+  Kokkos::View<float *, MemorySpace> _intensity_contributions;
   int rank;
+
+  /*
+   * Callback to accumulate optical distance (kappa*length) and intensity contribution for use in AccumulateRayRankIntersectionData.
+   */
+  template <typename Predicate>
+  KOKKOS_FUNCTION void operator()(Predicate const &predicate,
+                                  int const primitive_index) const
+  {
+    float length;
+    float entrylength;
+    auto const &ray = ArborX::getGeometry(predicate);
+    auto const &box = boxes(primitive_index);
+    int const predicate_index = ArborX::getData(predicate);
+    overlapDistance(ray, box, length, entrylength);
+    float const optical_path_length = kappa * length;
+    float const optical_path_length_in = _optical_path_lengths(predicate_index);
+    
+    _optical_path_lengths(predicate_index) += optical_path_length;
+    _intensity_contributions(predicate_index) += sigmaT4overPi*(exp(optical_path_length_in)-exp(_optical_path_lengths(predicate_index)));
+  }
 
   template <typename Predicates, typename InOutView, typename InView,
             typename OutView>
@@ -151,14 +174,14 @@ struct AccumulateRayRankIntersections
                   OutView &out) const
   {
     auto const n = offset.extent(0) - 1;
-    auto const nrays = queries.extent(0);
-    auto const nintersects = in.extent(0);
-    auto const &boxes_ = boxes; // why do we do this?
+    auto const num_rays = queries.extent(0);
+    auto const num_intersections = in.extent(0);
+    auto const &boxes_ = boxes;
     Kokkos::realloc(out, n);    // one for each ray
     constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
 
-    /* Because the rank's cells are not defined in order of intersection
-     * within the "in" view, then we must first iterate through each ray-cell
+    /* Because the rank's boxes are not defined in order of intersection
+     * within the "in" view, then we must first iterate through each ray-box
      * intersection to determine the entrancelength and optical distance,
      * then sort by entrancelength, then iterate through to determine the
      * radiation intensity contributions.
@@ -166,29 +189,29 @@ struct AccumulateRayRankIntersections
      * An ordered intersects traversal of the bottom_tree would be better
      * I think
      */
-    Kokkos::View<float *, MemorySpace> optical_distances(
-        Kokkos::view_alloc("Example::optical_distances",
+    Kokkos::View<float *, MemorySpace> optical_path_lengths(
+        Kokkos::view_alloc("Example::optical_path_lengths",
                            Kokkos::WithoutInitializing),
-        nintersects);
-    Kokkos::View<IntersectsBased::IntersectedCellForSorting *, MemorySpace>
-        sort_array(Kokkos::view_alloc("Example::IntersectedCells",
+        num_intersections);
+    Kokkos::View<IntersectsBased::IntersectedBoxForSorting *, MemorySpace>
+        sort_array(Kokkos::view_alloc("Example::IntersectedBoxes",
                                       Kokkos::WithoutInitializing),
-                   nintersects);
+                   num_intersections);
     Kokkos::parallel_for(
-        "Evaluating ray-cell interaction", nrays, KOKKOS_LAMBDA(int i) {
+        "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
           auto const &ray = ArborX::getGeometry(queries(i));
           float length, entrylength;
           for (int j = offset(i); j < offset(i + 1); ++j)
           {
             auto const &box = boxes_(in(j));
             overlapDistance(ray, box, length, entrylength);
-            optical_distances(j) = length * kappa;
+            optical_path_lengths(j) = length * kappa;
             sort_array(j) =
-                IntersectsBased::IntersectedCellForSorting{entrylength, i};
+                IntersectsBased::IntersectedBoxForSorting{entrylength, i};
           }
         });
 
-    // Sorting cell intersections within rank (TODO OrderedIntersects for this?)
+    // Sorting box intersections within rank (TODO OrderedIntersects for this?)
     Kokkos::Profiling::pushRegion("Example::sorting by key");
 #if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP) ||               \
     defined(KOKKOS_ENABLE_SYCL)
@@ -211,9 +234,15 @@ struct AccumulateRayRankIntersections
 #endif
     Kokkos::Profiling::popRegion();
 
+
+
+
+
+
+
     // Accumulating two ouputted values for this rank
     Kokkos::parallel_for(
-        "Evaluating ray-cell interaction", nrays, KOKKOS_LAMBDA(int i) {
+        "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
 #if KOKKOS_VERSION >= 30700
           using Kokkos::exp;
           using Kokkos::pow;
@@ -230,9 +259,9 @@ struct AccumulateRayRankIntersections
           {
             auto const &box = boxes_(in(permutation(j)));
             optical_length_in = accum_optical_length;
-            accum_optical_length += optical_distances(permutation(j));
+            accum_optical_length += optical_path_lengths(permutation(j));
             intensity_contribution +=
-                sigma * pow(temp, 4.f) / pi *
+                sigmaT4overPi *
                 (exp(-optical_length_in) - exp(-accum_optical_length));
           }
 
@@ -274,7 +303,7 @@ struct ArborX::AccessTraits<MPIbased::Rays<MemorySpace>, ArborX::PredicatesTag>
   KOKKOS_FUNCTION
   static auto get(MPIbased::Rays<MemorySpace> const &rays, size_type i)
   {
-    return attach(intersects(rays._rays(i)), (int)i);
+    return attach(ordered_intersects(rays._rays(i)), (int)i);
   }
 };
 
@@ -379,7 +408,7 @@ int main(int argc, char *argv[])
 
     if (nx % nx_mpi + ny % ny_mpi + nz % nz_mpi != 0)
     {
-      std::cerr << "ERROR: Please make the number of cells in each direction"
+      std::cerr << "ERROR: Please make the number of boxes in each direction"
                    " divisible by the number of MPI ranks in that direction."
                 << std::endl;
       return EXIT_FAILURE;
@@ -496,7 +525,7 @@ int main(int argc, char *argv[])
     Kokkos::View<int *, MemorySpace> offsets("offsets", 0);
     distributed_bvh.query(
         exec_space, MPIbased::Rays<MemorySpace>{rays},
-        MPIbased::AccumulateRayRankIntersections<MemorySpace>{boxes, comm_rank},
+        MPIbased::AccumulateRayRankIntersectionData<MemorySpace>{boxes, comm_rank},
         values, offsets);
 
     // Ray IDs from originating rank need to be applied for sorting
