@@ -91,6 +91,17 @@ void check_generic_lambda_support(Callback const &)
 #endif
 }
 
+template <class Callback>
+constexpr bool is_generic_lambda_supported()
+{
+#ifdef __NVCC__
+  // Without it would get a segmentation fault and no diagnostic whatsoever
+  return !__nv_is_extended_host_device_lambda_closure_type(Callback);
+#else
+  return true;
+#endif
+}
+
 template <typename Callback, typename Predicates, typename OutputView>
 void check_valid_callback(Callback const &callback, Predicates const &,
                           OutputView const &)
@@ -120,6 +131,36 @@ Sorry!)error");
           Kokkos::detected_t<InlineCallbackArchetypeExpression, Callback,
                              Predicate, OutputFunctorHelper<OutputView>>>{},
       "Callback 'operator()' return type must be void");
+}
+
+template <typename Callback, typename Predicates, typename OutputView>
+constexpr bool is_valid_callback()
+{
+  using Access = AccessTraits<Predicates, PredicatesTag>;
+  using PredicateTag = typename AccessTraitsHelper<Access>::tag;
+  using Predicate = typename AccessTraitsHelper<Access>::type;
+
+  if constexpr (!is_generic_lambda_supported<Callback>())
+    return false;
+
+  if constexpr (std::is_same<PredicateTag, NearestPredicateTag>{} &&
+                Kokkos::is_detected<
+                    Legacy_NearestPredicateInlineCallbackArchetypeExpression,
+                    Callback, Predicate, OutputFunctorHelper<OutputView>>{})
+    return false;
+
+  if constexpr (!(is_valid_predicate_tag<PredicateTag>::value &&
+                  Kokkos::is_detected<InlineCallbackArchetypeExpression,
+                                      Callback, Predicate,
+                                      OutputFunctorHelper<OutputView>>{}))
+    return false;
+
+  if constexpr (!std::is_void<Kokkos::detected_t<
+                    InlineCallbackArchetypeExpression, Callback, Predicate,
+                    OutputFunctorHelper<OutputView>>>{})
+    return false;
+
+  return true;
 }
 
 // EXPERIMENTAL archetypal expression for user callbacks
@@ -206,6 +247,44 @@ void check_valid_callback(Callback const &callback, Predicates const &)
               Kokkos::detected_t<Experimental_CallbackArchetypeExpression,
                                  Callback, Predicate, int>>{},
       "Callback 'operator()' return type must be void");
+}
+
+template <typename Callback, typename Predicates>
+constexpr bool is_valid_callback()
+{
+  using Access = AccessTraits<Predicates, PredicatesTag>;
+  using PredicateTag = typename AccessTraitsHelper<Access>::tag;
+  using Predicate = typename AccessTraitsHelper<Access>::type;
+
+  if constexpr (!is_generic_lambda_supported<Callback>())
+    return false;
+
+  if (!is_valid_predicate_tag<PredicateTag>::value)
+    return false;
+
+  if (!Kokkos::is_detected<Experimental_CallbackArchetypeExpression, Callback,
+                           Predicate, int>{})
+    return false;
+
+  if constexpr ((std::is_same<PredicateTag, SpatialPredicateTag>{} ||
+                 std::is_same<PredicateTag,
+                              Experimental::OrderedSpatialPredicateTag>{}) &&
+                !(std::is_same<CallbackTreeTraversalControl,
+                               Kokkos::detected_t<
+                                   Experimental_CallbackArchetypeExpression,
+                                   Callback, Predicate, int>>{} ||
+                  std::is_void<Kokkos::detected_t<
+                      Experimental_CallbackArchetypeExpression, Callback,
+                      Predicate, int>>{}))
+    return false;
+
+  if constexpr (std::is_same<PredicateTag, NearestPredicateTag>{} &&
+                std::is_void<
+                    Kokkos::detected_t<Experimental_CallbackArchetypeExpression,
+                                       Callback, Predicate, int>>{})
+    return false;
+
+  return true;
 }
 
 } // namespace Details

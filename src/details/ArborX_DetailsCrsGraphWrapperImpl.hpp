@@ -442,7 +442,15 @@ queryDispatch(Tag, Tree const &tree, ExecutionSpace const &space,
   using MemorySpace = typename Tree::memory_space;
   Kokkos::View<int *, MemorySpace> indices(
       "ArborX::CrsGraphWrapper::query::indices", 0);
-  queryDispatch(Tag{}, tree, space, predicates, indices, offset, policy);
+  if constexpr (!is_valid_callback<Callback, Predicates>())
+  {
+    // We don't allow mixing non-pure and post callbacks for now
+    queryDispatch(Tag{}, tree, space, predicates, indices, offset, policy);
+  }
+  else
+  {
+    tree.query(space, predicates, callback);
+  }
   callback(predicates, offset, indices, out);
 }
 
