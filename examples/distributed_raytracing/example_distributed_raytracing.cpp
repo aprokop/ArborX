@@ -96,6 +96,13 @@ struct IntersectedRank : public IntersectedRankForSorting
   {}
 };
 
+struct RayDataAccumulator
+{
+  float optical_path_length;
+  float intensity_contribution;
+  float rank_entry_length;
+};
+
 /*
  *  Callback for storing two accumated values for each ray/rank
  *  intersection:
@@ -108,9 +115,6 @@ struct AccumulateRayRankIntersectionData
 {
   using tag = ArborX::Details::PostCallbackTag;
   Kokkos::View<ArborX::Box *, MemorySpace> _boxes;
-  Kokkos::View<float *, MemorySpace> _optical_path_lengths;
-  Kokkos::View<float *, MemorySpace> _intensity_contributions;
-  Kokkos::View<float *, MemorySpace> _rank_entry_lengths;
   int rank;
 
   /*
@@ -118,11 +122,9 @@ struct AccumulateRayRankIntersectionData
    * contribution from boxes.
    */
   template <typename Predicate>
-  KOKKOS_FUNCTION void operator()(Predicate const &predicate,
+  KOKKOS_FUNCTION void operator()(Predicate &predicate,
                                   int const primitive_index) const
   {
-    // TODO: how do we set _optical_path_lengths and _intensity_contributions to
-    // be the correct lengths?
 
 #if KOKKOS_VERSION >= 30700
     using Kokkos::exp;
@@ -133,20 +135,20 @@ struct AccumulateRayRankIntersectionData
     float length;
     float entrylength;
     auto const &ray = ArborX::getGeometry(predicate);
+    auto &accumulated_data = ArborX::getData(predicate);
     auto const &box = _boxes(primitive_index);
-    int const predicate_index = ArborX::getData(predicate);
+
     overlapDistance(ray, box, length, entrylength);
     float const optical_path_length = kappa * length;
-    float const optical_path_length_in = _optical_path_lengths(predicate_index);
+    float const optical_path_length_in = accumulated_data.optical_path_length;
 
-    // FIXME better approach for these? Only used in regular callback
-    _optical_path_lengths(predicate_index) += optical_path_length;
-    _intensity_contributions(predicate_index) +=
-        sigmaT4overPi * (exp(optical_path_length_in) -
-                         exp(_optical_path_lengths(predicate_index)));
-    _rank_entry_lengths(predicate_index) =
-        _rank_entry_lengths(predicate_index) =
-            0 ? entrylength : _rank_entry_lengths(predicate_index);
+    accumulated_data.optical_path_length += optical_path_length;
+    accumulated_data.intensity_contribution +=
+        sigmaT4overPi() * (exp(optical_path_length_in) -
+                         exp(accumulated_data.optical_path_length));
+    accumulated_data.rank_entry_length =
+        accumulated_data.rank_entry_length > entrylength
+            ? entrylength : accumulated_data.rank_entry_length;
   }
 
   template <typename Predicates, typename InOutView, typename InView,
@@ -163,11 +165,15 @@ struct AccumulateRayRankIntersectionData
     // Accumulating two ouputted values for this rank
     Kokkos::parallel_for(
         "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
+
+          auto const &ray = ArborX::getGeometry(queries(i));
+          auto const &accumulated_data = ArborX::getData(queries(i));
+
           // Rank output data structure
           out(i) = IntersectedRank{
-              /*entrylength*/ _rank_entry_lengths(i),
-              /*optical_path_length*/ _optical_path_lengths(i),
-              /*intensity contr*/ _optical_path_lengths(i),
+              /*entrylength*/ accumulated_data.rank_entry_length,
+              /*optical_path_length*/ accumulated_data.optical_path_length,
+              /*intensity contr*/ accumulated_data.intensity_contribution,
               /*ray_id*/ 0}; // ray ID on originating rank is tracked by
                              // distributedTree and will be applied later for
                              // sorting
@@ -198,7 +204,8 @@ struct ArborX::AccessTraits<MPIbased::Rays<MemorySpace>, ArborX::PredicatesTag>
   KOKKOS_FUNCTION
   static auto get(MPIbased::Rays<MemorySpace> const &rays, size_type i)
   {
-    return attach(ordered_intersects(rays._rays(i)), (int)i);
+    //return attach(ordered_intersects(rays._rays(i)), (int)i);
+    return attach(ordered_intersects(rays._rays(i)), MPIbased::RayDataAccumulator{0.f,0.f,0.f});
   }
 };
 
@@ -300,7 +307,7 @@ int main(int argc, char *argv[])
       std::cout << desc << '\n';
       return 1;
     }
-
+    
     if (nx % nx_mpi + ny % ny_mpi + nz % nz_mpi != 0)
     {
       std::cerr << "ERROR: Please make the number of boxes in each direction"
@@ -322,7 +329,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
       }
     }
-
+    
     int num_boxes = nx * ny * nz;
     float dx = lx / (float)nx;
     float dy = ly / (float)ny;
@@ -341,7 +348,7 @@ int main(int argc, char *argv[])
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                            "Example::boxes"),
         num_boxes);
-
+    
     // Only construct boxes for this rank
     Kokkos::parallel_for(
         "Example::initialize_boxes",
@@ -357,7 +364,7 @@ int main(int argc, char *argv[])
               {(i_global + 1) * dx, (j_global + 1) * dy, (k_global + 1) * dz}};
         });
     Kokkos::Profiling::popRegion();
-
+    
     // For every box shoot rays from random (uniformly distributed) points
     // inside the box in random (uniformly distributed) directions.
     Kokkos::Profiling::pushRegion("Example::make_rays");
@@ -412,11 +419,11 @@ int main(int argc, char *argv[])
     }
     Kokkos::Profiling::popRegion();
     Kokkos::Profiling::popRegion();
-
+    
     ArborX::DistributedTree<MemorySpace> distributed_bvh{MPI_COMM_WORLD,
                                                          exec_space, boxes};
 
-    Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values(
+        Kokkos::View<MPIbased::IntersectedRank *, MemorySpace> values(
         "Example::values", 0);
     Kokkos::View<int *, MemorySpace> offsets("Example::offsets", 0);
     Kokkos::View<float *, MemorySpace> optical_path_lengths(
@@ -427,9 +434,7 @@ int main(int argc, char *argv[])
         "Example::rank_entry_lengths", 0);
     distributed_bvh.query(
         exec_space, MPIbased::Rays<MemorySpace>{rays},
-        MPIbased::AccumulateRayRankIntersectionData<MemorySpace>{
-            boxes, optical_path_lengths, intensity_contributions,
-            rank_entry_lengths, comm_rank},
+        MPIbased::AccumulateRayRankIntersectionData<MemorySpace>{boxes, comm_rank},
         values, offsets);
 
     // Ray IDs from originating rank need to be applied for sorting
