@@ -52,6 +52,19 @@ KOKKOS_INLINE_FUNCTION float sigmaT4overPi()
   return sigma * pow(temp, 4.f) / pi;
 }
 
+namespace ArborX
+{
+
+template <typename Predicate, typename Data>
+KOKKOS_INLINE_FUNCTION Data &
+getData_nonconst(PredicateWithAttachment<Predicate, Data> &pred) noexcept
+{
+  return pred._data;
+}
+
+} // namespace ArborX
+
+
 namespace MPIbased
 {
 
@@ -135,20 +148,25 @@ struct AccumulateRayRankIntersectionData
     float length;
     float entrylength;
     auto const &ray = ArborX::getGeometry(predicate);
-    auto &accumulated_data = ArborX::getData(predicate);
+    //auto &accumulated_data = ArborX::getData(predicate);
+    //auto &accumulated_data = ArborX::getData_nonconst(std::add_lvalue_reference_t<std::remove_cv_t<std::remove_reference_t<Predicate&>>>(predicate));
+    auto &accumulated_data = const_cast<RayDataAccumulator&>(ArborX::getData(predicate));
     auto const &box = _boxes(primitive_index);
 
     overlapDistance(ray, box, length, entrylength);
     float const optical_path_length = kappa * length;
     float const optical_path_length_in = accumulated_data.optical_path_length;
+    printf("in %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
 
     accumulated_data.optical_path_length += optical_path_length;
     accumulated_data.intensity_contribution +=
-        sigmaT4overPi() * (exp(optical_path_length_in) -
-                         exp(accumulated_data.optical_path_length));
+        sigmaT4overPi() * (exp(-optical_path_length_in) -
+                         exp(-accumulated_data.optical_path_length));
     accumulated_data.rank_entry_length =
         accumulated_data.rank_entry_length > entrylength
             ? entrylength : accumulated_data.rank_entry_length;
+
+    printf("out %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
   }
 
   template <typename Predicates, typename InOutView, typename InView,
@@ -168,6 +186,8 @@ struct AccumulateRayRankIntersectionData
 
           auto const &ray = ArborX::getGeometry(queries(i));
           auto const &accumulated_data = ArborX::getData(queries(i));
+          //auto &accumulated_data = ArborX::getData_nonconst(std::add_lvalue_reference_t<typename Predicates::non_const_value_type>(queries(i)));
+   printf("ray %d: %f %f %f\n",i,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
 
           // Rank output data structure
           out(i) = IntersectedRank{
@@ -204,8 +224,8 @@ struct ArborX::AccessTraits<MPIbased::Rays<MemorySpace>, ArborX::PredicatesTag>
   KOKKOS_FUNCTION
   static auto get(MPIbased::Rays<MemorySpace> const &rays, size_type i)
   {
-    //return attach(ordered_intersects(rays._rays(i)), (int)i);
     return attach(ordered_intersects(rays._rays(i)), MPIbased::RayDataAccumulator{0.f,0.f,0.f});
+    //return attach(intersects(rays._rays(i)), MPIbased::RayDataAccumulator{0.f,0.f,0.f});
   }
 };
 
