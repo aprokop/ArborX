@@ -335,6 +335,11 @@ int main(int argc, char *argv[])
 
     if (comm_rank == 0)
     {
+      printf("#ranks        : %d [%d, %d, %d]\n", num_ranks_requested, nx_mpi,
+             ny_mpi, nz_mpi);
+      printf("#cells        : %d [%d, %d, %d]\n", nx * ny * nz, nx, ny, nz);
+      printf("#rays         : %d (%d per cell)\n", nx * ny * nz * rays_per_box,
+             rays_per_box);
       std::cout << "Running with " << num_ranks << " MPI ranks" << std::endl;
       if (num_ranks != num_ranks_requested)
       {
