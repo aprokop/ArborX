@@ -134,7 +134,7 @@ struct AccumulateRayRankIntersectionData
    * Callback to accumulate optical distance (kappa*length) and intensity
    * contribution from boxes.
    */
-  template <typename Predicate>
+  template <typename Predicate>//, typename OutputView>
   KOKKOS_FUNCTION void operator()(Predicate &predicate,
                                   int const primitive_index) const
   {
@@ -154,9 +154,10 @@ struct AccumulateRayRankIntersectionData
     auto const &box = _boxes(primitive_index);
 
     overlapDistance(ray, box, length, entrylength);
+    //printf("trace: in %d length=%f entrylength=%f kappa=%f\n",primitive_index,length,entrylength,kappa);
     float const optical_path_length = kappa * length;
     float const optical_path_length_in = accumulated_data.optical_path_length;
-    printf("in %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
+    //printf("in %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
 
     accumulated_data.optical_path_length += optical_path_length;
     accumulated_data.intensity_contribution +=
@@ -166,7 +167,7 @@ struct AccumulateRayRankIntersectionData
         accumulated_data.rank_entry_length > entrylength
             ? entrylength : accumulated_data.rank_entry_length;
 
-    printf("out %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
+    //printf("out %d: %f %f %f %f\n",primitive_index,optical_path_length_in,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
   }
 
   template <typename Predicates, typename InOutView, typename InView,
@@ -174,10 +175,10 @@ struct AccumulateRayRankIntersectionData
   void operator()(Predicates const &queries, InOutView &offset, InView &in,
                   OutView &out) const
   {
-    auto const n = offset.extent(0) - 1;
     auto const num_rays = queries.extent(0);
     auto const num_intersections = in.extent(0);
-    Kokkos::realloc(out, n); // one for each ray
+    Kokkos::realloc(out, num_rays); // one for each ray
+    Kokkos::realloc(offset, num_rays+1);
     constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
 
     // Accumulating two ouputted values for this rank
@@ -187,7 +188,7 @@ struct AccumulateRayRankIntersectionData
           auto const &ray = ArborX::getGeometry(queries(i));
           auto const &accumulated_data = ArborX::getData(queries(i));
           //auto &accumulated_data = ArborX::getData_nonconst(std::add_lvalue_reference_t<typename Predicates::non_const_value_type>(queries(i)));
-   printf("ray %d: %f %f %f\n",i,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
+   //printf("ray %d: %f %f %f\n",i,accumulated_data.optical_path_length,accumulated_data.intensity_contribution,accumulated_data.rank_entry_length);
 
           // Rank output data structure
           out(i) = IntersectedRank{
@@ -202,8 +203,9 @@ struct AccumulateRayRankIntersectionData
           // ray/rank intersection
           // required for communicateResultsBack to work
           offset(i) = i;
-          if (i == n - 1)
-            offset(n) = n; // set last value as well
+          if (i == num_rays - 1) {
+            offset(num_rays) = num_rays; // set last value as well
+          }
         });
   }
 };
