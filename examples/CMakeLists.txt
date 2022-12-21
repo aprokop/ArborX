@@ -16,4 +16,8 @@ if(Boost_FOUND)
   add_subdirectory(viz)
   add_subdirectory(raytracing)
   add_subdirectory(brute_force)
+
+  if(ARBORX_ENABLE_MPI)
+    add_subdirectory(distributed_raytracing)
+  endif()
 endif()
