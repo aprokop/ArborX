@@ -176,6 +176,8 @@ template <typename Point,
 KOKKOS_INLINE_FUNCTION unsigned int morton32(Point const &p)
 {
   constexpr int DIM = GeometryTraits::dimension_v<Point>;
+  static_assert(DIM >= 2);
+
   constexpr unsigned N = (1u << (32 / DIM));
 
   using KokkosExt::max;
@@ -192,47 +194,37 @@ KOKKOS_INLINE_FUNCTION unsigned int morton32(Point const &p)
 }
 
 template <typename Point,
-          std::enable_if_t<GeometryTraits::is_point<Point>{} &&
-                           GeometryTraits::dimension_v<Point> != 2> * = nullptr>
+          typename Enable = std::enable_if_t<GeometryTraits::is_point<Point>{}>>
 KOKKOS_INLINE_FUNCTION unsigned long long morton64(Point const &p)
 {
+  using KokkosExt::max;
+  using KokkosExt::min;
+
   constexpr int DIM = GeometryTraits::dimension_v<Point>;
+  static_assert(DIM >= 2);
+
   constexpr unsigned N = (1u << (63 / DIM));
 
-  using KokkosExt::max;
-  using KokkosExt::min;
-
-  unsigned long long r = 0;
-  for (int d = 0; d < DIM; ++d)
+  if constexpr (DIM > 2)
   {
-    auto x = min(max(p[d] * N, 0.f), (float)N - 1);
-    r += (expandBitsBy<DIM - 1>((unsigned long long)x) << (DIM - d - 1));
+    unsigned long long r = 0;
+    for (int d = 0; d < DIM; ++d)
+    {
+      auto x = min(max(p[d] * N, 0.f), (float)N - 1);
+      r += (expandBitsBy<DIM - 1>((unsigned long long)x) << (DIM - d - 1));
+    }
+    return r;
   }
+  else
+  {
+    // Special case because it needs double. Float is not sufficient to
+    // represent large integers, which would result in some missing bins.
+    auto xd = min(max((double)p[0] * N, 0.), (double)N - 1);
+    auto yd = min(max((double)p[1] * N, 0.), (double)N - 1);
 
-  return r;
-}
-
-// Calculate a 62-bit Morton code for a 2D point located within [0, 1]^2.
-// Special case because it needs double.
-template <typename Point,
-          std::enable_if_t<GeometryTraits::is_point<Point>{} &&
-                           GeometryTraits::dimension_v<Point> == 2> * = nullptr>
-KOKKOS_INLINE_FUNCTION unsigned long long morton64(Point const &p)
-{
-  // The interval [0,1] is subdivided into 2,147,483,648 bins (in each
-  // direction).
-  constexpr unsigned N = (1u << 31);
-
-  using KokkosExt::max;
-  using KokkosExt::min;
-
-  // Have to use double as float is not sufficient to represent large
-  // integers, which would result in some missing bins.
-  auto xd = min(max((double)p[0] * N, 0.), (double)N - 1);
-  auto yd = min(max((double)p[1] * N, 0.), (double)N - 1);
-
-  return 2 * expandBitsBy<1>((unsigned long long)xd) +
-         expandBitsBy<1>((unsigned long long)yd);
+    return 2 * expandBitsBy<1>((unsigned long long)xd) +
+           expandBitsBy<1>((unsigned long long)yd);
+  }
 }
 
 } // namespace Details
