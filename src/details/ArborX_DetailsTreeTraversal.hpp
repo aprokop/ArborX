@@ -23,6 +23,8 @@
 #include <ArborX_Exception.hpp>
 #include <ArborX_Predicates.hpp>
 
+#include <cstdlib>
+
 namespace ArborX
 {
 namespace Details
@@ -62,6 +64,39 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
     }
     else
     {
+#if defined(KOKKOS_ENABLE_CUDA)
+      if constexpr (std::is_same_v<ExecutionSpace, Kokkos::Cuda>)
+      {
+        char const *env_occupancy =
+            std::getenv("CUDA_OCCUPANCY_TRAVERSAL_SPATIAL");
+
+        if (env_occupancy == NULL || strcmp(env_occupancy, "") == 0)
+        {
+          std::cout << "CUDA occupancy traversal spatial: auto" << std::endl;
+
+          Kokkos::parallel_for("ArborX::TreeTraversal::spatial",
+                               Kokkos::RangePolicy<ExecutionSpace>(
+                                   space, 0, Access::size(predicates)),
+                               *this);
+        }
+        else
+        {
+          int occupancy = std::atoi(env_occupancy);
+
+          std::cout << "CUDA occupancy traversal spatial: " << occupancy
+                    << std::endl;
+
+          Kokkos::parallel_for(
+              "ArborX::TreeTraversal::spatial",
+              Kokkos::Experimental::prefer(
+                  Kokkos::RangePolicy<ExecutionSpace>(space, 0,
+                                                      Access::size(predicates)),
+                  Kokkos::Experimental::DesiredOccupancy{occupancy}),
+              *this);
+        }
+      }
+      else
+#endif
       Kokkos::parallel_for("ArborX::TreeTraversal::spatial",
                            Kokkos::RangePolicy<ExecutionSpace>(
                                space, 0, Access::size(predicates)),
