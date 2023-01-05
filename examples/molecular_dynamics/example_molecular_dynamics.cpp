@@ -10,6 +10,8 @@
  ****************************************************************************/
 
 #include <ArborX.hpp>
+#include <ArborX_DetailsExpandHalfToFull.hpp>
+#include <ArborX_NeighborList.hpp>
 #include <ArborX_Version.hpp>
 
 #include <Kokkos_Random.hpp>
@@ -119,12 +121,25 @@ int main(int argc, char *argv[])
   // TODO scale velocities
   Kokkos::Profiling::popRegion();
 
-  ArborX::BVH<MemorySpace> index(execution_space, particles);
-
   Kokkos::View<int *, MemorySpace> indices("Example::indices", 0);
   Kokkos::View<int *, MemorySpace> offsets("Example::offsets", 0);
+
+  Kokkos::Profiling::pushRegion("half+expand");
+  ArborX::Experimental::findHalfNeighborList(execution_space, particles, r,
+                                             offsets, indices);
+  ArborX::Details::expandHalfToFull(execution_space, offsets, indices);
+  Kokkos::Profiling::popRegion();
+
+  Kokkos::Profiling::pushRegion("classic");
+  ArborX::BVH<MemorySpace> index(execution_space, particles);
   index.query(execution_space, Neighbors<MemorySpace>{particles, r},
               ExcludeSelfCollision{}, indices, offsets);
+  Kokkos::Profiling::popRegion();
+
+  Kokkos::Profiling::pushRegion("full");
+  ArborX::Experimental::findFullNeighborList(execution_space, particles, r,
+                                             offsets, indices);
+  Kokkos::Profiling::popRegion();
 
   Kokkos::View<float *[3], MemorySpace> forces(
       Kokkos::view_alloc(execution_space, "Example::forces"), n);
