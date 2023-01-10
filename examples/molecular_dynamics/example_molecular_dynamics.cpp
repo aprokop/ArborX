@@ -141,6 +141,15 @@ int main(int argc, char *argv[])
                                              offsets, indices);
   Kokkos::Profiling::popRegion();
 
+  Kokkos::Profiling::pushRegion("2D");
+  Kokkos::View<int **, MemorySpace> indices2("Example::indices2", 0, 0);
+  Kokkos::View<int *, MemorySpace> counts("Example::counts", 0);
+  ArborX::Experimental::findHalfNeighborList2D(execution_space, particles, r,
+                                               indices2, counts);
+  ArborX::Experimental::findHalfNeighborList2D(execution_space, particles, r,
+                                               indices2, counts);
+  Kokkos::Profiling::popRegion();
+
   Kokkos::View<float *[3], MemorySpace> forces(
       Kokkos::view_alloc(execution_space, "Example::forces"), n);
   Kokkos::parallel_for(
