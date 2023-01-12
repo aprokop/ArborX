@@ -98,7 +98,7 @@ struct IntersectedRank : public IntersectedRankForSorting
 {
   float optical_path_length;    // optical distance through rank
   float intensity_contribution; // contribution of rank to ray intensity
-  KOKKOS_FUNCTION IntersectedRank() = default;
+  KOKKOS_DEFAULTED_FUNCTION IntersectedRank() = default;
   KOKKOS_FUNCTION IntersectedRank(float entry_length, float path_length,
                                   float rank_intensity_contribution,
                                   int predicate_index)
@@ -167,19 +167,16 @@ struct AccumulateRayRankIntersectionData
 
   template <typename Predicates, typename InOutView, typename InView,
             typename OutView>
-  void operator()(Predicates const &queries, InOutView &offset, InView &in,
+  void operator()(Predicates const &queries, InOutView &offset, InView &,
                   OutView &out) const
   {
-    auto const num_rays = queries.extent(0);
-    auto const num_intersections = in.extent(0);
+    int const num_rays = queries.extent(0);
     Kokkos::realloc(out, num_rays); // one for each ray
     Kokkos::realloc(offset, num_rays + 1);
-    constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
 
     // Accumulating two ouputted values for this rank
     Kokkos::parallel_for(
         "Evaluating ray-box interaction", num_rays, KOKKOS_LAMBDA(int i) {
-          auto const &ray = ArborX::getGeometry(queries(i));
           auto const &accumulated_data = ArborX::getData(queries(i));
 
           // Rank output data structure
@@ -337,7 +334,7 @@ int main(int argc, char *argv[])
     {
       printf("#ranks        : %d [%d, %d, %d]\n", num_ranks_requested, nx_mpi,
              ny_mpi, nz_mpi);
-      printf("#cells        : %d [%d, %d, %d]\n", nx * ny * nz, nx, ny, nz);
+      printf("#cells/rank   : %d [%d, %d, %d]\n", nx * ny * nz, nx, ny, nz);
       printf("#rays         : %d (%d per cell)\n", nx * ny * nz * rays_per_box,
              rays_per_box);
       std::cout << "Running with " << num_ranks << " MPI ranks" << std::endl;
@@ -520,6 +517,7 @@ int main(int argc, char *argv[])
                              ray_intensity * 4 * pi * kappa / rays_per_box);
         });
 
+#if 0
     Kokkos::Profiling::pushRegion("Example::printing_output");
     if (print)
     {
@@ -573,6 +571,7 @@ int main(int argc, char *argv[])
       }
     }
     Kokkos::Profiling::popRegion();
+#endif
   }
   Kokkos::finalize();
   MPI_Finalize();
