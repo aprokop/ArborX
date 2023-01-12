@@ -39,7 +39,7 @@
 // The total energy that is distributed across all rays.
 constexpr float temp = 2000.f;   // medium temperature [Kelvin]
 constexpr float sigma = 5.67e-8; // stefan-boltzmann constant [W/m^2K]
-constexpr float pi = Kokkos::Experimental::pi_v<float>;
+constexpr float pi = Kokkos::numbers::pi_v<float>;
 constexpr float kappa = 10.f; // radiative absorption coefficient [1/m]
 
 KOKKOS_INLINE_FUNCTION float sigmaT4overPi()
