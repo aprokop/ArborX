@@ -25,8 +25,9 @@
 namespace ArborX::Details
 {
 
-constexpr int ROOT_CHAIN_VALUE = -2;
 constexpr int UNDEFINED_CHAIN_VALUE = -1;
+constexpr int ROOT_CHAIN_VALUE = -2;
+constexpr int FOLLOW_CHAIN_VALUE = -3;
 
 // Sort edges in increasing order
 template <typename ExecutionSpace, typename MemorySpace>
@@ -79,6 +80,7 @@ findAlphaEdges(ExecutionSpace const &exec_space,
       num_vertices);
   Kokkos::deep_copy(exec_space, smallest_vertex_incident_edges, INT_MAX);
 
+  // FIXME: can potentially use ScatterView here
   Kokkos::parallel_for(
       "ArborX::Dendrogram::find_smallest_vertex_incident_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
@@ -373,6 +375,17 @@ void updateSidedParents(ExecutionSpace const &exec_space,
           sided_level_parents(global_map(e)) =
               2 * global_map(smallest_larger) + static_cast<int>(is_left_side);
         }
+        else
+        {
+      // The parent is going to be the same as that of the largerst smaller
+      // incident alpha edge
+#ifdef VERBOSE
+          printf("[%d] storing %d\n", global_map(e),
+                 global_map(largest_smaller));
+#endif
+          sided_level_parents(global_map(e)) =
+              FOLLOW_CHAIN_VALUE - global_map(largest_smaller);
+        }
       });
   Kokkos::Profiling::popRegion();
 }
@@ -405,6 +418,7 @@ compressEdgesAndGlobalMap(ExecutionSpace const &exec_space,
       KOKKOS_LAMBDA(int e, int &update, bool is_final) {
         if (sided_level_parents(global_map(e)) == UNDEFINED_CHAIN_VALUE)
         {
+          // This will only be true for alpha-edges
           if (is_final)
           {
             compressed_edge_indices(update) = e;
@@ -450,8 +464,37 @@ computeParents(ExecutionSpace const &exec_space,
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const e) {
         long long key = sided_level_parents(e);
+
+// Unroll the chains
+#ifdef VERBOSE
+        printf("--- %lld\n", key);
+#endif
+        if (key <= FOLLOW_CHAIN_VALUE)
+        {
+          int next = FOLLOW_CHAIN_VALUE - key;
+          do
+          {
+            key = sided_level_parents(next);
+            if (key <= FOLLOW_CHAIN_VALUE)
+              next = FOLLOW_CHAIN_VALUE - key;
+            else if (key >= 0)
+            {
+              next = key / 2;
+              if (next > e)
+                break;
+            }
+            else if (key == ROOT_CHAIN_VALUE)
+              break;
+          } while (true);
+
+#ifdef VERBOSE
+          printf("[%d] recovered %lld\n", e, key);
+#endif
+        }
+
         if (key == ROOT_CHAIN_VALUE)
           key = INT_MAX;
+
         keys(e) = (key << shift) + e;
       });
 
