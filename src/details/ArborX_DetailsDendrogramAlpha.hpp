@@ -21,6 +21,11 @@
 #include <Kokkos_Core.hpp>
 
 // #define VERBOSE
+#define STATS
+
+#ifdef STATS
+#include <map>
+#endif
 
 namespace ArborX::Details
 {
@@ -499,6 +504,29 @@ computeParents(ExecutionSpace const &exec_space,
       });
 
   auto permute = sortObjects(exec_space, keys);
+
+#ifdef STATS
+  {
+    auto keys_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, keys);
+
+    std::map<int, int> chain_map;
+    for (int i = 0; i < (int)num_edges; ++i)
+      ++chain_map[keys_host(i) >> shift];
+
+    int num_chains = chain_map.size();
+    printf("[STAT] #chains: %d\n", num_chains);
+
+    std::map<int, int> chain_map_counts;
+    for (auto &it : chain_map)
+      chain_map_counts[it.second]++;
+
+    printf("[STAT] Chain lengths:\n");
+    for (auto &it : chain_map_counts)
+      printf("[STAT] %7d x %7d [%.2f%%]\n", it.second, it.first,
+             (100.f * it.first * it.second) / num_edges);
+  }
+#endif
 
   Kokkos::View<int *, MemorySpace> parents(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,

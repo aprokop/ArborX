@@ -94,7 +94,7 @@ dendrogramUnionFind(ExecutionSpace const &exec_space,
   Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram::union_find");
 
 #if 1
-  std::cout << "Running Wang's union-find" << std::endl;
+  // std::cout << "Running Wang's union-find" << std::endl;
   WangUnionFind union_find(num_vertices);
   std::ignore = exec_space;
 #else

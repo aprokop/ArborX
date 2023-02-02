@@ -16,6 +16,7 @@
 #include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
+#include <ArborX_DetailsUtils.hpp>
 #include <ArborX_MinimumSpanningTree.hpp> // WeightedEdge
 
 #include <Kokkos_Core.hpp>
@@ -29,6 +30,12 @@ enum class DendrogramImplementation
   ALPHA,
   NONE // FIXME to remove
 };
+
+#ifdef STATS
+template <typename ExecutionSpace, typename Edges>
+int computeDendrogramHeight(ExecutionSpace const &exec_space,
+                            Edges const &edges);
+#endif
 
 template <typename MemorySpace>
 struct Dendrogram
@@ -49,7 +56,7 @@ struct Dendrogram
     Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram");
 
     bool const are_edges_sorted = checkEdgesSorted(exec_space, edges);
-    printf("Edges are sorted: %s\n", (are_edges_sorted ? "yes" : "no"));
+    // printf("Edges are sorted: %s\n", (are_edges_sorted ? "yes" : "no"));
 
     Kokkos::View<WeightedEdge *, MemorySpace> sorted_edges;
     Kokkos::View<unsigned int *, MemorySpace> permute;
@@ -190,14 +197,23 @@ struct Dendrogram
       fflush(stdout);
 #endif
 
+#ifdef STATS
+      printf("[STAT] [level %d] size: %d\n", level, num_edges);
+      auto height = computeDendrogramHeight(exec_space, edges);
+      printf("[STAT] [level %d] height: %d [%.2f]\n", level, height,
+             height / log2(num_edges));
+#endif
+
       // Step 1: find alpha edges of the current MST
       profile_compute_alpha_edges.start();
       auto alpha_edge_indices = Details::findAlphaEdges(exec_space, edges);
       profile_compute_alpha_edges.stop();
 
       auto num_alpha_edges = (int)alpha_edge_indices.size();
-      printf("[%d] #alpha edges: %d / %d [%.2f%%]\n", level, num_alpha_edges,
-             num_edges, (100.f * num_alpha_edges) / num_edges);
+#ifdef STATS
+      printf("[STAT] [level %d] #alpha edges: %d / %d [%.2f%%]\n", level,
+             num_alpha_edges, num_edges, (100.f * num_alpha_edges) / num_edges);
+#endif
 
 #ifdef VERBOSE
       printf("-------------------------------------\n");
@@ -229,6 +245,9 @@ struct Dendrogram
         fflush(stdout);
 #endif
 
+#ifdef STATS
+        printf("[STAT] #levels: %d\n", level + 1);
+#endif
         Kokkos::Profiling::popRegion();
         break;
       }
@@ -303,11 +322,6 @@ struct Dendrogram
                                              sided_level_parents, global_map);
       profile_compress_edges.stop();
 
-      auto num_compressed_edges = (int)compressed_edges.size();
-      printf("[%d] #compressed edges: %d / %d [%.2f%%]\n", level,
-             num_compressed_edges, num_edges,
-             (100.f * num_compressed_edges) / num_edges);
-
 #ifdef VERBOSE
       printf("-------------------------------------\n");
       printf("[%d] global map:\n", level);
@@ -351,6 +365,61 @@ struct Dendrogram
     return parents;
   }
 };
+
+#ifdef STATS
+template <typename ExecutionSpace, typename Edges>
+int computeDendrogramHeight(ExecutionSpace const &exec_space,
+                            Edges const &sorted_edges)
+{
+  using MemorySpace = typename Edges::memory_space;
+
+  // SAME CODE AS UNION_FIND, EXCEPT FOR HEIGHTS
+  int const num_edges = sorted_edges.extent_int(0);
+  int const num_vertices = num_edges + 1;
+
+  Kokkos::View<int *, MemorySpace> edge_parents(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::edge_parents"),
+      num_edges);
+
+  constexpr int UNDEFINED = -1;
+  Kokkos::View<int *, MemorySpace> labels(
+      Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                         "ArborX::Dendrogram::labels"),
+      num_vertices);
+  Kokkos::deep_copy(exec_space, labels, UNDEFINED);
+
+  auto sorted_edges_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, sorted_edges);
+  auto edge_parents_host = Kokkos::create_mirror_view(edge_parents);
+  auto labels_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, labels);
+
+  Kokkos::View<int *, Kokkos::HostSpace> heights("heights", num_edges);
+  Details::WangUnionFind union_find(num_vertices);
+  for (int e = 0; e < num_edges; ++e)
+  {
+    int i = sorted_edges_host(e).source;
+    int j = sorted_edges_host(e).target;
+
+    int height = 0;
+    for (int k : {i, j})
+    {
+      auto edge_child = labels_host(union_find.representative(k));
+
+      if (edge_child != UNDEFINED)
+        height = std::max(height, heights(union_find.representative(k)) + 1);
+    }
+
+    union_find.merge(i, j);
+
+    heights(union_find.representative(i)) = height;
+    labels_host(union_find.representative(i)) = e;
+  }
+
+  return heights(union_find.representative(0));
+}
+#endif
 
 } // namespace ArborX
 
