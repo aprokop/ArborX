@@ -117,7 +117,7 @@ struct Dendrogram
         "ArborX::Dendrogram::check_edges_sorted",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, edges.size() - 1),
         KOKKOS_LAMBDA(int i, int &partial_sum) {
-          if (edges(i).weight < edges(i + 1).weight)
+          if (edges(i).weight > edges(i + 1).weight)
             ++partial_sum;
         },
         count);
