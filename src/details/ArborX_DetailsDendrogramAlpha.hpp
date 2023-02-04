@@ -21,7 +21,7 @@
 #include <Kokkos_Core.hpp>
 
 // #define VERBOSE
-#define STATS
+// #define STATS
 
 #ifdef STATS
 #include <map>
