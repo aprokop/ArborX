@@ -12,13 +12,22 @@
 #define ARBORX_DENDROGRAM_HPP
 
 #include <ArborX_DetailsDendrogram.hpp>
+#include <ArborX_DetailsKokkosExtScopedProfileRegion.hpp>
 #include <ArborX_DetailsKokkosExtSort.hpp>
+#include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsWeightedEdge.hpp>
 
 #include <Kokkos_Core.hpp>
 
 namespace ArborX::Experimental
 {
+
+enum class DendrogramImplementation
+{
+  DEFAULT,
+  UNION_FIND,
+  ALPHA,
+};
 
 template <typename MemorySpace>
 struct Dendrogram
@@ -28,11 +37,22 @@ struct Dendrogram
 
   template <typename ExecutionSpace>
   Dendrogram(ExecutionSpace const &exec_space,
-             Kokkos::View<Details::WeightedEdge *, MemorySpace> edges)
+             Kokkos::View<Details::WeightedEdge *, MemorySpace> edges,
+             DendrogramImplementation impl = DendrogramImplementation::DEFAULT)
       : _parents("ArborX::Dendrogram::parents", 0)
       , _parent_heights("ArborX::Dendrogram::parent_heights", 0)
   {
-    Kokkos::Profiling::pushRegion("ArborX::Dendrogram::Dendrogram");
+    KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::Dendrogram");
+
+    if (impl == DendrogramImplementation::DEFAULT)
+    {
+#ifdef KOKKOS_ENABLE_SERIAL
+      if (std::is_same_v<ExecutionSpace, Kokkos::Serial>)
+        impl = DendrogramImplementation::UNION_FIND;
+      else
+#endif
+        impl = DendrogramImplementation::ALPHA;
+    }
 
     auto const num_edges = edges.size();
     auto const num_vertices = num_edges + 1;
@@ -54,10 +74,19 @@ struct Dendrogram
 
     using ConstEdges =
         Kokkos::View<Details::UnweightedEdge const *, MemorySpace>;
-    Details::dendrogramUnionFind(exec_space, ConstEdges(unweighted_edges),
-                                 _parents);
+    switch (impl)
+    {
+    case DendrogramImplementation::UNION_FIND:
+      Details::dendrogramUnionFind(exec_space, ConstEdges(unweighted_edges),
+                                   _parents);
+      break;
 
-    Kokkos::Profiling::popRegion();
+    case DendrogramImplementation::ALPHA:
+      dendrogramAlpha(exec_space, ConstEdges(unweighted_edges), _parents);
+      break;
+
+    default:; // do nothing
+    }
   }
 
   template <typename ExecutionSpace>
@@ -74,6 +103,109 @@ struct Dendrogram
           weights(e) = edges(e).weight;
           unweighted_edges(e) = {edges(e).source, edges(e).target};
         });
+  }
+
+  template <typename ExecutionSpace>
+  void
+  dendrogramAlpha(ExecutionSpace const &exec_space,
+                  Kokkos::View<Details::UnweightedEdge const *, MemorySpace>
+                      sorted_unweighted_edges,
+                  Kokkos::View<int *, MemorySpace> &parents)
+  {
+    KokkosExt::ScopedProfileRegion guard(
+        "ArborX::Dendrogram::dendrogram_alpha");
+
+    auto &edges = sorted_unweighted_edges;
+    auto const num_global_edges = edges.size();
+
+    using Details::ROOT_CHAIN_VALUE;
+    using Details::UNDEFINED_CHAIN_VALUE;
+
+    Kokkos::View<int *, MemorySpace> sided_level_parents(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::sided_parents"),
+        edges.size());
+    Kokkos::deep_copy(exec_space, sided_level_parents, UNDEFINED_CHAIN_VALUE);
+
+    Kokkos::View<int *, MemorySpace> global_map(
+        Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                           "ArborX::Dendrogram::sided_parents"),
+        num_global_edges);
+    iota(exec_space, global_map);
+
+    int level = 0;
+    do
+    {
+      KokkosExt::ScopedProfileRegion level_guard("ArborX::Dendrogram::level_" +
+                                                 std::to_string(level));
+      int num_edges = edges.size();
+
+      // Step 1: find alpha edges of the current MST
+      auto alpha_edge_indices = Details::findAlphaEdges(exec_space, edges);
+
+      int num_alpha_edges = alpha_edge_indices.size();
+      if (num_alpha_edges == 0)
+      {
+        // Done with recursion. The edges that haven't been assigned yet
+        // automatically have ROOT_CHAIN_VALUE from the initialization.
+        Kokkos::parallel_for(
+            "ArborX::Dendrogram::assign_remaining_side_parents",
+            Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+            KOKKOS_LAMBDA(int const e) {
+              int &sided_level_parent = sided_level_parents(global_map(e));
+              if (sided_level_parent == UNDEFINED_CHAIN_VALUE)
+                sided_level_parent = ROOT_CHAIN_VALUE;
+            });
+        break;
+      }
+
+      auto const largest_alpha_index =
+          KokkosExt::lastElement(exec_space, alpha_edge_indices);
+
+      // Step 2: construct virtual alpha-vertices
+      auto alpha_vertices =
+          Details::assignAlphaVertices(exec_space, edges, alpha_edge_indices);
+
+      // Step 3: build alpha incidence matrix
+      Kokkos::View<int *, MemorySpace> alpha_mat_offsets(
+          "ArborX::Dendrogram::alpha_mat_offsets", 0);
+      Kokkos::View<int *, MemorySpace> alpha_mat_edges(
+          "ArborX::Dendrogram::alpha_mat_edges", 0);
+      Details::buildAlphaIncidenceMatrix(exec_space, edges, alpha_edge_indices,
+                                         alpha_vertices, alpha_mat_offsets,
+                                         alpha_mat_edges);
+
+      Kokkos::resize(alpha_edge_indices, 0); // deallocate
+
+      // Step 4: update sided parents
+      Details::updateSidedParents(
+          exec_space, edges, largest_alpha_index, alpha_vertices,
+          alpha_mat_offsets, alpha_mat_edges, global_map, sided_level_parents);
+
+      Kokkos::resize(alpha_vertices, 0);    // deallocate
+      Kokkos::resize(alpha_mat_offsets, 0); // deallocate
+      Kokkos::resize(alpha_mat_edges, 0);   // deallocate
+
+      // Step 5: compress edges
+      auto [compressed_edges, compressed_global_map] =
+          Details::compressEdgesAndGlobalMap(exec_space, edges,
+                                             sided_level_parents, global_map);
+
+      // Prepare for the next iteration
+      global_map = compressed_global_map;
+      edges = compressed_edges;
+
+      ++level;
+
+    } while (true);
+
+    // Step 6: build edge parents
+    auto edge_parents =
+        Kokkos::subview(parents, Kokkos::make_pair(0, (int)num_global_edges));
+    Details::computeParents(exec_space, sided_level_parents, edge_parents);
+
+    // Step 7: construct final parents
+    // FIXME
   }
 };
 
