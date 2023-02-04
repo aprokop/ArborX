@@ -19,7 +19,7 @@ namespace ArborX::Experimental
 
 template <typename ExecutionSpace, typename Primitives>
 auto hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
-             int core_min_size)
+             int core_min_size, DendrogramImplementation dendrogram_impl)
 {
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN");
 
@@ -31,7 +31,7 @@ auto hdbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::Profiling::popRegion();
 
   Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::dendrogram");
-  Dendrogram<MemorySpace> dendrogram(exec_space, mst.edges);
+  Dendrogram<MemorySpace> dendrogram(exec_space, mst.edges, dendrogram_impl);
   Kokkos::Profiling::popRegion();
 
   Kokkos::Profiling::popRegion();

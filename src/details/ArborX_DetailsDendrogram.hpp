@@ -32,7 +32,7 @@ struct UnweightedEdge
 template <typename Edges, typename Parents>
 void dendrogramUnionFindHost(Edges sorted_edges_host, Parents &parents_host)
 {
-  Kokkos::Profiling::pushRegion(
+  KokkosExt::ScopedProfileRegion guard(
       "ArborX::Dendrogram::dendrogram_union_find::union_find_host");
 
   using ExecutionSpace = Kokkos::DefaultHostExecutionSpace;
@@ -82,8 +82,6 @@ void dendrogramUnionFindHost(Edges sorted_edges_host, Parents &parents_host)
   }
   parents_host(num_edges - 1) = -1; // root
   Kokkos::Profiling::popRegion();
-
-  Kokkos::Profiling::popRegion();
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -92,7 +90,8 @@ void dendrogramUnionFind(
     Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges,
     Kokkos::View<int *, MemorySpace> &parents)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::dendrogram_union_find");
 
   Kokkos::Profiling::pushRegion(
       "ArborX::Dendrogram::dendrogram_union_find::copy_to_host");
@@ -114,7 +113,6 @@ void dendrogramUnionFind(
   Kokkos::deep_copy(exec_space, parents, parents_host);
 
   Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::popRegion();
 }
 
 constexpr int UNDEFINED_CHAIN_VALUE = -1;
@@ -133,7 +131,7 @@ Kokkos::View<int *, MemorySpace>
 findAlphaEdges(ExecutionSpace const &exec_space,
                Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::find_alpha_edges");
+  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::find_alpha_edges");
 
   auto const num_edges = sorted_edges.size();
   auto const num_vertices = num_edges + 1;
@@ -175,8 +173,6 @@ findAlphaEdges(ExecutionSpace const &exec_space,
       num_alpha_edges);
   Kokkos::resize(alpha_edges, num_alpha_edges);
 
-  Kokkos::Profiling::popRegion();
-
   return alpha_edges;
 }
 
@@ -186,7 +182,8 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
                     Kokkos::View<UnweightedEdge const *, MemorySpace> edges,
                     Kokkos::View<int *, MemorySpace> alpha_edge_indices)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::assign_alpha_vertices");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::assign_alpha_vertices");
 
   Kokkos::View<int *, MemorySpace> alpha_inverse_map(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
@@ -283,8 +280,6 @@ assignAlphaVertices(ExecutionSpace const &exec_space,
         });
   }
 
-  Kokkos::Profiling::popRegion();
-
   return alpha_vertices;
 }
 
@@ -295,7 +290,7 @@ buildAlphaMST(ExecutionSpace const &exec_space,
               Kokkos::View<int *, MemorySpace> alpha_edge_indices,
               Kokkos::View<int *, MemorySpace> alpha_vertices)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::build_alpha_mst");
+  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::build_alpha_mst");
 
   auto const num_alpha_edges = alpha_edge_indices.size();
 
@@ -312,8 +307,6 @@ buildAlphaMST(ExecutionSpace const &exec_space,
                           alpha_vertices(edge.target)};
       });
 
-  Kokkos::Profiling::popRegion();
-
   return alpha_edges;
 }
 
@@ -326,7 +319,7 @@ void buildAlphaIncidenceMatrix(
     Kokkos::View<int *, MemorySpace> &alpha_mat_offsets,
     Kokkos::View<int *, MemorySpace> &alpha_mat_edges)
 {
-  Kokkos::Profiling::pushRegion(
+  KokkosExt::ScopedProfileRegion guard(
       "ArborX::Dendrogram::build_alpha_incidence_matrix");
 
   auto num_alpha_edges = alpha_edge_indices.size();
@@ -367,8 +360,6 @@ void buildAlphaIncidenceMatrix(
         alpha_mat_edges(Kokkos::atomic_fetch_add(
             &offsets(alpha_vertices(edge.target)), 1)) = e;
       });
-
-  Kokkos::Profiling::popRegion();
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -434,7 +425,6 @@ void updateSidedParents(ExecutionSpace const &exec_space,
               FOLLOW_CHAIN_VALUE - global_map(largest_smaller);
         }
       });
-  Kokkos::Profiling::popRegion();
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -446,7 +436,7 @@ compressEdgesAndGlobalMap(
     Kokkos::View<int *, MemorySpace> sided_level_parents,
     Kokkos::View<int *, MemorySpace> global_map)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compress_edges");
+  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::compress_edges");
 
   auto const num_edges = edges.size();
 
@@ -483,8 +473,6 @@ compressEdgesAndGlobalMap(
   auto compressed_edges = Details::buildAlphaMST(
       exec_space, edges, compressed_edge_indices, compressed_vertices);
 
-  Kokkos::Profiling::popRegion();
-
   return std::make_pair(compressed_edges, compressed_global_map);
 }
 
@@ -493,7 +481,7 @@ void computeParents(ExecutionSpace const &exec_space,
                     Kokkos::View<int *, MemorySpace> sided_level_parents,
                     Parents &parents)
 {
-  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compute_parents");
+  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::compute_parents");
 
   auto num_edges = sided_level_parents.size();
 
@@ -550,8 +538,6 @@ void computeParents(ExecutionSpace const &exec_space,
         else
           parents(e) = (keys(i) >> shift) / 2;
       });
-
-  Kokkos::Profiling::popRegion();
 }
 
 } // namespace ArborX::Details
