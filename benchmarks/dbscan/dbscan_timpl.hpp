@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2017-2022 by the ArborX authors                            *
+ * Copyright (c) 2017-2023 by the ArborX authors                            *
  * All rights reserved.                                                     *
  *                                                                          *
  * This file is part of the ArborX library. ArborX is                       *
@@ -260,9 +260,17 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
   }
   else if (params.algorithm == "hdbscan")
   {
+    using ArborX::Experimental::DendrogramImplementation;
+    DendrogramImplementation dendrogram_impl =
+        DendrogramImplementation::DEFAULT;
+    if (params.dendrogram == "union-find")
+      dendrogram_impl = DendrogramImplementation::UNION_FIND;
+    else if (params.dendrogram == "alpha")
+      dendrogram_impl = DendrogramImplementation::ALPHA;
+
     Kokkos::Profiling::pushRegion("ArborX::HDBSCAN::total");
-    auto dendrogram = ArborX::Experimental::hdbscan(exec_space, primitives,
-                                                    params.core_min_size);
+    auto dendrogram = ArborX::Experimental::hdbscan(
+        exec_space, primitives, params.core_min_size, dendrogram_impl);
     Kokkos::Profiling::popRegion();
 
     if (params.verbose)
@@ -273,6 +281,27 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
              ArborX_Benchmark::get_time("ArborX::HDBSCAN::dendrogram"));
       printf("---- edge sort      : %10.3f\n",
              ArborX_Benchmark::get_time("ArborX::Dendrogram::sort_edges"));
+      if (params.dendrogram == "alpha")
+      {
+        printf(
+            "---- alpha edges    : %10.3f\n",
+            ArborX_Benchmark::get_time("ArborX::Dendrogram::find_alpha_edges"));
+        printf("---- alpha vertices : %10.3f\n",
+               ArborX_Benchmark::get_time(
+                   "ArborX::Dendrogram::assign_alpha_vertices"));
+        printf("---- alpha matrix   : %10.3f\n",
+               ArborX_Benchmark::get_time(
+                   "ArborX::Dendrogram::build_alpha_incidence_matrix"));
+        printf("---- sided parents  : %10.3f\n",
+               ArborX_Benchmark::get_time(
+                   "ArborX::Dendrogram::update_sided_parents"));
+        printf(
+            "---- compression    : %10.3f\n",
+            ArborX_Benchmark::get_time("ArborX::Dendrogram::compress_edges"));
+        printf(
+            "---- parents        : %10.3f\n",
+            ArborX_Benchmark::get_time("ArborX::Dendrogram::compute_parents"));
+      }
       printf("total time          : %10.3f\n",
              ArborX_Benchmark::get_time("ArborX::HDBSCAN::total"));
     }

@@ -1,5 +1,5 @@
 /****************************************************************************
- * Copyright (c) 2017-2022 by the ArborX authors                            *
+ * Copyright (c) 2017-2023 by the ArborX authors                            *
  * All rights reserved.                                                     *
  *                                                                          *
  * This file is part of the ArborX library. ArborX is                       *
@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
       ( "binary", bpo::bool_switch(&params.binary), "binary file indicator")
       ( "cluster-min-size", bpo::value<int>(&params.cluster_min_size)->default_value(1), "minimum cluster size")
       ( "core-min-size", bpo::value<int>(&params.core_min_size)->default_value(2), "DBSCAN min_pts")
+      ( "dendrogram", bpo::value<std::string>(&params.dendrogram)->default_value("default"), "dendrogram (default | union-find | alpha)" )
       ( "dimension", bpo::value<int>(&dim)->default_value(3), "dimension of points to generate" )
       ( "eps", bpo::value<float>(&params.eps), "DBSCAN eps" )
       ( "filename", bpo::value<std::string>(&params.filename), "filename containing data" )
@@ -118,6 +119,10 @@ int main(int argc, char *argv[])
     printf("cluster min size  : %d\n", params.cluster_min_size);
     printf("implementation    : %s\n", ss.str().c_str());
     printf("verify            : %s\n", (params.verify ? "true" : "false"));
+  }
+  if (params.algorithm == "hdbscan")
+  {
+    printf("dendrogram        : %s\n", params.dendrogram.c_str());
   }
   printf("minpts            : %d\n", params.core_min_size);
   if (!params.filename.empty())
