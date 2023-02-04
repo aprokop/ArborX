@@ -28,13 +28,15 @@ namespace
 
 template <class ExecutionSpace>
 auto buildDendrogram(ExecutionSpace const &exec_space,
-                     std::vector<WeightedEdge> const &edges_host)
+                     std::vector<WeightedEdge> const &edges_host,
+                     ArborX::Experimental::DendrogramImplementation impl)
 {
   using ArborXTest::toView;
   auto edges = toView<ExecutionSpace>(edges_host, "Test::edges");
 
   using MemorySpace = typename ExecutionSpace::memory_space;
-  ArborX::Experimental::Dendrogram<MemorySpace> dendrogram{exec_space, edges};
+  ArborX::Experimental::Dendrogram<MemorySpace> dendrogram(exec_space, edges,
+                                                           impl);
 
   auto parents_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{},
                                                           dendrogram._parents);
@@ -45,7 +47,7 @@ auto buildDendrogram(ExecutionSpace const &exec_space,
 
 } // namespace
 
-BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_union_find, DeviceType,
+BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_handcrafted, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
   using ExecutionSpace = typename DeviceType::execution_space;
@@ -53,49 +55,55 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_union_find, DeviceType,
 
   ExecutionSpace space;
 
+  for (auto impl : {ArborX::Experimental::DendrogramImplementation::UNION_FIND,
+                    ArborX::Experimental::DendrogramImplementation::ALPHA})
   {
-    // Dendrogram (sorted edge indices)
-    // --0--
-    // |   |
-    // 0   1
-    auto [parents, heights] =
-        buildDendrogram(space, std::vector<WeightedEdge>{{0, 1, 3.f}});
-    BOOST_TEST(parents == (std::vector<int>{-1, 0, 0}), tt::per_element());
-    BOOST_TEST(heights == (std::vector<float>{3.f}), tt::per_element());
-  }
+    {
+      // Dendrogram (sorted edge indices)
+      // --0--
+      // |   |
+      // 0   1
+      auto [parents, heights] =
+          buildDendrogram(space, std::vector<WeightedEdge>{{0, 1, 3.f}}, impl);
+      BOOST_TEST(parents == (std::vector<int>{-1, 0, 0}), tt::per_element());
+      BOOST_TEST(heights == (std::vector<float>{3.f}), tt::per_element());
+    }
 
-  {
-    // Dendrogram (sorted edge indices)
-    //      ----2---
-    //      |      |
-    //   ---1---   |
-    //   |     |   |
-    // --0--   |   |
-    // |   |   |   |
-    // 0   1   2   3
-    auto [parents, heights] = buildDendrogram(
-        space,
-        std::vector<WeightedEdge>{{0, 3, 7.f}, {1, 2, 3.f}, {0, 1, 2.f}});
-    BOOST_TEST(parents == (std::vector<int>{1, 2, -1, 0, 0, 1, 2}),
-               tt::per_element());
-    BOOST_TEST(heights == (std::vector<float>{2.f, 3.f, 7.f}),
-               tt::per_element());
-  }
+    {
+      // Dendrogram (sorted edge indices)
+      //      ----2---
+      //      |      |
+      //   ---1---   |
+      //   |     |   |
+      // --0--   |   |
+      // |   |   |   |
+      // 0   1   2   3
+      auto [parents, heights] = buildDendrogram(
+          space,
+          std::vector<WeightedEdge>{{0, 3, 7.f}, {1, 2, 3.f}, {0, 1, 2.f}},
+          impl);
+      BOOST_TEST(parents == (std::vector<int>{1, 2, -1, 0, 0, 1, 2}),
+                 tt::per_element());
+      BOOST_TEST(heights == (std::vector<float>{2.f, 3.f, 7.f}),
+                 tt::per_element());
+    }
 
-  {
-    // Dendrogram (sorted edge indices)
-    //   ----2----
-    //   |       |
-    // --1--   --0--
-    // |   |   |   |
-    // 0   1   2   3
-    auto [parents, heights] = buildDendrogram(
-        space,
-        std::vector<WeightedEdge>{{2, 3, 2.f}, {2, 0, 9.f}, {0, 1, 3.f}});
-    BOOST_TEST(parents == (std::vector<int>{2, 2, -1, 1, 1, 0, 0}),
-               tt::per_element());
-    BOOST_TEST(heights == (std::vector<float>{2.f, 3.f, 9.f}),
-               tt::per_element());
+    {
+      // Dendrogram (sorted edge indices)
+      //   ----2----
+      //   |       |
+      // --1--   --0--
+      // |   |   |   |
+      // 0   1   2   3
+      auto [parents, heights] = buildDendrogram(
+          space,
+          std::vector<WeightedEdge>{{2, 3, 2.f}, {2, 0, 9.f}, {0, 1, 3.f}},
+          impl);
+      BOOST_TEST(parents == (std::vector<int>{2, 2, -1, 1, 1, 0, 0}),
+                 tt::per_element());
+      BOOST_TEST(heights == (std::vector<float>{2.f, 3.f, 9.f}),
+                 tt::per_element());
+    }
   }
 }
 
