@@ -173,21 +173,21 @@ struct Dendrogram
                                          alpha_vertices, alpha_mat_offsets,
                                          alpha_mat_edges);
 
-      Kokkos::resize(alpha_edge_indices, 0); // deallocate
-
       // Step 4: update sided parents
       Details::updateSidedParents(
           exec_space, edges, largest_alpha_index, alpha_vertices,
           alpha_mat_offsets, alpha_mat_edges, global_map, sided_level_parents);
 
-      Kokkos::resize(alpha_vertices, 0);    // deallocate
       Kokkos::resize(alpha_mat_offsets, 0); // deallocate
       Kokkos::resize(alpha_mat_edges, 0);   // deallocate
 
       // Step 5: compress edges
-      auto [compressed_edges, compressed_global_map] =
-          Details::compressEdgesAndGlobalMap(exec_space, edges,
-                                             sided_level_parents, global_map);
+      Kokkos::Profiling::pushRegion("ArborX::Dendrogram::compress");
+      auto compressed_edges = Details::buildAlphaMST(
+          exec_space, edges, alpha_edge_indices, alpha_vertices);
+      auto compressed_global_map = Details::compressGlobalMap(
+          exec_space, global_map, alpha_edge_indices);
+      Kokkos::Profiling::popRegion();
 
       // Prepare for the next iteration
       global_map = compressed_global_map;

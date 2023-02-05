@@ -295,9 +295,8 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
         printf("---- sided parents  : %10.3f\n",
                ArborX_Benchmark::get_time(
                    "ArborX::Dendrogram::update_sided_parents"));
-        printf(
-            "---- compression    : %10.3f\n",
-            ArborX_Benchmark::get_time("ArborX::Dendrogram::compress_edges"));
+        printf("---- compression    : %10.3f\n",
+               ArborX_Benchmark::get_time("ArborX::Dendrogram::compress"));
         printf(
             "---- parents        : %10.3f\n",
             ArborX_Benchmark::get_time("ArborX::Dendrogram::compute_parents"));

@@ -322,6 +322,9 @@ void buildAlphaIncidenceMatrix(
   KokkosExt::ScopedProfileRegion guard(
       "ArborX::Dendrogram::build_alpha_incidence_matrix");
 
+  // FIXME we could use sort to construct the incidence matrix,
+  // this should be faster
+
   auto num_alpha_edges = alpha_edge_indices.size();
   auto num_vertices = num_alpha_edges + 1;
 
@@ -347,6 +350,7 @@ void buildAlphaIncidenceMatrix(
       exec_space, alpha_mat_edges,
       KokkosExt::lastElement(exec_space, alpha_mat_offsets));
 
+  // FIXME: if we can make it sorted, we could improve computing sided parents
   auto offsets = KokkosExt::clone(exec_space, alpha_mat_offsets);
   Kokkos::parallel_for(
       "ArborX::Dendrogram::compute_alpha_mat_edges",
@@ -428,52 +432,29 @@ void updateSidedParents(ExecutionSpace const &exec_space,
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
-std::pair<Kokkos::View<UnweightedEdge *, MemorySpace>,
-          Kokkos::View<int *, MemorySpace>>
-compressEdgesAndGlobalMap(
-    ExecutionSpace const &exec_space,
-    Kokkos::View<UnweightedEdge const *, MemorySpace> edges,
-    Kokkos::View<int *, MemorySpace> sided_level_parents,
-    Kokkos::View<int *, MemorySpace> global_map)
+Kokkos::View<int *, MemorySpace>
+compressGlobalMap(ExecutionSpace const &exec_space,
+                  Kokkos::View<int *, MemorySpace> global_map,
+                  Kokkos::View<int *, MemorySpace> alpha_edge_indices)
 {
-  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::compress_edges");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::compress_global_map");
 
-  auto const num_edges = edges.size();
+  auto const num_alpha_edges = alpha_edge_indices.size();
 
-  Kokkos::View<int *, MemorySpace> compressed_edge_indices(
-      Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                         "ArborX::Dendrogram::compression_indices"),
-      num_edges);
   Kokkos::View<int *, MemorySpace> compressed_global_map(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "ArborX::Dendrogram::global_map"),
-      num_edges);
+      num_alpha_edges);
 
-  int num_compressed_edges;
-  Kokkos::parallel_scan(
+  Kokkos::parallel_for(
       "ArborX::Dendrogram::find_compression_indices",
-      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
-      KOKKOS_LAMBDA(int e, int &update, bool is_final) {
-        if (sided_level_parents(global_map(e)) == UNDEFINED_CHAIN_VALUE)
-        {
-          // This will only be true for alpha-edges
-          if (is_final)
-          {
-            compressed_edge_indices(update) = e;
-            compressed_global_map(update) = global_map(e);
-          }
-          ++update;
-        }
-      },
-      num_compressed_edges);
-  Kokkos::resize(compressed_edge_indices, num_compressed_edges);
-  Kokkos::resize(compressed_global_map, num_compressed_edges);
-  auto compressed_vertices =
-      Details::assignAlphaVertices(exec_space, edges, compressed_edge_indices);
-  auto compressed_edges = Details::buildAlphaMST(
-      exec_space, edges, compressed_edge_indices, compressed_vertices);
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int i) {
+        compressed_global_map(i) = global_map(alpha_edge_indices(i));
+      });
 
-  return std::make_pair(compressed_edges, compressed_global_map);
+  return compressed_global_map;
 }
 
 template <typename ExecutionSpace, typename MemorySpace, typename Parents>
