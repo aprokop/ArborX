@@ -146,15 +146,13 @@ struct Dendrogram
       int num_alpha_edges = alpha_edge_indices.size();
       if (num_alpha_edges == 0)
       {
-        // Done with recursion. The edges that haven't been assigned yet
-        // automatically have ROOT_CHAIN_VALUE from the initialization.
+        // Done with the recursion as there are no more alpha edges. Assign all
+        // current edges to the root chain.
         Kokkos::parallel_for(
             "ArborX::Dendrogram::assign_remaining_side_parents",
             Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
             KOKKOS_LAMBDA(int const e) {
-              int &sided_level_parent = sided_level_parents(global_map(e));
-              if (sided_level_parent == UNDEFINED_CHAIN_VALUE)
-                sided_level_parent = ROOT_CHAIN_VALUE;
+              sided_level_parents(global_map(e)) = ROOT_CHAIN_VALUE;
             });
         break;
       }
