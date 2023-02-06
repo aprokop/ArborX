@@ -119,19 +119,13 @@ constexpr int UNDEFINED_CHAIN_VALUE = -1;
 constexpr int ROOT_CHAIN_VALUE = -2;
 constexpr int FOLLOW_CHAIN_VALUE = -3;
 
-// Determine alpha edges
-//
-// An alpha-edge is an edge that has both children as edges in the dendrogram.
-// In other words, an edge that is not an alpha edge has at most one child
-// edge. Assuming the edges are sorted in the order of increasing weights, an
-// edge e is an alpha-edge if both vertices have an incident edge that is
-// smaller than e.
 template <typename ExecutionSpace, typename MemorySpace>
-Kokkos::View<int *, MemorySpace>
-findAlphaEdges(ExecutionSpace const &exec_space,
-               Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges)
+Kokkos::View<int *, MemorySpace> findSmallestVertexIncidentEdges(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges)
 {
-  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::find_alpha_edges");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::find_smallest_vertex_incident_edges");
 
   auto const num_edges = sorted_edges.size();
   auto const num_vertices = num_edges + 1;
@@ -151,6 +145,26 @@ findAlphaEdges(ExecutionSpace const &exec_space,
         Kokkos::atomic_min(&smallest_vertex_incident_edges(edge.source), e);
         Kokkos::atomic_min(&smallest_vertex_incident_edges(edge.target), e);
       });
+
+  return smallest_vertex_incident_edges;
+}
+
+// Determine alpha edges
+//
+// An alpha-edge is an edge that has both children as edges in the dendrogram.
+// In other words, an edge that is not an alpha edge has at most one child
+// edge. Assuming the edges are sorted in the order of increasing weights, an
+// edge e is an alpha-edge if both vertices have an incident edge that is
+// smaller than e.
+template <typename ExecutionSpace, typename MemorySpace>
+Kokkos::View<int *, MemorySpace>
+findAlphaEdges(ExecutionSpace const &exec_space,
+               Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges,
+               Kokkos::View<int *, MemorySpace> smallest_vertex_incident_edges)
+{
+  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::alpha_edges");
+
+  auto const num_edges = sorted_edges.size();
 
   Kokkos::View<int *, MemorySpace> alpha_edges(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
@@ -462,7 +476,8 @@ void computeParents(ExecutionSpace const &exec_space,
                     Kokkos::View<int *, MemorySpace> sided_level_parents,
                     Parents &parents)
 {
-  KokkosExt::ScopedProfileRegion guard("ArborX::Dendrogram::compute_parents");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::compute_edge_parents");
 
   auto num_edges = sided_level_parents.size();
 
@@ -518,6 +533,30 @@ void computeParents(ExecutionSpace const &exec_space,
           parents(e) = permute(i + 1);
         else
           parents(e) = (keys(i) >> shift) / 2;
+      });
+}
+
+template <typename ExecutionSpace, typename MemorySpace, typename Parents>
+void assignVertexParents(
+    ExecutionSpace const &exec_space,
+    Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges,
+    Kokkos::View<int *, MemorySpace> smallest_vertex_incident_edges,
+    Parents &parents)
+{
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::Dendrogram::assign_vertex_parents");
+
+  auto const num_edges = sorted_edges.size();
+  auto const vertices_offset = num_edges;
+
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::assign_vertex_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
+      KOKKOS_LAMBDA(int const e) {
+        auto const &edge = sorted_edges(e);
+        for (int k : {edge.source, edge.target})
+          if (smallest_vertex_incident_edges(k) == e)
+            parents(vertices_offset + k) = e;
       });
 }
 

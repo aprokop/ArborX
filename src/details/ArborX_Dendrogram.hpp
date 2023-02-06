@@ -141,7 +141,21 @@ struct Dendrogram
       int num_edges = edges.size();
 
       // Step 1: find alpha edges of the current MST
-      auto alpha_edge_indices = Details::findAlphaEdges(exec_space, edges);
+      Kokkos::Profiling::pushRegion("ArborX::Dendrogram::find_alpha_edges");
+      auto smallest_vertex_incident_edges =
+          Details::findSmallestVertexIncidentEdges(exec_space, edges);
+      auto alpha_edge_indices = Details::findAlphaEdges(
+          exec_space, edges, smallest_vertex_incident_edges);
+      Kokkos::Profiling::popRegion();
+
+      if (level == 0)
+      {
+        // Step 6: build vertex parents
+        KokkosExt::ScopedProfileRegion guard(
+            "ArborX::Dendrogram::compute_vertex_parents");
+        assignVertexParents(exec_space, edges, smallest_vertex_incident_edges,
+                            parents);
+      }
 
       int num_alpha_edges = alpha_edge_indices.size();
       if (num_alpha_edges == 0)
@@ -201,9 +215,6 @@ struct Dendrogram
     auto edge_parents =
         Kokkos::subview(parents, Kokkos::make_pair(0, (int)num_global_edges));
     Details::computeParents(exec_space, sided_level_parents, edge_parents);
-
-    // Step 7: construct final parents
-    // FIXME
   }
 };
 
