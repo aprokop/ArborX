@@ -554,9 +554,10 @@ void assignVertexParents(
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const e) {
         auto const &edge = sorted_edges(e);
-        for (int k : {edge.source, edge.target})
-          if (smallest_vertex_incident_edges(k) == e)
-            parents(vertices_offset + k) = e;
+        if (smallest_vertex_incident_edges(edge.source) == e)
+          parents(vertices_offset + edge.source) = e;
+        if (smallest_vertex_incident_edges(edge.target) == e)
+          parents(vertices_offset + edge.target) = e;
       });
 }
 
