@@ -13,6 +13,7 @@
 #define ARBORX_DETAILS_EULER_TOUR_HPP
 
 #include <ArborX_DetailsKokkosExtMinMaxOperations.hpp>
+#include <ArborX_DetailsKokkosExtScopedProfileRegion.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
 #include <ArborX_Exception.hpp>
@@ -26,7 +27,7 @@ template <typename ExecutionSpace, typename Edges>
 Kokkos::View<int *, typename Edges::memory_space>
 eulerTourList(ExecutionSpace const &exec_space, Edges const &edges)
 {
-  Kokkos::Profiling::pushRegion("ArborX::euler_tour_list");
+  KokkosExt::ScopedProfileRegion guard("ArborX::euler_tour_list");
 
   using MemorySpace = typename Edges::memory_space;
 
@@ -116,8 +117,6 @@ eulerTourList(ExecutionSpace const &exec_space, Edges const &edges)
         }
       });
 
-  Kokkos::Profiling::popRegion();
-
   return successors;
 }
 
@@ -126,7 +125,7 @@ template <typename ExecutionSpace, typename List>
 Kokkos::View<int *, typename List::memory_space>
 rankList(ExecutionSpace const &exec_space, List &list, int head)
 {
-  Kokkos::Profiling::pushRegion("ArborX::list_ranking");
+  KokkosExt::ScopedProfileRegion guard("ArborX::list_ranking");
 
   using MemorySpace = typename List::memory_space;
 
@@ -252,8 +251,6 @@ rankList(ExecutionSpace const &exec_space, List &list, int head)
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
       KOKKOS_LAMBDA(int i) { ranks(i) += sublists_total(sublist_ids(i)); });
 
-  Kokkos::Profiling::popRegion();
-
   return ranks;
 }
 
@@ -263,12 +260,10 @@ auto eulerTour(ExecutionSpace const &exec_space,
                Kokkos::View<WeightedEdge *, EdgesProperties...> const &edges,
                int head = 0)
 {
-  Kokkos::Profiling::pushRegion("ArborX::euler_tour");
+  KokkosExt::ScopedProfileRegion guard("ArborX::euler_tour");
 
   auto successors = eulerTourList(exec_space, edges);
   auto euler_tour = rankList(exec_space, successors, head);
-
-  Kokkos::Profiling::popRegion();
 
   return euler_tour;
 }
