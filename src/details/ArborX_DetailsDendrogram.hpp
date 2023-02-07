@@ -378,6 +378,27 @@ void buildAlphaIncidenceMatrix(
         alpha_mat_edges(Kokkos::atomic_fetch_add(
             &offsets(alpha_vertices(edge.target)), 1)) = e;
       });
+
+  Kokkos::parallel_for(
+      "ArborX::Dendrogram::sort_alpha_mat_edges",
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_alpha_edges),
+      KOKKOS_LAMBDA(int const k) {
+        int start = alpha_mat_offsets(k);
+        int end = alpha_mat_offsets(k + 1);
+
+        // Insertion sort
+        for (int i = start + 1; i < end; ++i)
+        {
+          int x = alpha_mat_edges(i);
+          int j = i - 1;
+          while (j >= start && alpha_mat_edges(j) > x)
+          {
+            alpha_mat_edges(j + 1) = alpha_mat_edges(j);
+            --j;
+          }
+          alpha_mat_edges(j + 1) = x;
+        }
+      });
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -413,23 +434,39 @@ void updateSidedParents(ExecutionSpace const &exec_space,
           return;
         }
 
-        int largest_smaller = -1;
-        int smallest_larger = INT_MAX;
-        for (int k = alpha_mat_offsets(alpha_vertex);
-             k < alpha_mat_offsets(alpha_vertex + 1); ++k)
-        {
-          auto alpha_e = alpha_mat_edges(k);
-          if (alpha_e < e && alpha_e > largest_smaller)
-            largest_smaller = alpha_e;
-          if (alpha_e > e && alpha_e < smallest_larger)
-            smallest_larger = alpha_e;
-        }
-        assert(largest_smaller != INT_MAX || smallest_larger != -1);
+        auto upper_bound = [](int *v, int first, int last, int x) {
+#if 0
+          int count = last - first;
+          while (count > 0)
+          {
+            int step = count / 2;
+            int mid = first + step;
+            if (!(x < v[mid]))
+            {
+              first = ++mid;
+              count -= step + 1;
+            }
+            else
+            {
+              count = step;
+            }
+          }
+#else
+          while (first < last && x >= v[first])
+            ++first;
+#endif
+          return first;
+        };
 
-        if (largest_smaller == -1 && smallest_larger != INT_MAX)
+        int start = alpha_mat_offsets(alpha_vertex);
+        int end = alpha_mat_offsets(alpha_vertex + 1);
+        int pos = upper_bound(alpha_mat_edges.data(), start, end, e);
+
+        if (pos == start)
         {
-          // No smaller incident alpha-edge.
+          // No smaller incident alpha-edges.
           // Can immediately assign the parent.
+          auto smallest_larger = alpha_mat_edges(pos);
           auto const &alpha_edge = edges(smallest_larger);
 
           bool is_left_side =
@@ -439,6 +476,8 @@ void updateSidedParents(ExecutionSpace const &exec_space,
         }
         else
         {
+          // Assign to the largerst of the smaller alpha-edges.
+          auto largest_smaller = alpha_mat_edges(pos - 1);
           sided_level_parents(global_map(e)) =
               FOLLOW_CHAIN_VALUE - global_map(largest_smaller);
         }
