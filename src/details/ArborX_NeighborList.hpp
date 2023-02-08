@@ -35,9 +35,9 @@ struct NeighborListPredicateGetter
 };
 
 template <class ExecutionSpace, class Primitives, class Indices, class Counts>
-void findHalfNeighborList2D(ExecutionSpace const &space,
-                            Primitives const &primitives, float radius,
-                            Indices &indices, Counts &counts)
+int findHalfNeighborList2D(ExecutionSpace const &space,
+                           Primitives const &primitives, float radius,
+                           Indices &indices, Counts &counts)
 {
   KokkosExt::ScopedProfileRegion guard(
       "ArborX::Experimental::HalfNeighborList2D");
@@ -85,10 +85,10 @@ void findHalfNeighborList2D(ExecutionSpace const &space,
 
     Kokkos::Profiling::popRegion();
   }
-  auto max_neighbors = max(space, counts);
+  auto const max_neighbors = max(space, counts);
   if (max_neighbors <= buffer_size)
   {
-    return;
+    return max_neighbors;
   }
 
   Kokkos::Profiling::pushRegion("ArborX::Experimental::HalfNeighborList::Fill");
@@ -103,6 +103,8 @@ void findHalfNeighborList2D(ExecutionSpace const &space,
       NeighborListPredicateGetter{radius});
 
   Kokkos::Profiling::popRegion();
+
+  return max_neighbors;
 }
 
 template <class ExecutionSpace, class Primitives, class Offsets, class Indices>
