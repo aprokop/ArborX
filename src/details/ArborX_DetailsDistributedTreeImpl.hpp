@@ -148,8 +148,8 @@ struct DistributedTreeImpl
                           Kokkos::is_view<OffsetView>{}>
   queryDispatch(SpatialPredicateTag, DistributedTree const &tree,
                 ExecutionSpace const &space, Predicates const &queries,
-                Callback const &callback, OutputView &out,
-                OffsetView &offset Experimental::TraversalPolicy const &policy =
+                Callback const &callback, OutputView &out, OffsetView &offset,
+                Experimental::TraversalPolicy const &policy =
                     Experimental::TraversalPolicy());
 
   // nearest neighbors queries
@@ -164,7 +164,8 @@ struct DistributedTreeImpl
                     ExecutionSpace const &space, Predicates const &queries,
                     Indices &indices, Offset &offset, Ranks &ranks,
                     Distances *distances_ptr = nullptr,
-                    Experimental::TraversalPolicy const &policy);
+                    Experimental::TraversalPolicy const &policy =
+                        Experimental::TraversalPolicy());
 
   template <typename DistributedTree, typename ExecutionSpace,
             typename Predicates, typename IndicesAndRanks, typename Offset>
@@ -182,7 +183,8 @@ struct DistributedTreeImpl
         "ArborX::DistributedTree::query::nearest::indices", 0);
     Kokkos::View<int *, ExecutionSpace> ranks(
         "ArborX::DistributedTree::query::nearest::ranks", 0);
-    queryDispatchImpl(tag, tree, space, queries, indices, offset, ranks);
+    queryDispatchImpl(tag, tree, space, queries, indices, offset, ranks,
+                      (Kokkos::View<float *, DeviceType> *)nullptr, policy);
     auto const n = indices.extent(0);
     KokkosExt::reallocWithoutInitializing(space, values, n);
     Kokkos::parallel_for(
@@ -203,10 +205,11 @@ struct DistributedTreeImpl
   template <typename DistributedTree, typename ExecutionSpace,
             typename Predicates, typename Indices, typename Offset,
             typename Distances>
-  static void reassessStrategy(
-      ExecutionSpace const &space, Predicates const &queries,
-      DistributedTree const &tree, Indices &indices, Offset &offset,
-      Distances &distances Experimental::TraversalPolicy const &policy);
+  static void reassessStrategy(ExecutionSpace const &space,
+                               Predicates const &queries,
+                               DistributedTree const &tree, Indices &indices,
+                               Offset &offset, Distances &distances,
+                               Experimental::TraversalPolicy const &policy);
 
   template <typename ExecutionSpace, typename Predicates, typename Ranks,
             typename Query>
@@ -306,7 +309,8 @@ template <typename DistributedTree, typename ExecutionSpace,
           typename Distances>
 void DistributedTreeImpl<DeviceType>::deviseStrategy(
     ExecutionSpace const &space, Predicates const &queries,
-    DistributedTree const &tree, Indices &indices, Offset &offset, Distances &)
+    DistributedTree const &tree, Indices &indices, Offset &offset, Distances &,
+    Experimental::TraversalPolicy const &policy)
 {
   Kokkos::Profiling::pushRegion("ArborX::DistributedTree::deviseStrategy");
 
@@ -369,7 +373,7 @@ template <typename DistributedTree, typename ExecutionSpace,
 void DistributedTreeImpl<DeviceType>::reassessStrategy(
     ExecutionSpace const &space, Predicates const &queries,
     DistributedTree const &tree, Indices &indices, Offset &offset,
-    Distances &distances)
+    Distances &distances, Experimental::TraversalPolicy const &policy)
 {
   Kokkos::Profiling::pushRegion("ArborX::DistributedTree::reassessStrategy");
 
@@ -403,7 +407,7 @@ void DistributedTreeImpl<DeviceType>::reassessStrategy(
   query(top_tree, space,
         WithinDistanceFromPredicates<Predicates, decltype(farthest_distances)>{
             queries, farthest_distances},
-        indices, offset);
+        indices, offset, policy);
   // NOTE: in principle, we could perform radius searches on the bottom_tree
   // rather than nearest queries.
 
@@ -510,15 +514,15 @@ DistributedTreeImpl<DeviceType>::queryDispatchImpl(
 
   // NOTE: compiler would not deduce __range for the braced-init-list, but I
   // got it to work with the static_cast to function pointers.
-  using Strategy =
-      void (*)(ExecutionSpace const &, Predicates const &,
-               DistributedTree const &, Indices &, Offset &, Distances &);
+  using Strategy = void (*)(ExecutionSpace const &, Predicates const &,
+                            DistributedTree const &, Indices &, Offset &,
+                            Distances &, Experimental::TraversalPolicy const &);
   for (auto implementStrategy :
        {static_cast<Strategy>(DistributedTreeImpl<DeviceType>::deviseStrategy),
         static_cast<Strategy>(
             DistributedTreeImpl<DeviceType>::reassessStrategy)})
   {
-    implementStrategy(space, queries, tree, indices, offset, distances);
+    implementStrategy(space, queries, tree, indices, offset, distances, policy);
 
     {
       // NOTE_COMM_NEAREST: The communication pattern here for the nearest
@@ -585,8 +589,8 @@ std::enable_if_t<Kokkos::is_view<OutputView>{} && Kokkos::is_view<OffsetView>{}>
 DistributedTreeImpl<DeviceType>::queryDispatch(
     SpatialPredicateTag, DistributedTree const &tree,
     ExecutionSpace const &space, Predicates const &queries,
-    Callback const &callback, OutputView &out,
-    OffsetView &offset Experimental::TraversalPolicy const &policy)
+    Callback const &callback, OutputView &out, OffsetView &offset,
+    Experimental::TraversalPolicy const &policy)
 {
   Kokkos::Profiling::pushRegion("ArborX::DistributedTree::query::spatial");
 
