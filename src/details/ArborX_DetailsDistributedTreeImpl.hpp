@@ -25,6 +25,7 @@
 #include <ArborX_Predicates.hpp>
 #include <ArborX_Ray.hpp>
 #include <ArborX_Sphere.hpp>
+#include <ArborX_TraversalPolicy.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -130,12 +131,14 @@ struct DistributedTreeImpl
                           Kokkos::is_view<Offset>{}>
   queryDispatch(SpatialPredicateTag, DistributedTree const &tree,
                 ExecutionSpace const &space, Predicates const &queries,
-                IndicesAndRanks &values, Offset &offset)
+                IndicesAndRanks &values, Offset &offset,
+                Experimental::TraversalPolicy const &policy =
+                    Experimental::TraversalPolicy())
   {
     int comm_rank;
     MPI_Comm_rank(tree.getComm(), &comm_rank);
     queryDispatch(SpatialPredicateTag{}, tree, space, queries,
-                  DefaultCallbackWithRank{comm_rank}, values, offset);
+                  DefaultCallbackWithRank{comm_rank}, values, offset, policy);
   }
 
   template <typename DistributedTree, typename ExecutionSpace,
@@ -145,7 +148,9 @@ struct DistributedTreeImpl
                           Kokkos::is_view<OffsetView>{}>
   queryDispatch(SpatialPredicateTag, DistributedTree const &tree,
                 ExecutionSpace const &space, Predicates const &queries,
-                Callback const &callback, OutputView &out, OffsetView &offset);
+                Callback const &callback, OutputView &out,
+                OffsetView &offset Experimental::TraversalPolicy const &policy =
+                    Experimental::TraversalPolicy());
 
   // nearest neighbors queries
   template <typename DistributedTree, typename ExecutionSpace,
@@ -158,7 +163,8 @@ struct DistributedTreeImpl
   queryDispatchImpl(NearestPredicateTag, DistributedTree const &tree,
                     ExecutionSpace const &space, Predicates const &queries,
                     Indices &indices, Offset &offset, Ranks &ranks,
-                    Distances *distances_ptr = nullptr);
+                    Distances *distances_ptr = nullptr,
+                    Experimental::TraversalPolicy const &policy);
 
   template <typename DistributedTree, typename ExecutionSpace,
             typename Predicates, typename IndicesAndRanks, typename Offset>
@@ -166,9 +172,12 @@ struct DistributedTreeImpl
                           Kokkos::is_view<Offset>{}>
   queryDispatch(NearestPredicateTag tag, DistributedTree const &tree,
                 ExecutionSpace const &space, Predicates const &queries,
-                IndicesAndRanks &values, Offset &offset)
+                IndicesAndRanks &values, Offset &offset,
+                Experimental::TraversalPolicy const &policy =
+                    Experimental::TraversalPolicy())
   {
-    // FIXME avoid zipping when distributed nearest callbacks become available
+    // FIXME avoid zipping when distributed nearest callbacks
+    // become available
     Kokkos::View<int *, ExecutionSpace> indices(
         "ArborX::DistributedTree::query::nearest::indices", 0);
     Kokkos::View<int *, ExecutionSpace> ranks(
@@ -186,18 +195,18 @@ struct DistributedTreeImpl
   template <typename DistributedTree, typename ExecutionSpace,
             typename Predicates, typename Indices, typename Offset,
             typename Distances>
-  static void deviseStrategy(ExecutionSpace const &space,
-                             Predicates const &queries,
-                             DistributedTree const &tree, Indices &indices,
-                             Offset &offset, Distances &);
+  static void
+  deviseStrategy(ExecutionSpace const &space, Predicates const &queries,
+                 DistributedTree const &tree, Indices &indices, Offset &offset,
+                 Distances &, Experimental::TraversalPolicy const &policy);
 
   template <typename DistributedTree, typename ExecutionSpace,
             typename Predicates, typename Indices, typename Offset,
             typename Distances>
-  static void reassessStrategy(ExecutionSpace const &space,
-                               Predicates const &queries,
-                               DistributedTree const &tree, Indices &indices,
-                               Offset &offset, Distances &distances);
+  static void reassessStrategy(
+      ExecutionSpace const &space, Predicates const &queries,
+      DistributedTree const &tree, Indices &indices, Offset &offset,
+      Distances &distances Experimental::TraversalPolicy const &policy);
 
   template <typename ExecutionSpace, typename Predicates, typename Ranks,
             typename Query>
@@ -471,7 +480,8 @@ std::enable_if_t<Kokkos::is_view<Indices>{} && Kokkos::is_view<Offset>{} &&
 DistributedTreeImpl<DeviceType>::queryDispatchImpl(
     NearestPredicateTag, DistributedTree const &tree,
     ExecutionSpace const &space, Predicates const &queries, Indices &indices,
-    Offset &offset, Ranks &ranks, Distances *distances_ptr)
+    Offset &offset, Ranks &ranks, Distances *distances_ptr,
+    Experimental::TraversalPolicy const &policy)
 {
   Kokkos::Profiling::pushRegion("ArborX::DistributedTree::query::nearest");
 
@@ -575,7 +585,8 @@ std::enable_if_t<Kokkos::is_view<OutputView>{} && Kokkos::is_view<OffsetView>{}>
 DistributedTreeImpl<DeviceType>::queryDispatch(
     SpatialPredicateTag, DistributedTree const &tree,
     ExecutionSpace const &space, Predicates const &queries,
-    Callback const &callback, OutputView &out, OffsetView &offset)
+    Callback const &callback, OutputView &out,
+    OffsetView &offset Experimental::TraversalPolicy const &policy)
 {
   Kokkos::Profiling::pushRegion("ArborX::DistributedTree::query::spatial");
 
@@ -587,7 +598,7 @@ DistributedTreeImpl<DeviceType>::queryDispatch(
       "ArborX::DistributedTree::query::spatial::indices", 0);
   Kokkos::View<int *, DeviceType> ranks(
       "ArborX::DistributedTree::query::spatial::ranks", 0);
-  query(top_tree, space, queries, indices, offset);
+  query(top_tree, space, queries, indices, offset, policy);
 
   {
     // NOTE_COMM_SPATIAL: The communication pattern here for the spatial search
@@ -608,7 +619,7 @@ DistributedTreeImpl<DeviceType>::queryDispatch(
                    ranks);
 
     // Perform queries that have been received
-    query(bottom_tree, space, fwd_queries, callback, out, offset);
+    query(bottom_tree, space, fwd_queries, callback, out, offset, policy);
 
     // Communicate results back
     communicateResultsBack(comm, space, out, offset, ranks, ids);
