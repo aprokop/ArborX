@@ -48,12 +48,11 @@ public:
   // indirection when recording results rather than using that function at
   // the end.  We decided to keep reversePermutation around for now.
 
-  template <typename ExecutionSpace, typename Predicates, typename Box,
+  template <typename ExecutionSpace, typename Predicates,
             typename SpaceFillingCurve>
   static Kokkos::View<unsigned int *, DeviceType>
   sortPredicatesAlongSpaceFillingCurve(ExecutionSpace const &space,
                                        SpaceFillingCurve const &curve,
-                                       Box const &scene_bounding_box,
                                        Predicates const &predicates)
   {
     using Access = AccessTraits<Predicates, PredicatesTag>;
@@ -61,6 +60,18 @@ public:
 
     using Point = std::decay_t<decltype(returnCentroid(
         getGeometry(Access::get(predicates, 0))))>;
+    using Box =
+        ExperimentalHyperGeometry::Box<GeometryTraits::dimension_v<Point>>;
+
+    Box scene_bounding_box;
+    Kokkos::parallel_reduce(
+        "ArborX::BatchedQueries::calculate_bounding_box",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
+        KOKKOS_LAMBDA(int i, Box &update) {
+          update += returnCentroid(getGeometry(Access::get(predicates, i)));
+        },
+        Kokkos::Sum<Box>{scene_bounding_box});
+
     using LinearOrderingValueType =
         Kokkos::detected_t<SpaceFillingCurveProjectionArchetypeExpression,
                            SpaceFillingCurve, Box, Point>;
