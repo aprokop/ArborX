@@ -11,6 +11,7 @@
 
 #include <ArborX_DBSCAN.hpp>
 #include <ArborX_DBSCANVerification.hpp>
+#include <ArborX_DetailsEulerTour.hpp>
 #include <ArborX_HDBSCAN.hpp>
 #include <ArborX_MinimumSpanningTree.hpp>
 
@@ -297,6 +298,25 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
              ArborX_Benchmark::get_time("ArborX::MST::boruvka"));
       printf("total time          : %10.3f\n",
              ArborX_Benchmark::get_time("ArborX::MST::total"));
+    }
+  }
+  else if (params.algorithm == "euler-tour")
+  {
+    ArborX::Details::MinimumSpanningTree<MemorySpace> mst(
+        exec_space, primitives, params.core_min_size);
+
+    eulerTour(exec_space, mst.edges);
+
+    if (params.verbose)
+    {
+      printf("-- mst              : %10.3f\n",
+             ArborX_Benchmark::get_time("ArborX::MST::MST"));
+      printf("-- list             : %10.3f\n",
+             ArborX_Benchmark::get_time("ArborX::euler_tour_list"));
+      printf("-- list ranking     : %10.3f\n",
+             ArborX_Benchmark::get_time("ArborX::list_ranking"));
+      printf("total time          : %10.3f\n",
+             ArborX_Benchmark::get_time("ArborX::euler_tour"));
     }
   }
 

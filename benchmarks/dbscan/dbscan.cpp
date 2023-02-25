@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
   // clang-format off
   desc.add_options()
       ( "help", "help message" )
-      ( "algorithm", bpo::value<std::string>(&params.algorithm)->default_value("dbscan"), "algorithm (dbscan | hdbscan | mst)" )
+      ( "algorithm", bpo::value<std::string>(&params.algorithm)->default_value("dbscan"), "algorithm (dbscan | euler-tour | hdbscan | mst)" )
       ( "binary", bpo::bool_switch(&params.binary), "binary file indicator")
       ( "cluster-min-size", bpo::value<int>(&params.cluster_min_size)->default_value(1), "minimum cluster size")
       ( "core-min-size", bpo::value<int>(&params.core_min_size)->default_value(2), "DBSCAN min_pts")
