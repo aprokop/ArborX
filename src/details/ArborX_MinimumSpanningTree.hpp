@@ -317,13 +317,15 @@ struct FindComponentNearestNeighbors
     // components. Otherwise, for a large number of points and a small number of
     // components it becomes extremely expensive.
     auto &component_weight = _weights(component - n + 1);
-    if (current_best.weight < inf && current_best.weight <= component_weight)
+    if (current_best.weight < inf && current_best.weight <= component_weight &&
+        (Kokkos::atomic_min_fetch(&component_weight, current_best.weight) ==
+         current_best.weight))
     {
-      if (Kokkos::atomic_min_fetch(&component_weight, current_best.weight) ==
-          current_best.weight)
-      {
-        _edges(i - n + 1) = current_best;
-      }
+      _edges(i - n + 1) = current_best;
+    }
+    else if (node != SENTINEL)
+    {
+      _edges(i - n + 1).weight = inf;
     }
   }
 };
@@ -684,8 +686,6 @@ private:
       reduceLabels(space, parents, labels);
 
       constexpr auto inf = KokkosExt::ArithmeticTraits::infinity<float>::value;
-      constexpr DirectedEdge uninitialized_edge;
-      Kokkos::deep_copy(space, component_out_edges, uninitialized_edge);
       Kokkos::deep_copy(space, weights, inf);
       Kokkos::deep_copy(space, radii, inf);
       resetSharedRadii(space, bvh, labels, metric, radii);
