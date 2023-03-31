@@ -26,7 +26,7 @@ enum class DendrogramImplementation
 {
   DEFAULT,
   UNION_FIND,
-  ALPHA,
+  ALPHA
 };
 
 template <typename MemorySpace>
@@ -34,6 +34,12 @@ struct Dendrogram
 {
   Kokkos::View<int *, MemorySpace> _parents;
   Kokkos::View<float *, MemorySpace> _parent_heights;
+
+  Dendrogram(Kokkos::View<int *, MemorySpace> parents,
+             Kokkos::View<float *, MemorySpace> parent_heights)
+      : _parents(parents)
+      , _parent_heights(parent_heights)
+  {}
 
   template <typename ExecutionSpace>
   Dendrogram(ExecutionSpace const &exec_space,
@@ -85,7 +91,8 @@ struct Dendrogram
       dendrogramAlpha(exec_space, ConstEdges(unweighted_edges), _parents);
       break;
 
-    default:; // do nothing
+    default:
+      Kokkos::abort("ArborX implementation bug");
     }
   }
 
@@ -106,16 +113,14 @@ struct Dendrogram
   }
 
   template <typename ExecutionSpace>
-  void
-  dendrogramAlpha(ExecutionSpace const &exec_space,
-                  Kokkos::View<Details::UnweightedEdge const *, MemorySpace>
-                      sorted_unweighted_edges,
-                  Kokkos::View<int *, MemorySpace> &parents)
+  void dendrogramAlpha(
+      ExecutionSpace const &exec_space,
+      Kokkos::View<Details::UnweightedEdge const *, MemorySpace> edges,
+      Kokkos::View<int *, MemorySpace> &parents)
   {
     KokkosExt::ScopedProfileRegion guard(
         "ArborX::Dendrogram::dendrogram_alpha");
 
-    auto &edges = sorted_unweighted_edges;
     auto const num_global_edges = edges.size();
 
     using Details::ROOT_CHAIN_VALUE;
@@ -129,7 +134,7 @@ struct Dendrogram
 
     Kokkos::View<int *, MemorySpace> global_map(
         Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                           "ArborX::Dendrogram::sided_parents"),
+                           "ArborX::Dendrogram::global_map"),
         num_global_edges);
     iota(exec_space, global_map);
 

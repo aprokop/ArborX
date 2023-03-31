@@ -32,7 +32,7 @@ struct UnweightedEdge
 template <typename Edges, typename Parents>
 void dendrogramUnionFindHost(Edges sorted_edges_host, Parents &parents_host)
 {
-  KokkosExt::ScopedProfileRegion guard(
+  Kokkos::Profiling::pushRegion(
       "ArborX::Dendrogram::dendrogram_union_find::union_find_host");
 
   using ExecutionSpace = Kokkos::DefaultHostExecutionSpace;
@@ -82,6 +82,8 @@ void dendrogramUnionFindHost(Edges sorted_edges_host, Parents &parents_host)
   }
   parents_host(num_edges - 1) = -1; // root
   Kokkos::Profiling::popRegion();
+
+  Kokkos::Profiling::popRegion();
 }
 
 template <typename ExecutionSpace, typename MemorySpace>
@@ -90,8 +92,7 @@ void dendrogramUnionFind(
     Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges,
     Kokkos::View<int *, MemorySpace> &parents)
 {
-  KokkosExt::ScopedProfileRegion guard(
-      "ArborX::Dendrogram::dendrogram_union_find");
+  Kokkos::Profiling::pushRegion("ArborX::Dendrogram::dendrogram_union_find");
 
   Kokkos::Profiling::pushRegion(
       "ArborX::Dendrogram::dendrogram_union_find::copy_to_host");
@@ -113,6 +114,8 @@ void dendrogramUnionFind(
   Kokkos::deep_copy(exec_space, parents, parents_host);
 
   Kokkos::Profiling::popRegion();
+
+  Kokkos::Profiling::popRegion();
 }
 
 constexpr int UNDEFINED_CHAIN_VALUE = -1;
@@ -122,12 +125,12 @@ constexpr int FOLLOW_CHAIN_VALUE = -3;
 template <typename ExecutionSpace, typename MemorySpace>
 Kokkos::View<int *, MemorySpace> findSmallestVertexIncidentEdges(
     ExecutionSpace const &exec_space,
-    Kokkos::View<UnweightedEdge const *, MemorySpace> sorted_edges)
+    Kokkos::View<UnweightedEdge const *, MemorySpace> edges)
 {
   KokkosExt::ScopedProfileRegion guard(
       "ArborX::Dendrogram::find_smallest_vertex_incident_edges");
 
-  auto const num_edges = sorted_edges.size();
+  auto const num_edges = edges.size();
   auto const num_vertices = num_edges + 1;
 
   // Find smallest incident edge for each vertex
@@ -141,7 +144,7 @@ Kokkos::View<int *, MemorySpace> findSmallestVertexIncidentEdges(
       "ArborX::Dendrogram::find_smallest_vertex_incident_edges",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const e) {
-        auto &edge = sorted_edges(e);
+        auto &edge = edges(e);
         Kokkos::atomic_min(&smallest_vertex_incident_edges(edge.source), e);
         Kokkos::atomic_min(&smallest_vertex_incident_edges(edge.target), e);
       });
@@ -554,9 +557,10 @@ void assignVertexParents(
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_edges),
       KOKKOS_LAMBDA(int const e) {
         auto const &edge = sorted_edges(e);
-        for (int k : {edge.source, edge.target})
-          if (smallest_vertex_incident_edges(k) == e)
-            parents(vertices_offset + k) = e;
+        if (smallest_vertex_incident_edges(edge.source) == e)
+          parents(vertices_offset + edge.source) = e;
+        if (smallest_vertex_incident_edges(edge.target) == e)
+          parents(vertices_offset + edge.target) = e;
       });
 }
 
