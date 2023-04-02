@@ -9,6 +9,7 @@ add_subdirectory(access_traits)
 add_subdirectory(callback)
 add_subdirectory(dbscan)
 add_subdirectory(molecular_dynamics)
+add_subdirectory(plasma)
 add_subdirectory(simple_intersection)
 
 find_package(Boost COMPONENTS program_options)
