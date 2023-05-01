@@ -276,7 +276,7 @@ private:
       Kokkos::deep_copy(space,
                         Kokkos::subview(sided_parents,
                                         std::make_pair(edges_start, edges_end)),
-                        ROOT_CHAIN_VALUE);
+                        BORUVKA_ROOT_CHAIN);
 
       computeParents(space, edges, sided_parents, dendrogram_parents);
 

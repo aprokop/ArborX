@@ -34,8 +34,8 @@ enum class BoruvkaMode
   HDBSCAN
 };
 
-constexpr int ROOT_CHAIN_VALUE = -2;
-constexpr int FOLLOW_CHAIN_VALUE = -3;
+constexpr int BORUVKA_ROOT_CHAIN = -2;
+constexpr int BORUVKA_FOLLOW_OFFSET = -3;
 
 class DirectedEdge
 {
@@ -528,7 +528,7 @@ void updateSidedParents(ExecutionSpace const &space, Labels const &labels,
         }
         else
         {
-          sided_parents(e) = FOLLOW_CHAIN_VALUE - alpha_edge_index;
+          sided_parents(e) = BORUVKA_FOLLOW_OFFSET - alpha_edge_index;
         }
       });
 }
@@ -585,14 +585,14 @@ void computeParents(ExecutionSpace const &space, Edges const &edges,
       KOKKOS_LAMBDA(int const e) {
         long long key = sided_parents(e);
         auto const &edge = edges(e);
-        if (key <= FOLLOW_CHAIN_VALUE)
+        if (key <= BORUVKA_FOLLOW_OFFSET)
         {
-          int next = FOLLOW_CHAIN_VALUE - key;
+          int next = BORUVKA_FOLLOW_OFFSET - key;
           do
           {
             key = sided_parents(next);
-            if (key <= FOLLOW_CHAIN_VALUE)
-              next = FOLLOW_CHAIN_VALUE - key;
+            if (key <= BORUVKA_FOLLOW_OFFSET)
+              next = BORUVKA_FOLLOW_OFFSET - key;
             else if (key >= 0)
             {
               next = key / 2;
@@ -600,11 +600,11 @@ void computeParents(ExecutionSpace const &space, Edges const &edges,
               if (edge < next_edge)
                 break;
             }
-            else if (key == ROOT_CHAIN_VALUE)
+            else if (key == BORUVKA_ROOT_CHAIN)
               break;
           } while (true);
         }
-        if (key == ROOT_CHAIN_VALUE)
+        if (key == BORUVKA_ROOT_CHAIN)
           key = INT_MAX;
 
         // Comparison of weights as ints is the same as their comparison as
