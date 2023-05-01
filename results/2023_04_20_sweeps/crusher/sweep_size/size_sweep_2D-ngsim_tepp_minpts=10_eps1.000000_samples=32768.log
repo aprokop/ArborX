@@ -1,0 +1,52 @@
+filename          : /ccs/home/aprokop/csc333_orion//ngsim.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1.000000
+samples           : 32768
+Reading in "/ccs/home/aprokop/csc333_orion//ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.45189e+06 1.87263e+06 )
+p[32767] = ( 6.04281e+06 2.13359e+06 )
+::[DBSCANTime] DIM: 2
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//ngsim.arborx*
+>rounds*1*
+>eps*1*
+>minpts*10*
+>dim*2*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.00254512*
+>numgrids*29656*
+>buildgetnbrkdt*0.00310588*
+>markcoretime*0.00236797*
+>numcore*29*
+>numpts*32768*
+clustercore bucketing
+>clustercoretime*0.00359416*
+>assignbordertime*0.00041604*
+>cleanuptime*0.000510931*
+>totaltime*0.013377*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*32768*
+>numcore*29*
+>numborder*16*
+>numnoise*32723*
+>numclusterpts*45*
+>numcluster*4*
+>>>>>>>>>>>>>>>>
+Total points: 32768
+Core points: 29
+Border points: 16
+Noise points: 32723
+Total clustered points: 45
+Num clusters: 4
+clusterid-23423: 10 points
+clusterid-2001: 10 points
+clusterid-22883: 15 points
+clusterid-23012: 10 points
+>>>>>>>>>>>>>>>>

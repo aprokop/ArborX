@@ -1,0 +1,49 @@
+filename          : /ccs/home/aprokop/csc333_orion//2D_VisualVar_10M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1000.000000
+samples           : 8388608
+Reading in "/ccs/home/aprokop/csc333_orion//2D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 2D points
+Data sanity check:
+p[0] = ( 71641 39020 )
+p[8388607] = ( 53490 24092 )
+::[DBSCANTime] DIM: 2
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//2D_VisualVar_10M.arborx*
+>rounds*1*
+>eps*1000*
+>minpts*10*
+>dim*2*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.0856011*
+>numgrids*5282*
+>buildgetnbrkdt*0.00162888*
+>markcoretime*0.00436592*
+>numcore*8387982*
+>numpts*8388608*
+clustercore bucketing
+>clustercoretime*0.0254791*
+>assignbordertime*0.000654936*
+>cleanuptime*0.00332308*
+>totaltime*0.123716*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*8388608*
+>numcore*8387982*
+>numborder*4*
+>numnoise*622*
+>numclusterpts*8387986*
+>numcluster*1*
+>>>>>>>>>>>>>>>>
+Total points: 8388608
+Core points: 8387982
+Border points: 4
+Noise points: 622
+Total clustered points: 8387986
+Num clusters: 1
+clusterid-5281: 8387986 points
+>>>>>>>>>>>>>>>>

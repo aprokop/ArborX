@@ -1,0 +1,44 @@
+filename          : /datasets/ngsim.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1.000000
+samples           : 524288
+Reading in "/datasets/ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+#samples = 524288
+Data sanity check:
+p[0] = ( 2.23052e+06 1.37592e+06 )
+p[524287] = ( 6.0428e+06 2.13355e+06 )
+Total edges are 8259274
+numPoints: 524288
+Init Memory 419.000000, Memory consumed 461.000000
+------PERFORMANCE REPORT------
+eps	minpts	pts	cluster		n_threads	n_blocks	preproc.	proc.	kernel	total	memory
+1	10	524288	1588		512		1025		736.049		5569.54	0 	6305.6	42
+-------------------------------------------
+
+97610 nodes with ID: 0
+23312 nodes with ID: 1
+25898 nodes with ID: 2
+27560 nodes with ID: 3
+22 nodes with ID: 4
+6792 nodes with ID: 5
+2667 nodes with ID: 6
+28518 nodes with ID: 7
+3267 nodes with ID: 8
+611 nodes with ID: 9
+20 nodes with ID: 10
+5465 nodes with ID: 11
+35894 nodes with ID: 12
+4914 nodes with ID: 13
+1888 nodes with ID: 14
+28121 nodes with ID: 15
+1628 nodes with ID: 16
+202 nodes with ID: 17
+9699 nodes with ID: 18
+723 nodes with ID: 19
+9191 nodes with ID: 20
+3759 nodes with ID: 21
+23940 nodes with ID: 22
+1744 nodes with ID: 23
+6278 nodes with ID: 24
+3925 nodes with ID: 25

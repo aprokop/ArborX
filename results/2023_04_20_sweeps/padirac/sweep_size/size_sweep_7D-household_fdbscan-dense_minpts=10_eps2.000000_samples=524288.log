@@ -1,0 +1,33 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 2.000000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 10
+filename          : /datasets/7D_2.05M_household.arborx [binary, max_pts = -1]
+samples           : 524288
+verbose           : true
+Reading in "/datasets/7D_2.05M_household.arborx" in binary mode...done
+Read in 2049280 7D points
+Data sanity check:
+p[0] = ( 5.374 0.498 233.29 23 0 2 17 )
+p[524287] = ( 0.932 0 239.55 3.8 0 0 0 )
+h = 7.559289e-01, n = [15, 2, 40, 64, 117, 106, 42]
+#nonempty cells     :      40245
+#dense cells        :       3793 [9.42%]
+#dense cell points  :     459779 [87.70%]
+#mixed primitives   :      68302
+-- dense cells      :      0.007
+-- construction     :      0.001
+-- query+cluster    :      0.093
+---- neigh          :      0.013
+---- query          :      0.079
+-- postprocess      :      0.002
+total time          :      0.102
+
+#clusters       : 33
+#cluster points : 520186 [99.22%]
+#noise   points : 4102 [0.78%]

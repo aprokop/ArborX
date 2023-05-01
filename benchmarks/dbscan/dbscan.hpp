@@ -20,7 +20,6 @@ struct Parameters
   bool binary;
   int cluster_min_size;
   int core_min_size;
-  std::string dendrogram;
   float eps;
   std::string filename;
   std::string filename_labels;

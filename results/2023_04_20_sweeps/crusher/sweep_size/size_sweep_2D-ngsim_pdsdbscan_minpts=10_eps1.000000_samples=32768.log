@@ -1,0 +1,15 @@
+filename          : /ccs/home/aprokop/csc333_orion//ngsim.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1.000000
+samples           : 32768
+Reading points from file: /ccs/home/aprokop/csc333_orion//ngsim.arborx
+Reading in "/ccs/home/aprokop/csc333_orion//ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.45189e+06 1.87263e+06 )
+p[32767] = ( 6.04281e+06 2.13359e+06 )
+Reading input data file took 0.115857 seconds.
+Build kdtree took 0.00605772 seconds.
+Local computation took 0.00246638 seconds.
+Merging took 7.71591e-05 seconds.
+DBSCAN (total) took 0.00336066 seconds.

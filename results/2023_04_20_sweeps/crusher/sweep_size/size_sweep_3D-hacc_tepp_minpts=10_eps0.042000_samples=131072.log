@@ -1,0 +1,69 @@
+filename          : /ccs/home/aprokop/csc333_orion//hacc_37M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.042000
+samples           : 131072
+Reading in "/ccs/home/aprokop/csc333_orion//hacc_37M.arborx" in binary mode...done
+Read in 36902719 3D points
+Data sanity check:
+p[0] = ( 0.946488 21.8635 28.2964 )
+p[131071] = ( -0.0996399 71.3167 64.6333 )
+::[DBSCANTime] DIM: 3
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//hacc_37M.arborx*
+>rounds*1*
+>eps*0.042*
+>minpts*10*
+>dim*3*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.00696611*
+>numgrids*130379*
+>buildgetnbrkdt*0.0135899*
+>markcoretime*0.0134861*
+>numcore*173*
+>numpts*131072*
+clustercore bucketing
+>clustercoretime*0.00656486*
+>assignbordertime*0.00106001*
+>cleanuptime*0.00158715*
+>totaltime*0.0441499*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*131072*
+>numcore*173*
+>numborder*290*
+>numnoise*130609*
+>numclusterpts*463*
+>numcluster*28*
+>>>>>>>>>>>>>>>>
+Total points: 131072
+Core points: 173
+Border points: 290
+Noise points: 130609
+Total clustered points: 463
+Num clusters: 28
+clusterid-123993: 16 points
+clusterid-123070: 11 points
+clusterid-41087: 29 points
+clusterid-95337: 12 points
+clusterid-99780: 22 points
+clusterid-78409: 16 points
+clusterid-62877: 12 points
+clusterid-88822: 15 points
+clusterid-32881: 23 points
+clusterid-107713: 11 points
+clusterid-93439: 13 points
+clusterid-26879: 35 points
+clusterid-44030: 10 points
+clusterid-26579: 14 points
+clusterid-20951: 29 points
+clusterid-35567: 18 points
+clusterid-120450: 10 points
+clusterid-91825: 15 points
+clusterid-125848: 21 points
+clusterid-92585: 10 points
+ ... see output file for more details
+>>>>>>>>>>>>>>>>

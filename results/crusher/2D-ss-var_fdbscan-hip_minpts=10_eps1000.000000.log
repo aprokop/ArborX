@@ -1,0 +1,27 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1000.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /ccs/home/aprokop/csc333_orion//2D_VisualVar_10M.arborx [binary, max_pts = -1]
+samples           : -1
+verbose           : true
+Reading in "/ccs/home/aprokop/csc333_orion//2D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 2D points
+Data sanity check:
+p[0] = ( 71641 39020 )
+p[9999999] = ( 53490 24092 )
+-- construction     :      0.012
+-- query+cluster    :     28.822
+---- neigh          :      0.015
+---- query          :     28.801
+-- postprocess      :      0.016
+total time          :     28.880
+
+#clusters       : 1
+#cluster points : 9999271 [99.99%]
+#noise   points : 729 [0.01%]

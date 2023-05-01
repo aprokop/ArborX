@@ -1,0 +1,28 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /datasets/ngsim.arborx [binary, max_pts = -1]
+samples           : 32768
+verbose           : true
+Reading in "/datasets/ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.45189e+06 1.87263e+06 )
+p[32767] = ( 6.04281e+06 2.13359e+06 )
+CUDA occupancy: 80
+-- construction     :      0.001
+-- query+cluster    :      0.001
+---- neigh          :      0.000
+---- query          :      0.000
+-- postprocess      :      0.002
+total time          :      0.004
+
+#clusters       : 4
+#cluster points : 45 [0.14%]
+#noise   points : 32723 [99.86%]

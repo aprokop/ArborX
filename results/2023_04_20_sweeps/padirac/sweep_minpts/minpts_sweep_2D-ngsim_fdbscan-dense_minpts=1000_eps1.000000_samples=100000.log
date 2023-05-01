@@ -1,0 +1,20 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1.000000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 1000
+filename          : /datasets/ngsim.arborx [binary, max_pts = -1]
+samples           : 100000
+verbose           : true
+Reading in "/datasets/ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.45252e+06 1.87204e+06 )
+p[99999] = ( 6.0428e+06 2.13355e+06 )
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  ArborX exception: FDBSCAN-DenseBox algorithm will experience loss of precision, undetectably producing wrong results. Please switch to using FDBSCAN.
+Aborted (core dumped)

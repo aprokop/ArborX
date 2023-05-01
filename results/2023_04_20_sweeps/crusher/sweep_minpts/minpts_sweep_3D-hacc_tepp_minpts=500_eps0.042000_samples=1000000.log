@@ -1,0 +1,48 @@
+filename          : /ccs/home/aprokop/csc333_orion//hacc_37M.arborx [max_pts = -1]
+minpts            : 500
+eps               : 0.042000
+samples           : 1000000
+Reading in "/ccs/home/aprokop/csc333_orion//hacc_37M.arborx" in binary mode...done
+Read in 36902719 3D points
+Data sanity check:
+p[0] = ( 0.00466919 9.3683 40.6306 )
+p[999999] = ( -0.270844 71.2819 71.0654 )
+::[DBSCANTime] DIM: 3
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//hacc_37M.arborx*
+>rounds*1*
+>eps*0.042*
+>minpts*500*
+>dim*3*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.057086*
+>numgrids*970934*
+>buildgetnbrkdt*0.0364571*
+>markcoretime*0.0276339*
+>numcore*0*
+>numpts*1000000*
+clustercore bucketing
+>clustercoretime*0.012244*
+>assignbordertime*0.0028379*
+>cleanuptime*0.00685501*
+>totaltime*0.144048*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*1000000*
+>numcore*0*
+>numborder*0*
+>numnoise*1000000*
+>numclusterpts*0*
+>numcluster*0*
+>>>>>>>>>>>>>>>>
+Total points: 1000000
+Core points: 0
+Border points: 0
+Noise points: 1000000
+Total clustered points: 0
+Num clusters: 0
+>>>>>>>>>>>>>>>>

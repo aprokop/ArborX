@@ -1,0 +1,28 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 2.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /datasets/7D_2.05M_household.arborx [binary, max_pts = -1]
+samples           : 32768
+verbose           : true
+Reading in "/datasets/7D_2.05M_household.arborx" in binary mode...done
+Read in 2049280 7D points
+Data sanity check:
+p[0] = ( 5.374 0.498 233.29 23 0 2 17 )
+p[32767] = ( 0.948 0 238.16 4 0 1 0 )
+CUDA occupancy: 80
+-- construction     :      0.001
+-- query+cluster    :      0.090
+---- neigh          :      0.001
+---- query          :      0.088
+-- postprocess      :      0.002
+total time          :      0.093
+
+#clusters       : 11
+#cluster points : 31501 [96.13%]
+#noise   points : 1267 [3.87%]

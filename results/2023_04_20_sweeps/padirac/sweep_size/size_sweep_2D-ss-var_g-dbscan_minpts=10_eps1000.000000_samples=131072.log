@@ -1,0 +1,44 @@
+filename          : /datasets/2D_VisualVar_10M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1000.000000
+samples           : 131072
+Reading in "/datasets/2D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 2D points
+#samples = 131072
+Data sanity check:
+p[0] = ( 71712 39034 )
+p[131071] = ( 43493 90444 )
+Total edges are 58653286
+numPoints: 131072
+Init Memory 419.000000, Memory consumed 647.000000
+------PERFORMANCE REPORT------
+eps	minpts	pts	cluster		n_threads	n_blocks	preproc.	proc.	kernel	total	memory
+1000	10	131072	4		512		257		715.652		173.616	0 	889.271	228
+-------------------------------------------
+
+17 nodes with ID: 0
+130385 nodes with ID: 1
+658 nodes with ID: 2
+12 nodes with ID: 3
+0 nodes with ID: 4
+0 nodes with ID: 5
+0 nodes with ID: 6
+0 nodes with ID: 7
+0 nodes with ID: 8
+0 nodes with ID: 9
+0 nodes with ID: 10
+0 nodes with ID: 11
+0 nodes with ID: 12
+0 nodes with ID: 13
+0 nodes with ID: 14
+0 nodes with ID: 15
+0 nodes with ID: 16
+0 nodes with ID: 17
+0 nodes with ID: 18
+0 nodes with ID: 19
+0 nodes with ID: 20
+0 nodes with ID: 21
+0 nodes with ID: 22
+0 nodes with ID: 23
+0 nodes with ID: 24
+0 nodes with ID: 25

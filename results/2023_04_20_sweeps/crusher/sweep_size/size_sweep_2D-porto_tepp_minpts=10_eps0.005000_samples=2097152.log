@@ -1,0 +1,69 @@
+filename          : /ccs/home/aprokop/csc333_orion//PortoTaxi.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.005000
+samples           : 2097152
+Reading in "/ccs/home/aprokop/csc333_orion//PortoTaxi.arborx" in binary mode...done
+Read in 81712629 2D points
+Data sanity check:
+p[0] = ( -8.64984 41.1543 )
+p[2097151] = ( -8.62089 41.1499 )
+::[DBSCANTime] DIM: 2
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//PortoTaxi.arborx*
+>rounds*1*
+>eps*0.005*
+>minpts*10*
+>dim*2*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.0474319*
+>numgrids*9156*
+>buildgetnbrkdt*0.00620794*
+>markcoretime*0.00312805*
+>numcore*2091012*
+>numpts*2097152*
+clustercore bucketing
+>clustercoretime*0.025948*
+>assignbordertime*0.000750065*
+>cleanuptime*0.00144696*
+>totaltime*0.0865011*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*2097152*
+>numcore*2091012*
+>numborder*1543*
+>numnoise*4597*
+>numclusterpts*2092623*
+>numcluster*143*
+>>>>>>>>>>>>>>>>
+Total points: 2097152
+Core points: 2091012
+Border points: 1543
+Noise points: 4597
+Total clustered points: 2092623
+Num clusters: 143
+clusterid-8800: 16 points
+clusterid-9116: 16 points
+clusterid-7437: 10 points
+clusterid-3809: 27 points
+clusterid-3398: 16 points
+clusterid-1031: 18 points
+clusterid-2598: 10 points
+clusterid-6914: 13 points
+clusterid-7256: 16 points
+clusterid-2382: 11 points
+clusterid-7151: 58 points
+clusterid-3738: 20 points
+clusterid-3230: 13 points
+clusterid-6176: 35 points
+clusterid-8843: 12 points
+clusterid-197: 17 points
+clusterid-4821: 25 points
+clusterid-2668: 40 points
+clusterid-3938: 19 points
+clusterid-5913: 21 points
+ ... see output file for more details
+>>>>>>>>>>>>>>>>

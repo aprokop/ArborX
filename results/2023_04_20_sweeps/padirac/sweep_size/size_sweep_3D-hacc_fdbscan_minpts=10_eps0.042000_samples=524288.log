@@ -1,0 +1,28 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 0.042000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /datasets/hacc_37M.arborx [binary, max_pts = -1]
+samples           : 524288
+verbose           : true
+Reading in "/datasets/hacc_37M.arborx" in binary mode...done
+Read in 36902719 3D points
+Data sanity check:
+p[0] = ( 0.00466919 9.3683 40.6306 )
+p[524287] = ( -0.0996399 71.3167 64.6333 )
+CUDA occupancy: 80
+-- construction     :      0.002
+-- query+cluster    :      0.003
+---- neigh          :      0.002
+---- query          :      0.001
+-- postprocess      :      0.003
+total time          :      0.009
+
+#clusters       : 580
+#cluster points : 16653 [3.18%]
+#noise   points : 507635 [96.82%]

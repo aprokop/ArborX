@@ -1,0 +1,48 @@
+filename          : /ccs/home/aprokop/csc333_orion//7D_VisualVar_10M.arborx [max_pts = -1]
+minpts            : 1000
+eps               : 1000.000000
+samples           : 1000000
+Reading in "/ccs/home/aprokop/csc333_orion//7D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 7D points
+Data sanity check:
+p[0] = ( 76275 13201 51959 92618 40856 41672 13625 )
+p[999999] = ( 12899 45565 95945 25240 90783 79532 42875 )
+::[DBSCANTime] DIM: 7
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//7D_VisualVar_10M.arborx*
+>rounds*1*
+>eps*1000*
+>minpts*1000*
+>dim*7*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.0628998*
+>numgrids*805185*
+>buildgetnbrkdt*0.0341971*
+>markcoretime*0.096257*
+>numcore*0*
+>numpts*1000000*
+clustercore bucketing
+>clustercoretime*0.00820613*
+>assignbordertime*0.00501394*
+>cleanuptime*0.00728106*
+>totaltime*0.21494*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*1000000*
+>numcore*0*
+>numborder*0*
+>numnoise*1000000*
+>numclusterpts*0*
+>numcluster*0*
+>>>>>>>>>>>>>>>>
+Total points: 1000000
+Core points: 0
+Border points: 0
+Noise points: 1000000
+Total clustered points: 0
+Num clusters: 0
+>>>>>>>>>>>>>>>>

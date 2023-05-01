@@ -1,0 +1,33 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 0.042000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 10
+filename          : /datasets/hacc_37M.arborx [binary, max_pts = -1]
+samples           : 1000000
+verbose           : true
+Reading in "/datasets/hacc_37M.arborx" in binary mode...done
+Read in 36902719 3D points
+Data sanity check:
+p[0] = ( 0.00466919 9.3683 40.6306 )
+p[999999] = ( -0.270844 71.2819 71.0654 )
+h = 2.424871e-02, n = [3300, 3300, 3300]
+#nonempty cells     :     970935
+#dense cells        :         24 [0.00%]
+#dense cell points  :        281 [0.03%]
+#mixed primitives   :     999743
+-- dense cells      :      0.006
+-- construction     :      0.003
+-- query+cluster    :      0.007
+---- neigh          :      0.002
+---- query          :      0.003
+-- postprocess      :      0.002
+total time          :      0.019
+
+#clusters       : 1689
+#cluster points : 60565 [6.06%]
+#noise   points : 939435 [93.94%]

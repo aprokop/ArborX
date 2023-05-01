@@ -1,0 +1,33 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1000.000000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 10
+filename          : /datasets/7D_VisualVar_10M.arborx [binary, max_pts = -1]
+samples           : -1
+verbose           : true
+Reading in "/datasets/7D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 7D points
+Data sanity check:
+p[0] = ( 76273 13264 51964 92661 40795 41674 13611 )
+p[9999999] = ( 83191 68129 74908 96623 60297 5390 92310 )
+h = 3.779645e+02, n = [265, 265, 265, 265, 265, 265, 265]
+#nonempty cells     :    6080652
+#dense cells        :      91534 [1.51%]
+#dense cell points  :    2430177 [24.30%]
+#mixed primitives   :    7661357
+-- dense cells      :      0.016
+-- construction     :      0.011
+-- query+cluster    :      0.232
+---- neigh          :      0.024
+---- query          :      0.204
+-- postprocess      :      0.010
+total time          :      0.269
+
+#clusters       : 55296
+#cluster points : 9999000 [99.99%]
+#noise   points : 1000 [0.01%]

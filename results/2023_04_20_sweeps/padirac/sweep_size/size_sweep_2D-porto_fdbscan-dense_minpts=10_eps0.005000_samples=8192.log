@@ -1,0 +1,33 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 0.005000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 10
+filename          : /datasets/PortoTaxi.arborx [binary, max_pts = -1]
+samples           : 8192
+verbose           : true
+Reading in "/datasets/PortoTaxi.arborx" in binary mode...done
+Read in 81712629 2D points
+Data sanity check:
+p[0] = ( -8.66871 41.2386 )
+p[8191] = ( -8.59619 41.1463 )
+h = 3.535534e-03, n = [296, 498]
+#nonempty cells     :       1005
+#dense cells        :        212 [21.09%]
+#dense cell points  :       6377 [77.84%]
+#mixed primitives   :       2027
+-- dense cells      :      0.003
+-- construction     :      0.000
+-- query+cluster    :      0.002
+---- neigh          :      0.001
+---- query          :      0.001
+-- postprocess      :      0.000
+total time          :      0.005
+
+#clusters       : 4
+#cluster points : 7674 [93.68%]
+#noise   points : 518 [6.32%]

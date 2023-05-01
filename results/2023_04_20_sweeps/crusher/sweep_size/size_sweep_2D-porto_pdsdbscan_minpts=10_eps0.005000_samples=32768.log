@@ -1,0 +1,15 @@
+filename          : /ccs/home/aprokop/csc333_orion//PortoTaxi.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.005000
+samples           : 32768
+Reading points from file: /ccs/home/aprokop/csc333_orion//PortoTaxi.arborx
+Reading in "/ccs/home/aprokop/csc333_orion//PortoTaxi.arborx" in binary mode...done
+Read in 81712629 2D points
+Data sanity check:
+p[0] = ( -8.60626 41.1638 )
+p[32767] = ( -8.62769 41.1628 )
+Reading input data file took 0.724933 seconds.
+Build kdtree took 0.00650015 seconds.
+Local computation took 0.0669052 seconds.
+Merging took 0.00411155 seconds.
+DBSCAN (total) took 0.0797752 seconds.

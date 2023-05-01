@@ -1,0 +1,27 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /ccs/home/aprokop/csc333_orion//ngsim.arborx [binary, max_pts = -1]
+samples           : -1
+verbose           : true
+Reading in "/ccs/home/aprokop/csc333_orion//ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.4512e+06 1.87325e+06 )
+p[11850525] = ( 6.04282e+06 2.13377e+06 )
+-- construction     :      0.015
+-- query+cluster    :      0.806
+---- neigh          :      0.049
+---- query          :      0.752
+-- postprocess      :      0.012
+total time          :      0.852
+
+#clusters       : 1424
+#cluster points : 11712956 [98.84%]
+#noise   points : 137570 [1.16%]

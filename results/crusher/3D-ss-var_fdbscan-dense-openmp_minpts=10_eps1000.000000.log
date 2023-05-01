@@ -1,0 +1,33 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1000.000000
+cluster min size  : 1
+implementation    : fdbscan-densebox
+verify            : false
+minpts            : 10
+filename          : /ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx [binary, max_pts = -1]
+samples           : -1
+verbose           : true
+Reading in "/ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 3D points
+Data sanity check:
+p[0] = ( 44263 10849 49131 )
+p[9999999] = ( 73604 71356 26448 )
+h = 5.773503e+02, n = [174, 174, 174]
+#nonempty cells     :     615813
+#dense cells        :     287452 [46.68%]
+#dense cell points  :    8607286 [86.07%]
+#mixed primitives   :    1680166
+-- dense cells      :      0.266
+-- construction     :      0.021
+-- query+cluster    :      0.934
+---- neigh          :      0.063
+---- query          :      0.684
+-- postprocess      :      0.539
+total time          :      1.765
+
+#clusters       : 3
+#cluster points : 9999214 [99.99%]
+#noise   points : 786 [0.01%]

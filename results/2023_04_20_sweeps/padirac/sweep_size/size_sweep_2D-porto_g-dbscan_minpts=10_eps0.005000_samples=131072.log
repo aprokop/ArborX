@@ -1,0 +1,44 @@
+filename          : /datasets/PortoTaxi.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.005000
+samples           : 131072
+Reading in "/datasets/PortoTaxi.arborx" in binary mode...done
+Read in 81712629 2D points
+#samples = 131072
+Data sanity check:
+p[0] = ( -8.64213 41.1712 )
+p[131071] = ( -8.60932 41.1812 )
+Total edges are 421209876
+numPoints: 131072
+Init Memory 419.000000, Memory consumed 2031.000000
+------PERFORMANCE REPORT------
+eps	minpts	pts	cluster		n_threads	n_blocks	preproc.	proc.	kernel	total	memory
+0.005	10	131072	27		512		257		1254.43		310.819	0 	1565.26	1612
+-------------------------------------------
+
+1614 nodes with ID: 0
+128959 nodes with ID: 1
+20 nodes with ID: 2
+84 nodes with ID: 3
+53 nodes with ID: 4
+18 nodes with ID: 5
+23 nodes with ID: 6
+21 nodes with ID: 7
+16 nodes with ID: 8
+21 nodes with ID: 9
+28 nodes with ID: 10
+13 nodes with ID: 11
+12 nodes with ID: 12
+17 nodes with ID: 13
+22 nodes with ID: 14
+22 nodes with ID: 15
+15 nodes with ID: 16
+15 nodes with ID: 17
+10 nodes with ID: 18
+10 nodes with ID: 19
+10 nodes with ID: 20
+11 nodes with ID: 21
+10 nodes with ID: 22
+13 nodes with ID: 23
+13 nodes with ID: 24
+12 nodes with ID: 25

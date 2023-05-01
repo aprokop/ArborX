@@ -1,0 +1,28 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1000.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 50
+filename          : /datasets/3D_VisualVar_10M.arborx [binary, max_pts = -1]
+samples           : 1000000
+verbose           : true
+Reading in "/datasets/3D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 3D points
+Data sanity check:
+p[0] = ( 44313 10806 49069 )
+p[999999] = ( 71978 52402 78668 )
+CUDA occupancy: 80
+-- construction     :      0.003
+-- query+cluster    :      0.031
+---- neigh          :      0.010
+---- query          :      0.019
+-- postprocess      :      0.005
+total time          :      0.039
+
+#clusters       : 966
+#cluster points : 750191 [75.02%]
+#noise   points : 249809 [24.98%]

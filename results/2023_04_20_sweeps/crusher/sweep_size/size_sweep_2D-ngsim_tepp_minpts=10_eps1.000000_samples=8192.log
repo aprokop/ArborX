@@ -1,0 +1,48 @@
+filename          : /ccs/home/aprokop/csc333_orion//ngsim.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1.000000
+samples           : 8192
+Reading in "/ccs/home/aprokop/csc333_orion//ngsim.arborx" in binary mode...done
+Read in 11850526 2D points
+Data sanity check:
+p[0] = ( 6.45216e+06 1.87343e+06 )
+p[8191] = ( 6.04284e+06 2.13335e+06 )
+::[DBSCANTime] DIM: 2
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//ngsim.arborx*
+>rounds*1*
+>eps*1*
+>minpts*10*
+>dim*2*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.0114689*
+>numgrids*7971*
+>buildgetnbrkdt*0.00130892*
+>markcoretime*0.000659227*
+>numcore*0*
+>numpts*8192*
+clustercore bucketing
+>clustercoretime*0.00130582*
+>assignbordertime*0.000339031*
+>cleanuptime*0.00027895*
+>totaltime*0.01618*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*8192*
+>numcore*0*
+>numborder*0*
+>numnoise*8192*
+>numclusterpts*0*
+>numcluster*0*
+>>>>>>>>>>>>>>>>
+Total points: 8192
+Core points: 0
+Border points: 0
+Noise points: 8192
+Total clustered points: 0
+Num clusters: 0
+>>>>>>>>>>>>>>>>

@@ -1,0 +1,15 @@
+filename          : /ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 1000.000000
+samples           : 524288
+Reading points from file: /ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx
+Reading in "/ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 3D points
+Data sanity check:
+p[0] = ( 44304 10790 49140 )
+p[524287] = ( 71978 52402 78668 )
+Reading input data file took 0.175663 seconds.
+Build kdtree took 0.0905294 seconds.
+Local computation took 0.0974764 seconds.
+Merging took 0.00167949 seconds.
+DBSCAN (total) took 0.101953 seconds.

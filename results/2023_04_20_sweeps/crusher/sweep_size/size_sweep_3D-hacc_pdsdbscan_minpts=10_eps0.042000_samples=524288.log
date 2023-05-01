@@ -1,0 +1,15 @@
+filename          : /ccs/home/aprokop/csc333_orion//hacc_37M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.042000
+samples           : 524288
+Reading points from file: /ccs/home/aprokop/csc333_orion//hacc_37M.arborx
+Reading in "/ccs/home/aprokop/csc333_orion//hacc_37M.arborx" in binary mode...done
+Read in 36902719 3D points
+Data sanity check:
+p[0] = ( 0.00466919 9.3683 40.6306 )
+p[524287] = ( -0.0996399 71.3167 64.6333 )
+Reading input data file took 0.501271 seconds.
+Build kdtree took 0.100224 seconds.
+Local computation took 0.00695279 seconds.
+Merging took 0.000172313 seconds.
+DBSCAN (total) took 0.00997905 seconds.

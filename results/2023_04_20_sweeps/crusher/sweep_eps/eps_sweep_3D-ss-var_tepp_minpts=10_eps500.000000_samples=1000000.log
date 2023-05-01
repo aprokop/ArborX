@@ -1,0 +1,69 @@
+filename          : /ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx [max_pts = -1]
+minpts            : 10
+eps               : 500.000000
+samples           : 1000000
+Reading in "/ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx" in binary mode...done
+Read in 10000000 3D points
+Data sanity check:
+p[0] = ( 44313 10806 49069 )
+p[999999] = ( 71978 52402 78668 )
+::[DBSCANTime] DIM: 3
+>testsplit**
+>datafile*/ccs/home/aprokop/csc333_orion//3D_VisualVar_10M.arborx*
+>rounds*1*
+>eps*500*
+>minpts*10*
+>dim*3*
+>roundsplit**
+>serialalgo*parallel*
+>ndalgo*nd*
+>algo*exact*
+>numprocs*112*
+>assigngridtime*0.0572228*
+>numgrids*708121*
+>buildgetnbrkdt*0.044198*
+>markcoretime*0.0425251*
+>numcore*478271*
+>numpts*1000000*
+clustercore bucketing
+>clustercoretime*0.0199041*
+>assignbordertime*0.00585079*
+>cleanuptime*0.0048852*
+>totaltime*0.175609*
+>roundsplit**
+Verbalizing clusters ... 
+>numpts*1000000*
+>numcore*478271*
+>numborder*181601*
+>numnoise*340128*
+>numclusterpts*664344*
+>numcluster*5406*
+>>>>>>>>>>>>>>>>
+Total points: 1000000
+Core points: 478271
+Border points: 181601
+Noise points: 340128
+Total clustered points: 664344
+Num clusters: 5406
+clusterid-53785: 3757 points
+clusterid-617815: 20 points
+clusterid-640498: 11 points
+clusterid-644252: 16 points
+clusterid-640459: 12 points
+clusterid-629105: 16 points
+clusterid-632714: 10 points
+clusterid-644212: 20 points
+clusterid-653164: 18 points
+clusterid-671229: 11 points
+clusterid-685151: 17 points
+clusterid-689395: 13 points
+clusterid-695332: 25 points
+clusterid-701062: 33 points
+clusterid-666541: 16 points
+clusterid-674723: 75 points
+clusterid-664912: 12 points
+clusterid-634813: 24 points
+clusterid-674799: 12 points
+clusterid-685389: 26 points
+ ... see output file for more details
+>>>>>>>>>>>>>>>>

@@ -1,0 +1,15 @@
+filename          : /ccs/home/aprokop/csc333_orion//7D_2.05M_household.arborx [max_pts = -1]
+minpts            : 10
+eps               : 0.500000
+samples           : 1000000
+Reading points from file: /ccs/home/aprokop/csc333_orion//7D_2.05M_household.arborx
+Reading in "/ccs/home/aprokop/csc333_orion//7D_2.05M_household.arborx" in binary mode...done
+Read in 2049280 7D points
+Data sanity check:
+p[0] = ( 5.36 0.436 233.63 23 0 1 16 )
+p[999999] = ( 0.932 0 239.55 3.8 0 0 0 )
+Reading input data file took 0.124663 seconds.
+Build kdtree took 0.307912 seconds.
+Local computation took 10.9469 seconds.
+Merging took 0.684478 seconds.
+DBSCAN (total) took 11.9465 seconds.

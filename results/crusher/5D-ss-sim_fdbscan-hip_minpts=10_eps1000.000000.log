@@ -1,0 +1,27 @@
+ArborX version    : 1.4 (dev)
+ArborX hash       : No hash available
+Kokkos version    : 4.0.99
+algorithm         : dbscan
+eps               : 1000.000000
+cluster min size  : 1
+implementation    : fdbscan
+verify            : false
+minpts            : 10
+filename          : /ccs/home/aprokop/csc333_orion//5D_VisualSim_10M.arborx [binary, max_pts = -1]
+samples           : -1
+verbose           : true
+Reading in "/ccs/home/aprokop/csc333_orion//5D_VisualSim_10M.arborx" in binary mode...done
+Read in 10000000 5D points
+Data sanity check:
+p[0] = ( 73482 67130 50421 49964 25076 )
+p[9999999] = ( 59807 24938 72327 40583 2828 )
+-- construction     :      0.091
+-- query+cluster    :      5.806
+---- neigh          :      0.021
+---- query          :      5.779
+-- postprocess      :      0.015
+total time          :      5.931
+
+#clusters       : 12
+#cluster points : 9999000 [99.99%]
+#noise   points : 1000 [0.01%]
