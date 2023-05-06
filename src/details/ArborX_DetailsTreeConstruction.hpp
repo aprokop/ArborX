@@ -70,7 +70,8 @@ inline void projectOntoSpaceFillingCurve(ExecutionSpace const &space,
       });
 }
 
-template <typename ExecutionSpace, typename Primitives, typename Nodes>
+template <typename BoundingVolume, typename ExecutionSpace, typename Primitives,
+          typename Nodes>
 inline void initializeSingleLeafNode(ExecutionSpace const &space,
                                      Primitives const &primitives,
                                      Nodes const &leaf_nodes)
@@ -80,15 +81,13 @@ inline void initializeSingleLeafNode(ExecutionSpace const &space,
   ARBORX_ASSERT(leaf_nodes.extent(0) == 1);
   ARBORX_ASSERT(Access::size(primitives) == 1);
 
-  using Node = typename Nodes::value_type;
-  using BoundingVolume = typename Node::bounding_volume_type;
-
   Kokkos::parallel_for(
       "ArborX::TreeConstruction::initialize_single_leaf",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1), KOKKOS_LAMBDA(int) {
         BoundingVolume bounding_volume{};
         expand(bounding_volume, Access::get(primitives, 0));
-        leaf_nodes(0) = makeLeafNode(0, std::move(bounding_volume));
+        leaf_nodes(0) = makeLeafNode(
+            PairIndexVolume<BoundingVolume>{(unsigned)0, bounding_volume});
       });
 }
 
@@ -210,7 +209,8 @@ public:
 
     // Initialize leaf node
     auto &leaf_node = _leaf_nodes(i);
-    leaf_node = makeLeafNode(original_index, bounding_volume);
+    leaf_node = makeLeafNode(
+        PairIndexVolume<BoundingVolume>{original_index, bounding_volume});
 
     // For a leaf node, the range is just one index
     int range_left = i;
@@ -271,7 +271,7 @@ public:
         Kokkos::load_fence();
         expand(bounding_volume,
                right_child_is_leaf
-                   ? _leaf_nodes(right_child).bounding_volume
+                   ? _leaf_nodes(right_child).value.bounding_volume
                    : _internal_nodes(right_child).bounding_volume);
       }
       else
@@ -294,7 +294,7 @@ public:
         Kokkos::load_fence();
         expand(bounding_volume,
                left_child_is_leaf
-                   ? _leaf_nodes(left_child).bounding_volume
+                   ? _leaf_nodes(left_child).value.bounding_volume
                    : _internal_nodes(left_child).bounding_volume);
 
         if (!left_child_is_leaf)
