@@ -159,8 +159,8 @@ BasicBoundingVolumeHierarchy<MemorySpace, BoundingVolume, Enable>::
 
   if (size() == 1)
   {
-    Details::TreeConstruction::initializeSingleLeafNode<BoundingVolume>(
-        space, primitives, _leaf_nodes);
+    Details::TreeConstruction::initializeSingleLeafNode(space, primitives,
+                                                        _leaf_nodes);
     Kokkos::deep_copy(
         space,
         Kokkos::View<BoundingVolume, Kokkos::HostSpace,

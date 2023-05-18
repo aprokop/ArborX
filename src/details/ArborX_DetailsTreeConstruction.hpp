@@ -70,13 +70,14 @@ inline void projectOntoSpaceFillingCurve(ExecutionSpace const &space,
       });
 }
 
-template <typename BoundingVolume, typename ExecutionSpace, typename Primitives,
-          typename Nodes>
+template <typename ExecutionSpace, typename Primitives, typename Nodes>
 inline void initializeSingleLeafNode(ExecutionSpace const &space,
                                      Primitives const &primitives,
                                      Nodes const &leaf_nodes)
 {
   using Access = AccessTraits<Primitives, PrimitivesTag>;
+  using Value = typename Nodes::value_type::value_type;
+  using BoundingVolume = decltype(std::declval<Value>().bounding_volume);
 
   ARBORX_ASSERT(leaf_nodes.extent(0) == 1);
   ARBORX_ASSERT(Access::size(primitives) == 1);
@@ -86,8 +87,7 @@ inline void initializeSingleLeafNode(ExecutionSpace const &space,
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1), KOKKOS_LAMBDA(int) {
         BoundingVolume bounding_volume{};
         expand(bounding_volume, Access::get(primitives, 0));
-        leaf_nodes(0) = makeLeafNode(
-            PairIndexVolume<BoundingVolume>{(unsigned)0, bounding_volume});
+        leaf_nodes(0) = makeLeafNode(Value{(unsigned)0, bounding_volume});
       });
 }
 
@@ -208,9 +208,9 @@ public:
     expand(bounding_volume, Access::get(_primitives, original_index));
 
     // Initialize leaf node
+    using Value = typename LeafNodes::value_type::value_type;
     auto &leaf_node = _leaf_nodes(i);
-    leaf_node = makeLeafNode(
-        PairIndexVolume<BoundingVolume>{original_index, bounding_volume});
+    leaf_node = makeLeafNode(Value{original_index, bounding_volume});
 
     // For a leaf node, the range is just one index
     int range_left = i;
