@@ -425,6 +425,17 @@ struct centroid<SphereTag, Sphere>
   }
 };
 
+template <typename KDOP>
+struct centroid<KDOPTag, KDOP>
+{
+  KOKKOS_FUNCTION static auto apply(KDOP const &kdop)
+  {
+    // FIXME approximation
+    using Box = ArborX::Box;
+    return centroid<BoxTag, Box>::apply((Box)kdop);
+  }
+};
+
 } // namespace Dispatch
 
 // transformation that maps the unit cube into a new axis-aligned box
