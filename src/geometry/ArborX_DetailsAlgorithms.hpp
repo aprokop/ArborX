@@ -27,7 +27,6 @@ namespace Details
 namespace Dispatch
 {
 using GeometryTraits::BoxTag;
-using GeometryTraits::KDOPTag;
 using GeometryTraits::PointTag;
 using GeometryTraits::SphereTag;
 
@@ -294,19 +293,6 @@ struct expand<BoxTag, PointTag, Box, Point>
   }
 };
 
-// expand a box to include a point
-template <typename Box, typename KDOP>
-struct expand<BoxTag, KDOPTag, Box, KDOP>
-{
-  KOKKOS_FUNCTION static void apply(Box &box, KDOP const &kdop)
-  {
-    // FIXME This is a workaround so that we can use existing conversion
-    // machinery for KDOP. In the long term, this should be replaced by a
-    // general algorithm.
-    Details::expand(box, (ArborX::Box)kdop);
-  }
-};
-
 // expand a box to include a box
 template <typename Box1, typename Box2>
 struct expand<BoxTag, BoxTag, Box1, Box2>
@@ -422,17 +408,6 @@ struct centroid<SphereTag, Sphere>
   KOKKOS_FUNCTION static auto apply(Sphere const &sphere)
   {
     return sphere.centroid();
-  }
-};
-
-template <typename KDOP>
-struct centroid<KDOPTag, KDOP>
-{
-  KOKKOS_FUNCTION static auto apply(KDOP const &kdop)
-  {
-    // FIXME approximation
-    using Box = ArborX::Box;
-    return centroid<BoxTag, Box>::apply((Box)kdop);
   }
 };
 
