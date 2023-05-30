@@ -746,6 +746,7 @@ struct MinimumSpanningTree
   Kokkos::View<WeightedEdge *, MemorySpace> edges;
   Kokkos::View<int *, MemorySpace> dendrogram_parents;
   Kokkos::View<float *, MemorySpace> dendrogram_parent_heights;
+  Kokkos::View<int *, MemorySpace> _edge_hierarchy_offsets;
 
   template <class ExecutionSpace, class Primitives>
   MinimumSpanningTree(ExecutionSpace const &space, Primitives const &primitives,
@@ -788,6 +789,9 @@ struct MinimumSpanningTree
     }
     else
     {
+      if (Mode == BoruvkaMode::HDBSCAN)
+        Kokkos::abort("Cannot run HDBSCAN using Boruvka with minPts = 1");
+
       Kokkos::Profiling::pushRegion("ArborX::MST::boruvka");
       doBoruvka(space, bvh, Euclidean{});
       Kokkos::Profiling::popRegion();
@@ -795,6 +799,8 @@ struct MinimumSpanningTree
 
     finalizeEdges(space, bvh, edges);
 
+    computeFlatClustering(space, dendrogram_parents, dendrogram_parent_heights,
+                          _edge_hierarchy_offsets);
     Kokkos::Profiling::popRegion();
   }
 
@@ -886,6 +892,8 @@ private:
     int num_components = n;
     [[maybe_unused]] int edges_start = 0;
     [[maybe_unused]] int edges_end = 0;
+    std::vector<int> edge_offsets;
+    edge_offsets.push_back(0);
     do
     {
       Kokkos::Profiling::pushRegion("ArborX::Boruvka_" +
@@ -927,6 +935,8 @@ private:
       int num_edges_host;
       Kokkos::deep_copy(space, num_edges_host, num_edges);
       space.fence();
+
+      edge_offsets.push_back(num_edges_host);
 
       if constexpr (Mode == BoruvkaMode::HDBSCAN)
       {
@@ -982,6 +992,7 @@ private:
                         ROOT_CHAIN_VALUE);
 
       computeParents(space, edges, sided_parents, dendrogram_parents);
+      Kokkos::resize(sided_parents, 0);
 
       KokkosExt::reallocWithoutInitializing(space, dendrogram_parent_heights,
                                             n - 1);
@@ -993,7 +1004,190 @@ private:
           });
     }
 
+    // Copy edge offsets to device
+    Kokkos::resize(space, _edge_hierarchy_offsets, edge_offsets.size());
+    auto edge_hierarchy_offsets_host = Kokkos::create_mirror_view(
+        Kokkos::HostSpace{}, _edge_hierarchy_offsets);
+    for (int i = 0; i < (int)edge_offsets.size(); ++i)
+      edge_hierarchy_offsets_host(i) = edge_offsets[i];
+    Kokkos::deep_copy(space, _edge_hierarchy_offsets,
+                      edge_hierarchy_offsets_host);
+
     Kokkos::Profiling::popRegion();
+  }
+
+  template <class ExecutionSpace, typename Parents, typename Heights,
+            typename Offsets>
+  void computeFlatClustering(ExecutionSpace const &space,
+                             Parents const &parents, Heights const &heights,
+                             Offsets const &offsets)
+  {
+    KokkosExt::ScopedProfileRegion guard("ArborX::HDBSCAN::flat_clustering");
+    auto const n = heights.size() + 1;
+
+    Kokkos::View<int *, MemorySpace> counts_naive(
+        Kokkos::view_alloc(space,
+                           "ArborX::HDBSCAN::flat_clustering::counts_naive"),
+        n - 1);
+    Kokkos::View<int *, MemorySpace> counts_hierarchical(
+        Kokkos::view_alloc(
+            space, "ArborX::HDBSCAN::flat_clustering::counts_hierarchical"),
+        n - 1);
+
+    // Naive approach
+    {
+      auto &counts = counts_naive;
+
+      KokkosExt::ScopedProfileRegion guard(
+          "ArborX::HDBSCAN::flat_clustering::counts_naive");
+
+      Kokkos::parallel_for(
+          "ArborX::HDBSCAN::flat_clustering::compute_counts",
+          Kokkos::RangePolicy<ExecutionSpace>(space, n - 1, 2 * n - 1),
+          KOKKOS_CLASS_LAMBDA(int i) {
+            int count = 1;
+            int parent = parents(i);
+            do
+            {
+              auto stored_count =
+                  Kokkos::atomic_fetch_add(&counts(parent), count);
+
+              // Terminate the first thread up
+              if (stored_count == 0)
+                break;
+
+              // Update the count using local variable, instead of reading
+              // counts
+              count += stored_count;
+
+              parent = parents(parent);
+            } while (parent != -1);
+          });
+    }
+
+    // Hierarchical approach
+    {
+      auto &counts = counts_hierarchical;
+
+      KokkosExt::ScopedProfileRegion guard(
+          "ArborX::HDBSCAN::flat_clustering::counts_hierarchical");
+
+      int num_levels = offsets.size() - 1;
+      auto offsets_host =
+          Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, offsets);
+
+      // std::cout << "offsets:";
+      // for (int i = 0; i < (int)offsets.size(); ++i)
+      // std::cout << " " << offsets(i);
+      // std::cout << std::endl;
+
+      // for (int i = 0; i < 2 * (int)n - 1; ++i)
+      // printf("[%d]: %d\n", i, parents(i));
+
+      Kokkos::View<int *, MemorySpace> skip_parents(
+          Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                             "ArborX::HDBSCAN::flat_clustering::skip_parents"),
+          n - 1);
+      Kokkos::deep_copy(
+          space, skip_parents,
+          Kokkos::subview(parents, std::make_pair(0, (int)n - 1)));
+
+      for (int k = 1; k < num_levels; ++k)
+      {
+        Kokkos::parallel_for(
+            "ArborX::HDBSCAN::flat_clustering::fast_travel_level_" +
+                std::to_string(k),
+            Kokkos::RangePolicy<ExecutionSpace>(space, offsets_host(k),
+                                                offsets_host(k + 1)),
+            KOKKOS_LAMBDA(int i) {
+              auto is_lower_level = [offset = offsets(k)](int j) {
+                return j < offset;
+              };
+
+              int parent = skip_parents(i);
+              while (parent != -1 && is_lower_level(parent))
+                parent = skip_parents(parent);
+
+              skip_parents(i) = parent;
+            });
+      }
+
+      // std::cout << "Skip parents:\n";
+      // for (int i = 0; i < (int)n - 1; ++i)
+      // printf("[%d]: %d\n", i, skip_parents(i));
+
+      // Forward loop
+      Kokkos::View<int *, MemorySpace> marks(
+          Kokkos::view_alloc(space, "ArborX::HDBSCAN::flat_clustering::marks"),
+          n - 1);
+      int max_traversal = 0;
+      Kokkos::parallel_reduce(
+          "ArborX::HDBSCAN::flat_clustering::counts_forward",
+          Kokkos::RangePolicy<ExecutionSpace>(space, n - 1, 2 * n - 1),
+          KOKKOS_LAMBDA(int i, int &update) {
+            auto parent = parents(i);
+            auto count = 1;
+            int hops = 0;
+            while (parent != -1)
+            {
+              Kokkos::atomic_add(&counts(parent), count);
+              parent = skip_parents(parent);
+              ++hops;
+            }
+            if (hops > update)
+              update = hops;
+          },
+          Kokkos::Max<int>(max_traversal));
+      printf("max hops: %d\n", max_traversal);
+
+      // std::cout << "Counts (forward):\n";
+      // for (int i = 0; i < (int)n - 1; ++i)
+      // printf("[%d]: %d\n", i, counts(i));
+
+      // Backward loop
+      for (int k = num_levels - 1; k >= 0; --k)
+      {
+        Kokkos::parallel_for(
+            "ArborX::HDBSCAN::flat_clustering::counts_backward_level_" +
+                std::to_string(k),
+            Kokkos::RangePolicy<ExecutionSpace>(space, offsets_host(k),
+                                                offsets_host(k + 1)),
+            KOKKOS_LAMBDA(int i) {
+              auto lower_level = [offset = offsets(k)](int j) {
+                return j < offset;
+              };
+
+              auto count = counts(i);
+              auto parent = parents(i);
+              while (parent != -1 && lower_level(parent))
+              {
+                Kokkos::atomic_add(&counts(parent), count);
+                parent = skip_parents(parent);
+              }
+            });
+      }
+
+      // std::cout << "Counts:\n";
+      // for (int i = 0; i < (int)n - 1; ++i)
+      // printf("[%d]: %d\n", i, counts(i));
+    }
+
+    // Check
+    int wrong = 0;
+    Kokkos::parallel_reduce(
+        "ArborX::HDBSCAN::flat_clustering::counts_check",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, n - 1),
+        KOKKOS_LAMBDA(int i, int &update) {
+          if (counts_naive(i) != counts_hierarchical(i))
+          {
+            ++update;
+            printf("[%d]: naive = %d, hier = %d\n", i, counts_naive(i),
+                   counts_hierarchical(i));
+          }
+        },
+        wrong);
+    std::cout << "Counts check: " << (wrong ? "failed" : "succeeded")
+              << std::endl;
   }
 };
 

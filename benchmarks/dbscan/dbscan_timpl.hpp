@@ -297,6 +297,8 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
             ArborX_Benchmark::get_time("ArborX::MST::compute_vertex_parents"));
         printf("-- edge parents     : %10.3f\n",
                ArborX_Benchmark::get_time("ArborX::MST::compute_edge_parents"));
+        printf("-- flat clustering  : %10.3f\n",
+               ArborX_Benchmark::get_time("ArborX::HDBSCAN::flat_clustering"));
       }
       else
       {
