@@ -448,6 +448,49 @@ auto loadHouseholdData(std::string const &filename)
   return points;
 }
 
+auto loadGanTaoData(std::string const &filename)
+{
+  std::cout << "Assuming Gan-Tao data.\n";
+  std::cout << "Reading in \"" << filename << "\" in text mode...";
+  std::cout.flush();
+
+  std::ifstream input;
+  input.open(filename);
+  if (!input.good())
+    throw std::runtime_error("Cannot open file");
+
+  // Skip header
+  std::string line;
+  std::getline(input, line);
+  int dim;
+  {
+    std::istringstream line_stream(line);
+    int n;
+    line_stream >> n;
+    line_stream >> dim;
+  }
+
+  Points points(dim);
+  while (input.good())
+  {
+    if (!std::getline(input, line))
+      break;
+    std::istringstream line_stream(line);
+
+    int word;
+    line_stream >> word; // skip first one
+    for (int i = 0; i < dim; ++i)
+    {
+      line_stream >> word;
+      points[i].emplace_back(word);
+    }
+  }
+  input.close();
+  std::cout << "done\nRead in " << points.size() << " points" << std::endl;
+
+  return points;
+}
+
 auto loadData(std::string const &filename, std::string const &reader_type)
 {
   if (reader_type == "hacc")
@@ -464,6 +507,8 @@ auto loadData(std::string const &filename, std::string const &reader_type)
     return loadGaiaData(filename);
   if (reader_type == "household")
     return loadHouseholdData(filename);
+  if (reader_type == "gan-tao")
+    return loadGanTaoData(filename);
 
   throw std::runtime_error("Unknown reader type: \"" + reader_type + "\"");
 }
