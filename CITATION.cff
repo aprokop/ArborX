@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the following paper."
+identifiers:
+  - description: "Core"
+    type: article
+    authors:
+    - family-names: Lebrun-Grandié
+      given-names: Damien
+      orcid: 0000-0003-1952-7219
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Prokopenko
+      given-names: Andrey
+      orcid: 0000-0003-3616-5504
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Turcksin
+      given-names: Bruno
+      orcid: 0000-0001-5954-6313
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Slattery
+      given-names: Stuart
+      orcid: 0000-0003-0103-888X
+      affiliation: Oak Ridge National Laboratory
+    title: "ArborX: A Performance Portable Geometric Search Library"
+    journal: ACM Transactions on Mathematical Software
+    year: 2020
+    month: 12
+    volume: 47
+    issue: 1
+    number: 2
+    pages: 15
+    publisher:
+        name: Association for Computing Machinery
+        address: New York, NY, USA
+    issn: 0098-3500
+    doi: 10.1145/3412558
