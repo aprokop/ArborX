@@ -15,6 +15,7 @@
 #include <ArborX_AccessTraits.hpp>
 #include <ArborX_Box.hpp>
 #include <ArborX_DetailsAlgorithms.hpp> // returnCentroid, translateAndScale
+#include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp> // sortObjects
 #include <ArborX_DetailsUtils.hpp>     // exclusivePrefixSum, lastElement
@@ -75,6 +76,63 @@ public:
         });
 
     return sortObjects(space, linear_ordering_indices);
+  }
+
+  template <typename ExecutionSpace, typename BVH, typename Predicates>
+  static Kokkos::View<unsigned int *, typename BVH::memory_space>
+  sortPredicatesSpatialTraversal(ExecutionSpace const &space, BVH const &bvh,
+                                 Predicates const &predicates)
+  {
+    using MemorySpace = typename BVH::memory_space;
+
+    using Access = AccessTraits<Predicates, PredicatesTag>;
+    auto const n_queries = Access::size(predicates);
+
+    Kokkos::View<unsigned int *, MemorySpace> hashes(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                           "ArborX::BVH::query::hashes"),
+        n_queries);
+
+    constexpr int num_bits = 32;
+    static_assert(num_bits <=
+                  8 * sizeof(typename decltype(hashes)::value_type));
+    Kokkos::parallel_for(
+        "ArborX::BatchedQueries::compute_index",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, Access::size(predicates)),
+        KOKKOS_LAMBDA(int queryIndex) {
+          auto const &predicate = Access::get(predicates, queryIndex);
+
+          unsigned hash = 0;
+          int node = HappyTreeFriends::getRoot(bvh);
+          int bit = -1;
+          do
+          {
+            ++bit;
+            bool const is_leaf = HappyTreeFriends::isLeaf(bvh, node);
+
+            if (predicate((
+                    is_leaf ? HappyTreeFriends::getLeafBoundingVolume(bvh, node)
+                            : HappyTreeFriends::getInternalBoundingVolume(
+                                  bvh, node))))
+            {
+              hash |= (1u << (num_bits - bit));
+              if (is_leaf)
+              {
+                node = HappyTreeFriends::getRope(bvh, node);
+              }
+              else
+              {
+                node = HappyTreeFriends::getLeftChild(bvh, node);
+              }
+            }
+            else
+            {
+              node = HappyTreeFriends::getRope(bvh, node);
+            }
+          } while (node != ROPE_SENTINEL && bit < num_bits);
+          hashes(queryIndex) = hash;
+        });
+    return sortObjects(space, hashes);
   }
 
   // NOTE  trailing return type seems required :(
