@@ -71,6 +71,33 @@ inline void initializeSingleLeafNode(ExecutionSpace const &space,
       KOKKOS_LAMBDA(int) { leaf_nodes(0) = makeLeafNode(values(0)); });
 }
 
+template <typename ExecutionSpace, typename Indexables, typename BoundingVolume>
+inline void getSingleLeafBounds(ExecutionSpace const &space,
+                                Indexables const &indexables,
+                                BoundingVolume &bounds)
+{
+  Kokkos::View<BoundingVolume, typename Indexables::memory_space> bv(
+      "ArborX::BVH::getSingleLeafBounds::bounding_volume");
+  Kokkos::parallel_for(
+      "ArborX::TreeConstruction::get_singel_leaf_bounds",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1),
+      KOKKOS_LAMBDA(int) { expand(bv(), indexables(0)); });
+  bounds = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bv)();
+}
+
+template <typename ExecutionSpace, typename Nodes, typename BoundingVolume>
+inline void getBounds(ExecutionSpace const &space, Nodes const &nodes,
+                      BoundingVolume &bounds)
+{
+  Kokkos::View<BoundingVolume, typename Nodes::memory_space> bv(
+      "ArborX::BVH::getBounds::bounding_volume");
+  Kokkos::parallel_for(
+      "ArborX::TreeConstruction::get_bounds",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1),
+      KOKKOS_LAMBDA(int) { bv() = nodes(0).bounding_volume; });
+  bounds = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bv)();
+}
+
 template <typename Values, typename IndexableGetter,
           typename PermutationIndices, typename LinearOrdering,
           typename LeafNodes, typename InternalNodes>

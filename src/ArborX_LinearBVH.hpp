@@ -91,19 +91,6 @@ private:
   using leaf_node_type = Details::LeafNode<value_type>;
   using internal_node_type = Details::InternalNode<bounding_volume_type>;
 
-  KOKKOS_FUNCTION
-  bounding_volume_type const *getRootBoundingVolumePtr() const
-  {
-    int const n = size();
-    // Need address of the root node's bounding box to copy it back on the host,
-    // but can't access node elements from the constructor since the data is on
-    // the device.
-    assert((n == 1 || Details::HappyTreeFriends::getRoot(*this) == n) &&
-           "workaround below assumes root is stored as first element");
-    return (n > 1 ? &_internal_nodes.data()->bounding_volume
-                  : &_leaf_nodes.data()->value.bounding_volume);
-  }
-
   size_type _size{0};
   bounding_volume_type _bounds;
   Kokkos::View<leaf_node_type *, MemorySpace> _leaf_nodes;
@@ -170,12 +157,8 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
         space,
         Details::LegacyValues<Primitives, bounding_volume_type>{primitives},
         _leaf_nodes);
-    Kokkos::deep_copy(
-        space,
-        Kokkos::View<BoundingVolume, Kokkos::HostSpace,
-                     Kokkos::MemoryUnmanaged>(&_bounds),
-        Kokkos::View<BoundingVolume const, MemorySpace,
-                     Kokkos::MemoryUnmanaged>(getRootBoundingVolumePtr()));
+    Details::TreeConstruction::getSingleLeafBounds(
+        space, Details::Indexables<Primitives>{primitives}, _bounds);
     return;
   }
 
@@ -211,12 +194,8 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
       _indexable_getter, permutation_indices, linear_ordering_indices,
       _leaf_nodes, _internal_nodes);
 
-  Kokkos::deep_copy(
-      space,
-      Kokkos::View<BoundingVolume, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
-          &_bounds),
-      Kokkos::View<BoundingVolume const, MemorySpace, Kokkos::MemoryUnmanaged>(
-          getRootBoundingVolumePtr()));
+  assert(Details::HappyTreeFriends::getRoot(*this) == (int)size());
+  Details::TreeConstruction::getBounds(space, _internal_nodes, _bounds);
 
   Kokkos::Profiling::popRegion();
 }
