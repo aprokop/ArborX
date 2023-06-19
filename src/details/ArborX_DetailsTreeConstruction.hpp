@@ -57,44 +57,27 @@ inline void projectOntoSpaceFillingCurve(ExecutionSpace const &space,
       });
 }
 
-template <typename ExecutionSpace, typename Values, typename Nodes>
-inline void initializeSingleLeafNode(ExecutionSpace const &space,
-                                     Values const &values,
-                                     Nodes const &leaf_nodes)
+template <typename ExecutionSpace, typename Values, typename IndexableGetter,
+          typename Nodes, typename BoundingVolume>
+inline void
+initializeSingleLeafTree(ExecutionSpace const &space, Values const &values,
+                         IndexableGetter const &indexable_getter,
+                         Nodes const &leaf_nodes, BoundingVolume &bounds)
 {
   ARBORX_ASSERT(leaf_nodes.extent(0) == 1);
   ARBORX_ASSERT(values.size() == 1);
 
-  Kokkos::parallel_for(
-      "ArborX::TreeConstruction::initialize_single_leaf",
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1),
-      KOKKOS_LAMBDA(int) { leaf_nodes(0) = makeLeafNode(values(0)); });
-}
-
-template <typename ExecutionSpace, typename Indexables, typename BoundingVolume>
-inline void getSingleLeafBounds(ExecutionSpace const &space,
-                                Indexables const &indexables,
-                                BoundingVolume &bounds)
-{
-  Kokkos::View<BoundingVolume, typename Indexables::memory_space> bv(
-      "ArborX::BVH::getSingleLeafBounds::bounding_volume");
-  Kokkos::parallel_for(
-      "ArborX::TreeConstruction::get_singel_leaf_bounds",
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1),
-      KOKKOS_LAMBDA(int) { expand(bv(), indexables(0)); });
-  bounds = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bv)();
-}
-
-template <typename ExecutionSpace, typename Nodes, typename BoundingVolume>
-inline void getBounds(ExecutionSpace const &space, Nodes const &nodes,
-                      BoundingVolume &bounds)
-{
   Kokkos::View<BoundingVolume, typename Nodes::memory_space> bv(
-      "ArborX::BVH::getBounds::bounding_volume");
+      "ArborX::BVH::getSingleLeafBounds::bounding_volume");
+
   Kokkos::parallel_for(
-      "ArborX::TreeConstruction::get_bounds",
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1),
-      KOKKOS_LAMBDA(int) { bv() = nodes(0).bounding_volume; });
+      "ArborX::TreeConstruction::initialize_single_leaf_tree",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 1), KOKKOS_LAMBDA(int) {
+        auto value = values(0);
+        leaf_nodes(0) = makeLeafNode(value);
+        expand(bv(), indexable_getter(value));
+      });
+
   bounds = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bv)();
 }
 
@@ -107,6 +90,8 @@ class GenerateHierarchy
 
   using MemorySpace = typename LeafNodes::memory_space;
   using LinearOrderingValueType = typename LinearOrdering::non_const_value_type;
+  using BoundingVolume =
+      typename InternalNodes::value_type::bounding_volume_type;
 
 public:
   template <typename ExecutionSpace>
@@ -114,7 +99,8 @@ public:
                     IndexableGetter const &indexable_getter,
                     PermutationIndices const &permutation_indices,
                     LinearOrdering const &sorted_morton_codes,
-                    LeafNodes leaf_nodes, InternalNodes internal_nodes)
+                    LeafNodes leaf_nodes, InternalNodes internal_nodes,
+                    BoundingVolume &bounds)
       : _values(values)
       , _indexable_getter(indexable_getter)
       , _permutation_indices(permutation_indices)
@@ -125,6 +111,8 @@ public:
                                    "ArborX::BVH::BVH::ranges"),
                 internal_nodes.extent(0))
       , _num_internal_nodes(_internal_nodes.extent_int(0))
+      , _bounds("ArborX::BVH::BVH::bounding_volume")
+
   {
     Kokkos::deep_copy(space, _ranges, UNTOUCHED_NODE);
 
@@ -132,6 +120,8 @@ public:
         "ArborX::TreeConstruction::generate_hierarchy",
         Kokkos::RangePolicy<ExecutionSpace>(space, 0, leaf_nodes.extent(0)),
         *this);
+    bounds =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, _bounds)();
   }
 
   using DeltaValueType = std::make_signed_t<LinearOrderingValueType>;
@@ -215,8 +205,6 @@ public:
     auto &leaf_node = _leaf_nodes(i);
     leaf_node = makeLeafNode(_values(original_index));
 
-    using BoundingVolume =
-        typename InternalNodes::value_type::bounding_volume_type;
     BoundingVolume bounding_volume{};
     expand(bounding_volume, _indexable_getter(leaf_node.value));
 
@@ -260,7 +248,7 @@ public:
         // This ensures that every node gets processed only once, and not
         // before both of its children are processed.
         if (range_right == UNTOUCHED_NODE)
-          break;
+          return;
 
         // This is slightly convoluted due to the fact that the indices of leaf
         // nodes have to be shifted. The determination whether the other child
@@ -293,7 +281,7 @@ public:
         range_left = Kokkos::atomic_compare_exchange(
             &_ranges(apetrei_parent), UNTOUCHED_NODE, range_right);
         if (range_left == UNTOUCHED_NODE)
-          break;
+          return;
 
         left_child = apetrei_parent;
         bool const left_child_is_leaf = (left_child == range_left);
@@ -322,6 +310,8 @@ public:
 
       i = internalIndex(karras_parent);
     } while (i != root);
+
+    _bounds() = bounding_volume;
   }
 
 private:
@@ -333,6 +323,7 @@ private:
   InternalNodes _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
   int _num_internal_nodes;
+  Kokkos::View<BoundingVolume, MemorySpace> _bounds;
 };
 
 template <typename ExecutionSpace, typename Values, typename IndexableGetter,
@@ -347,7 +338,8 @@ void generateHierarchy(
         permutation_indices,
     Kokkos::View<LinearOrderingValueType *, LinearOrderingViewProperties...>
         sorted_morton_codes,
-    LeafNodes leaf_nodes, InternalNodes internal_nodes)
+    LeafNodes leaf_nodes, InternalNodes internal_nodes,
+    typename InternalNodes::value_type::bounding_volume_type &bounds)
 {
   using ConstPermutationIndices =
       Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>;
@@ -357,7 +349,7 @@ void generateHierarchy(
   GenerateHierarchy(space, values, indexable_getter,
                     ConstPermutationIndices(permutation_indices),
                     ConstLinearOrdering(sorted_morton_codes), leaf_nodes,
-                    internal_nodes);
+                    internal_nodes, bounds);
 }
 
 } // namespace ArborX::Details::TreeConstruction

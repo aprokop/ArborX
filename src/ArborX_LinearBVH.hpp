@@ -141,6 +141,15 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
     return;
   }
 
+  if (size() == 1)
+  {
+    Details::TreeConstruction::initializeSingleLeafTree(
+        space,
+        Details::LegacyValues<Primitives, bounding_volume_type>{primitives},
+        _indexable_getter, _leaf_nodes, _bounds);
+    return;
+  }
+
   Kokkos::Profiling::pushRegion(
       "ArborX::BVH::BVH::calculate_scene_bounding_box");
 
@@ -150,18 +159,6 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
       space, Details::Indexables<Primitives>{primitives}, bbox);
 
   Kokkos::Profiling::popRegion();
-
-  if (size() == 1)
-  {
-    Details::TreeConstruction::initializeSingleLeafNode(
-        space,
-        Details::LegacyValues<Primitives, bounding_volume_type>{primitives},
-        _leaf_nodes);
-    Details::TreeConstruction::getSingleLeafBounds(
-        space, Details::Indexables<Primitives>{primitives}, _bounds);
-    return;
-  }
-
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::compute_linear_ordering");
 
   // Map indexables from multidimensional domain to one-dimensional interval
@@ -192,10 +189,7 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
       space,
       Details::LegacyValues<Primitives, bounding_volume_type>{primitives},
       _indexable_getter, permutation_indices, linear_ordering_indices,
-      _leaf_nodes, _internal_nodes);
-
-  assert(Details::HappyTreeFriends::getRoot(*this) == (int)size());
-  Details::TreeConstruction::getBounds(space, _internal_nodes, _bounds);
+      _leaf_nodes, _internal_nodes, _bounds);
 
   Kokkos::Profiling::popRegion();
 }
