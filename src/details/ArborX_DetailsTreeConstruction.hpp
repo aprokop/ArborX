@@ -117,7 +117,8 @@ public:
       , _num_internal_nodes(_internal_nodes.extent_int(0))
       , _bounds(Kokkos::create_mirror_view(
             Kokkos::view_alloc(MemorySpace(), space,
-                               Kokkos::WithoutInitializing),
+                               Kokkos::WithoutInitializing,
+                               "ArborX::BVH::BVH::bounding_volume"),
             Kokkos::View<BoundingVolume, Kokkos::HostSpace,
                          Kokkos::MemoryUnmanaged>(&bounds)))
 
