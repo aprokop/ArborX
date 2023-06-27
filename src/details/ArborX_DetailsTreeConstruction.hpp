@@ -78,7 +78,11 @@ initializeSingleLeafTree(ExecutionSpace const &space, Values const &values,
         expand(bv(), indexable_getter(value));
       });
 
-  bounds = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, bv)();
+  Kokkos::deep_copy(
+      space,
+      Kokkos::View<BoundingVolume, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
+          &bounds),
+      bv);
 }
 
 template <typename Values, typename IndexableGetter,
@@ -111,7 +115,11 @@ public:
                                    "ArborX::BVH::BVH::ranges"),
                 internal_nodes.extent(0))
       , _num_internal_nodes(_internal_nodes.extent_int(0))
-      , _bounds("ArborX::BVH::BVH::bounding_volume")
+      , _bounds(Kokkos::create_mirror_view(
+            Kokkos::view_alloc(MemorySpace(), space,
+                               Kokkos::WithoutInitializing),
+            Kokkos::View<BoundingVolume, Kokkos::HostSpace,
+                         Kokkos::MemoryUnmanaged>(&bounds)))
 
   {
     Kokkos::deep_copy(space, _ranges, UNTOUCHED_NODE);
@@ -120,8 +128,11 @@ public:
         "ArborX::TreeConstruction::generate_hierarchy",
         Kokkos::RangePolicy<ExecutionSpace>(space, 0, leaf_nodes.extent(0)),
         *this);
-    bounds =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, _bounds)();
+
+    Kokkos::deep_copy(space,
+                      Kokkos::View<BoundingVolume, Kokkos::HostSpace,
+                                   Kokkos::MemoryUnmanaged>(&bounds),
+                      _bounds);
   }
 
   using DeltaValueType = std::make_signed_t<LinearOrderingValueType>;
