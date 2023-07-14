@@ -45,6 +45,32 @@ void arborx_test_parallel_x_callback(char const *label, uint32_t device_id,
                   << device_id << " != " << arborx_test_device_id);
 }
 
+void arborx_test_fence_callback(char const *label, uint32_t device_id,
+                                uint64_t * /*fence_id*/)
+{
+  std::string label_str(label);
+  // clang-format off
+  for (std::string s : {
+         "Kokkos::Tools",
+         "HostSpace::impl_deallocate",
+         "Kokkos::deep_copy: copy between contiguous views, pre view equality check",
+         "Kokkos::deep_copy: copy between contiguous views, fence due to same spans",
+         "Kokkos::deep_copy: copy between contiguous views, post deep copy fence",
+         "fence after copying header from HostSpace",
+         "Kokkos::create_mirror_view_and_copy: fence before returning src view",
+         "Kokkos::Impl::ViewValueFunctor: View init/destroy fence"
+      })
+    if (label_str.find(s) != std::string::npos)
+      return;
+  // clang-format on
+
+  if (device_id != arborx_test_root_device_id)
+    BOOST_TEST(device_id == arborx_test_device_id,
+               "\"" << label
+                    << "\" fence not on the right execution space instance: "
+                    << device_id << " != " << arborx_test_device_id);
+}
+
 template <class ExecutionSpace>
 void arborx_test_set_tools_callbacks(ExecutionSpace exec)
 {
@@ -58,6 +84,8 @@ void arborx_test_set_tools_callbacks(ExecutionSpace exec)
       arborx_test_parallel_x_callback);
   Kokkos::Tools::Experimental::set_begin_parallel_scan_callback(
       arborx_test_parallel_x_callback);
+  Kokkos::Tools::Experimental::set_begin_fence_callback(
+      arborx_test_fence_callback);
 }
 
 void arborx_test_unset_tools_callbacks()
@@ -65,6 +93,7 @@ void arborx_test_unset_tools_callbacks()
   Kokkos::Tools::Experimental::set_begin_parallel_for_callback(nullptr);
   Kokkos::Tools::Experimental::set_begin_parallel_reduce_callback(nullptr);
   Kokkos::Tools::Experimental::set_begin_parallel_scan_callback(nullptr);
+  Kokkos::Tools::Experimental::set_begin_fence_callback(nullptr);
   arborx_test_device_id = -1;
   arborx_test_root_device_id = -1;
 }
