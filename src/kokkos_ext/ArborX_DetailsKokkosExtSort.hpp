@@ -19,6 +19,8 @@
 
 #include <Kokkos_Sort.hpp>
 
+#include <cassert>
+
 // clang-format off
 #if defined(KOKKOS_ENABLE_CUDA)
 #  if defined(KOKKOS_COMPILER_CLANG)
@@ -77,9 +79,12 @@ namespace KokkosExt
 {
 
 template <typename ExecutionSpace, typename Keys, typename Values>
-void sortByKey(ExecutionSpace const &space, Keys &keys, Values &values)
+void sortByKey(ExecutionSpace const &space, Keys &keys, Values &values,
+               bool stable_sort = false)
 {
   KokkosExt::ScopedProfileRegion guard("ArborX::KokkosExt::sortByKey::Kokkos");
+
+  assert(!stable_sort);
 
   static_assert(Kokkos::is_view<Keys>::value);
   static_assert(Kokkos::is_view<Values>::value);
@@ -118,9 +123,11 @@ void sortByKey(
 #else
     Kokkos::HIP const &space,
 #endif
-    Keys &keys, Values &values)
+    Keys &keys, Values &values, bool stable_sort = false)
 {
-  KokkosExt::ScopedProfileRegion guard("ArborX::KokkosExt::sortByKey::Thrust");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::KokkosExt::" + (stable_sort ? "stableSortByKey" : "sortByKey") +
+      "::Thrust");
 
   using ExecutionSpace = std::decay_t<decltype(space)>;
   static_assert(Kokkos::is_view<Keys>::value);
@@ -143,17 +150,23 @@ void sortByKey(
   auto const execution_policy = thrust::hip::par.on(space.hip_stream());
 #endif
 
-  thrust::sort_by_key(execution_policy, keys.data(), keys.data() + n,
-                      values.data());
+  if (!stable_sort)
+    thrust::sort_by_key(execution_policy, keys.data(), keys.data() + n,
+                        values.data());
+  else
+    thrust::stable_sort_by_key(execution_policy, keys.data(), keys.data() + n,
+                               values.data());
 }
 #endif
 
 #if defined(KOKKOS_ENABLE_SYCL) && defined(ARBORX_ENABLE_ONEDPL)
 template <typename Keys, typename Values>
 void sortByKey(Kokkos::Experimental::SYCL const &space, Keys &keys,
-               Values &values)
+               Values &values, bool stable_sort = false)
 {
-  KokkosExt::ScopedProfileRegion guard("ArborX::KokkosExt::sortByKey::OneDPL");
+  KokkosExt::ScopedProfileRegion guard(
+      "ArborX::KokkosExt::" + (stable_sort ? "stableSortByKey" : "sortByKey") +
+      "::OneDPL");
 
   using ExecutionSpace = std::decay_t<decltype(space)>;
   static_assert(Kokkos::is_view<Keys>::value);
@@ -174,9 +187,14 @@ void sortByKey(Kokkos::Experimental::SYCL const &space, Keys &keys,
       oneapi::dpl::make_zip_iterator(keys.data(), values.data());
   oneapi::dpl::execution::device_policy policy(
       *space.impl_internal_space_instance()->m_queue);
-  oneapi::dpl::sort(
-      policy, zipped_begin, zipped_begin + n,
-      [](auto lhs, auto rhs) { return std::get<0>(lhs) < std::get<0>(rhs); });
+  if (!stable_sort)
+    oneapi::dpl::sort(
+        policy, zipped_begin, zipped_begin + n,
+        [](auto lhs, auto rhs) { return std::get<0>(lhs) < std::get<0>(rhs); });
+  else
+    oneapi::dpl::stable_sort(
+        policy, zipped_begin, zipped_begin + n,
+        [](auto lhs, auto rhs) { return std::get<0>(lhs) < std::get<0>(rhs); });
 }
 #endif
 

@@ -26,7 +26,8 @@ namespace ArborX::Details
 // NOTE returns the permutation indices **and** sorts the input view
 template <typename ExecutionSpace, typename ViewType,
           class SizeType = unsigned int>
-auto sortObjects(ExecutionSpace const &space, ViewType &view)
+auto sortObjects(ExecutionSpace const &space, ViewType &view,
+                 bool stable_sort = false)
 {
   Kokkos::Profiling::pushRegion("ArborX::Sorting");
 
@@ -36,7 +37,7 @@ auto sortObjects(ExecutionSpace const &space, ViewType &view)
       view.extent(0));
   ArborX::iota(space, permute);
 
-  KokkosExt::sortByKey(space, view, permute);
+  KokkosExt::sortByKey(space, view, permute, stable_sort);
 
   Kokkos::Profiling::popRegion();
 
