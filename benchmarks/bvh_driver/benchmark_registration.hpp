@@ -130,7 +130,7 @@ makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
   // Radius is computed so that the number of results per query for a uniformly
   // distributed points in a [-a,a]^3 box is approximately n_neighbors.
   // Calculation: n_values*(4/3*M_PI*r^3)/(2a)^3 = n_neighbors
-  double const r = std::cbrt(static_cast<double>(n_neighbors) * 6. / M_PI);
+  float const r = std::cbrt(static_cast<float>(n_neighbors) * 6. / M_PI);
   using ExecutionSpace = typename DeviceType::execution_space;
   Kokkos::parallel_for(
       "bvh_driver:setup_radius_search_queries",
