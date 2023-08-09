@@ -596,8 +596,10 @@ BOOST_AUTO_TEST_CASE(make_euclidean_vector)
   using ArborX::Experimental::makeVector;
   using ArborX::Experimental::Vector;
   using ArborX::ExperimentalHyperGeometry::Point;
-  static_assert(makeVector(Point{0, 0, 0}, Point{1, 2, 3}) == Vector{1, 2, 3});
-  static_assert(makeVector(Point{1, 2, 3}, Point{4, 5, 6}) == Vector{3, 3, 3});
+  static_assert(makeVector(Point{0, 0, 0}, Point{1, 2, 3}) ==
+                Vector{{1, 2, 3}});
+  static_assert(makeVector(Point{1, 2, 3}, Point{4, 5, 6}) ==
+                Vector{{3, 3, 3}});
 }
 
 BOOST_AUTO_TEST_CASE(dot_product)
