@@ -38,6 +38,10 @@ bit_cast(From const &from) noexcept
 }
 #endif
 
+#if KOKKOS_VERSION >= 40100
+using Kokkos::countl_zero;
+#endif
+
 } // namespace KokkosExt
 
 #endif
