@@ -14,7 +14,8 @@
 
 #include <ArborX_DetailsAlgorithms.hpp> // expand
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
-#include <ArborX_DetailsNode.hpp> // makeLeafNode
+#include <ArborX_DetailsKokkosExtBitManipulation.hpp> // countl_zero
+#include <ArborX_DetailsNode.hpp>                     // makeLeafNode
 #include <ArborX_SpaceFillingCurves.hpp>
 
 #include <Kokkos_Core.hpp>
@@ -88,19 +89,18 @@ initializeSingleLeafTree(ExecutionSpace const &space, Values const &values,
 }
 
 template <typename Values, typename IndexableGetter,
-          typename PermutationIndices, typename LinearOrdering,
-          typename LeafNodes, typename InternalNodes>
+          typename PermutationIndices, typename LeafNodes,
+          typename InternalNodes>
 class GenerateHierarchy
 {
   static constexpr int UNTOUCHED_NODE = -1;
 
   using MemorySpace = typename LeafNodes::memory_space;
-  using LinearOrderingValueType = typename LinearOrdering::non_const_value_type;
   using BoundingVolume =
       typename InternalNodes::value_type::bounding_volume_type;
 
 public:
-  template <typename ExecutionSpace>
+  template <typename ExecutionSpace, typename LinearOrdering>
   GenerateHierarchy(ExecutionSpace const &space, Values const &values,
                     IndexableGetter const &indexable_getter,
                     PermutationIndices const &permutation_indices,
@@ -110,15 +110,18 @@ public:
       : _values(values)
       , _indexable_getter(indexable_getter)
       , _permutation_indices(permutation_indices)
-      , _sorted_morton_codes(sorted_morton_codes)
       , _leaf_nodes(leaf_nodes)
       , _internal_nodes(internal_nodes)
       , _ranges(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                                    "ArborX::BVH::BVH::ranges"),
                 internal_nodes.extent(0))
+      , _deltas(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                                   "ArborX::BVH::BVH::deltas"),
+                internal_nodes.extent(0) + 1)
       , _num_internal_nodes(_internal_nodes.extent_int(0))
   {
     Kokkos::deep_copy(space, _ranges, UNTOUCHED_NODE);
+    initializeDeltas(space, sorted_morton_codes, _deltas);
 
     Kokkos::parallel_for(
         "ArborX::TreeConstruction::generate_hierarchy",
@@ -142,28 +145,53 @@ public:
     return &_internal_nodes.data()->bounding_volume;
   }
 
-  using DeltaValueType = std::make_signed_t<LinearOrderingValueType>;
+  template <typename ExecutionSpace, typename LinearOrdering>
+  void
+  initializeDeltas(ExecutionSpace const &space,
+                   LinearOrdering const &sorted_morton_codes,
+                   Kokkos::View<unsigned char *, MemorySpace> &deltas) const
+  {
+    using LinearOrderingValueType =
+        typename LinearOrdering::non_const_value_type;
+    constexpr int limit = ((unsigned char)1 << sizeof(unsigned char) * 8);
+    static_assert(sizeof(LinearOrderingValueType) * 8 <= (int)limit);
+
+    Kokkos::parallel_for(
+        "ArborX::TreeConstruction::init_deltas",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, _num_internal_nodes),
+        KOKKOS_LAMBDA(int i) {
+          if (sorted_morton_codes(i) != sorted_morton_codes(i + 1))
+          {
+            // Per Apetrei:
+            //   Because we already know where the highest differing bit is for
+            //   each internal node, the delta function basically represents a
+            //   distance metric between two keys. Unlike the delta used by
+            //   Karras, we are interested in the index of the highest differing
+            //   bit and not the length of the common prefix. In practice,
+            //   logical xor can be used instead of finding the index of the
+            //   highest differing bit as we can compare the numbers. The higher
+            //   the index of the differing bit, the larger the number.
+            deltas(i) =
+                limit - KokkosExt::countl_zero(sorted_morton_codes(i) ^
+                                               sorted_morton_codes(i + 1));
+          }
+          else
+          {
+            deltas(i) = 0;
+          }
+        });
+  }
 
   KOKKOS_FUNCTION
   auto internalIndex(int const i) const { return i + _num_internal_nodes + 1; }
 
   KOKKOS_FUNCTION
-  DeltaValueType delta(int const i) const
+  int delta(int const i) const
   {
-    // Per Apetrei:
-    //   Because we already know where the highest differing bit is for each
-    //   internal node, the delta function basically represents a distance
-    //   metric between two keys. Unlike the delta used by Karras, we are
-    //   interested in the index of the highest differing bit and not the length
-    //   of the common prefix. In practice, logical xor can be used instead of
-    //   finding the index of the highest differing bit as we can compare the
-    //   numbers. The higher the index of the differing bit, the larger the
-    //   number.
-
     constexpr auto max_value =
-        KokkosExt::ArithmeticTraits::finite_max<DeltaValueType>::value;
+        KokkosExt::ArithmeticTraits::finite_max<int>::value;
     constexpr auto min_value =
-        KokkosExt::ArithmeticTraits::finite_min<DeltaValueType>::value;
+        KokkosExt::ArithmeticTraits::finite_min<int>::value;
 
     // This check is here simply to avoid code complications in the main
     // operator
@@ -180,18 +208,14 @@ public:
     // In this case, if the Morton indices are the same, we want to compare is.
     // We also want the result in this situation to always be less than any
     // Morton comparison. Thus, we add LLONG_MIN to it.
-    auto const x = _sorted_morton_codes(i) ^ _sorted_morton_codes(i + 1);
+    auto const x = _deltas(i);
 
-    return x + (!x) * (min_value + (i ^ (i + 1))) - 1;
-    //                                            ^^^
-    // When using 63 bits for Morton codes, the LLONG_MAX is actually a valid
-    // code. As we want the return statement above to return a value always
-    // greater than anything here, we downshift by 1.
+    return x + (!x) * (min_value + (i ^ (i + 1)));
   }
 
   template <typename Node>
   KOKKOS_FUNCTION void setRope(Node &node, int range_right,
-                               DeltaValueType delta_right) const
+                               int delta_right) const
   {
     int rope;
     if (range_right != _num_internal_nodes)
@@ -334,10 +358,10 @@ private:
   Values _values;
   IndexableGetter _indexable_getter;
   PermutationIndices _permutation_indices;
-  LinearOrdering _sorted_morton_codes;
   LeafNodes _leaf_nodes;
   InternalNodes _internal_nodes;
   Kokkos::View<int *, MemorySpace> _ranges;
+  Kokkos::View<unsigned char *, MemorySpace> _deltas;
   int _num_internal_nodes;
 };
 
