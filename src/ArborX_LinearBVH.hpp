@@ -41,13 +41,19 @@ struct HappyTreeFriends;
 
 template <typename MemorySpace, typename Value,
           typename IndexableGetter = Details::DefaultIndexableGetter,
-          typename BoundingVolume = ExperimentalHyperGeometry::Box<
-              GeometryTraits::dimension_v<
-                  std::decay_t<std::invoke_result_t<IndexableGetter, Value>>>,
-              typename GeometryTraits::coordinate_type<std::decay_t<
-                  std::invoke_result_t<IndexableGetter, Value>>>::type>>
+          typename... Parameters>
 class BasicBoundingVolumeHierarchy
 {
+  static_assert(sizeof...(Parameters) <= 1);
+  using BoundingVolume = std::conditional_t<
+      sizeof...(Parameters) == 0,
+      ExperimentalHyperGeometry::Box<
+          GeometryTraits::dimension_v<
+              std::decay_t<std::invoke_result_t<IndexableGetter, Value>>>,
+          typename GeometryTraits::coordinate_type<std::decay_t<
+              std::invoke_result_t<IndexableGetter, Value>>>::type>,
+      Parameters...>;
+
 public:
   using memory_space = MemorySpace;
   static_assert(Kokkos::is_memory_space<MemorySpace>::value);
@@ -155,14 +161,14 @@ template <typename MemorySpace>
 using BVH = BoundingVolumeHierarchy<MemorySpace>;
 
 template <typename MemorySpace, typename Value, typename IndexableGetter,
-          typename BoundingVolume>
+          typename... Parameters>
 template <typename ExecutionSpace, typename Primitives,
           typename SpaceFillingCurve>
-BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
-                             BoundingVolume>::
-    BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                                 Primitives const &primitives,
-                                 SpaceFillingCurve const &curve)
+BasicBoundingVolumeHierarchy<
+    MemorySpace, Value, IndexableGetter,
+    Parameters...>::BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
+                                                 Primitives const &primitives,
+                                                 SpaceFillingCurve const &curve)
     : _size(AccessTraits<Primitives, PrimitivesTag>::size(primitives))
     , _leaf_nodes(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                                      "ArborX::BVH::leaf_nodes"),
@@ -243,14 +249,14 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
 }
 
 template <typename MemorySpace, typename Value, typename IndexableGetter,
-          typename BoundingVolume>
+          typename... Parameters>
 template <typename ExecutionSpace, typename Predicates, typename Callback>
 void BasicBoundingVolumeHierarchy<
     MemorySpace, Value, IndexableGetter,
-    BoundingVolume>::query(ExecutionSpace const &space,
-                           Predicates const &predicates,
-                           Callback const &callback,
-                           Experimental::TraversalPolicy const &policy) const
+    Parameters...>::query(ExecutionSpace const &space,
+                          Predicates const &predicates,
+                          Callback const &callback,
+                          Experimental::TraversalPolicy const &policy) const
 {
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value);
