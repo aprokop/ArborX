@@ -25,6 +25,7 @@
 #include <ArborX_DistributedTree.hpp>
 #endif
 #include <ArborX_Box.hpp>
+#include <ArborX_DetailsLegacy.hpp>
 #include <ArborX_Point.hpp>
 #include <ArborX_Sphere.hpp>
 
@@ -162,7 +163,7 @@ auto query_with_distance(ExecutionSpace const &exec_space, Tree const &tree,
   BOOST_TEST(query_with_distance(exec_space, tree, queries) == (reference),    \
              boost::test_tools::per_element());
 
-template <typename Tree, typename ExecutionSpace>
+template <typename Tree, bool Legacy = true, typename ExecutionSpace>
 auto make(ExecutionSpace const &exec_space, std::vector<ArborX::Box> const &b)
 {
   int const n = b.size();
@@ -172,7 +173,11 @@ auto make(ExecutionSpace const &exec_space, std::vector<ArborX::Box> const &b)
   for (int i = 0; i < n; ++i)
     boxes_host(i) = b[i];
   Kokkos::deep_copy(boxes, boxes_host);
-  return Tree(exec_space, boxes);
+  if constexpr (Legacy)
+    return Tree(exec_space, boxes);
+  else
+    return Tree(exec_space, ArborX::Details::LegacyValues{
+                                boxes, typename Tree::bounding_volume_type{}});
 }
 
 #ifdef ARBORX_ENABLE_MPI

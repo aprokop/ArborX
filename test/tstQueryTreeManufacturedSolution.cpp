@@ -80,7 +80,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(structured_grid, TreeTypeTraits,
       }
   Kokkos::deep_copy(bounding_boxes, bounding_boxes_host);
 
+#ifdef ARBORX_APIV1
   Tree const tree(ExecutionSpace{}, bounding_boxes);
+#else
+  Tree const tree(ExecutionSpace{},
+                  ArborX::Details::LegacyValues{
+                      bounding_boxes, typename Tree::bounding_volume_type{}});
+#endif
 
   std::vector<int> offset_ref(n + 1);
   std::vector<int> indices_ref;

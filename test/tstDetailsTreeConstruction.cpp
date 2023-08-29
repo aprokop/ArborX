@@ -158,8 +158,7 @@ void generateHierarchy(Primitives primitives, MortonCodes sorted_morton_codes,
       typename InternalNodes::value_type::bounding_volume_type;
   BoundingVolume bounds;
   ArborX::Details::TreeConstruction::generateHierarchy(
-      space,
-      ArborX::Details::LegacyValues<Primitives, BoundingVolume>{primitives},
+      space, ArborX::Details::LegacyValues{primitives, BoundingVolume{}},
       ArborX::Details::DefaultIndexableGetter{}, permutation_indices,
       sorted_morton_codes, leaf_nodes, internal_nodes, bounds);
 }

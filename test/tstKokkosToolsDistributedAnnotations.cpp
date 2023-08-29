@@ -38,6 +38,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(
         std::regex re("^(Testing::"
                       "|ArborX::DistributedTree::"
                       "|ArborX::BVH::"
+                      "|Kokkos::SortImpl::BinSortFunctor::"
                       "|ArborX::Sorting::"
                       ").*");
         BOOST_TEST(std::regex_match(label, re),

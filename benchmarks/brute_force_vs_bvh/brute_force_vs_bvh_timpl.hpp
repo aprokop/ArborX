@@ -83,6 +83,7 @@ static void run_fp(int nprimitives, int nqueries, int nrepeats)
   Placeholder<DIM, FloatingPoint> primitives{nprimitives};
   Placeholder<DIM, FloatingPoint> predicates{nqueries};
 
+  using Point = ArborX::ExperimentalHyperGeometry::Point<DIM, FloatingPoint>;
   using Box = ArborX::ExperimentalHyperGeometry::Box<DIM, FloatingPoint>;
 
   for (int i = 0; i < nrepeats; i++)
@@ -91,8 +92,8 @@ static void run_fp(int nprimitives, int nqueries, int nrepeats)
     {
       Kokkos::Timer timer;
       ArborX::BasicBoundingVolumeHierarchy<
-          MemorySpace, ArborX::Details::PairIndexVolume<Box>>
-          bvh{space, primitives};
+          MemorySpace, ArborX::Details::PairIndexVolume<Point>>
+          bvh{space, ArborX::Details::LegacyValues{primitives, Point{}}};
 
       Kokkos::View<int *, ExecutionSpace> indices("Benchmark::indices_ref", 0);
       Kokkos::View<int *, ExecutionSpace> offset("Benchmark::offset_ref", 0);

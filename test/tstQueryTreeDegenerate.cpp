@@ -34,8 +34,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_spatial_predicate, TreeTypeTraits,
   Tree value_initialized{};
   for (auto const &tree : {
            default_initialized, value_initialized,
-           make<Tree>(ExecutionSpace{},
-                      {}), // constructed with empty view of boxes
+           make<Tree, APIv1>(ExecutionSpace{},
+                             {}), // constructed with empty view of boxes
        })
   {
     BOOST_TEST(tree.empty());
@@ -91,8 +91,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_nearest_predicate, TreeTypeTraits,
   // tree is empty, it has no leaves.
   for (auto const &tree : {
            Tree{}, // default constructed
-           make<Tree>(ExecutionSpace{},
-                      {}), // constructed with empty view of boxes
+           make<Tree, APIv1>(ExecutionSpace{},
+                             {}), // constructed with empty view of boxes
        })
   {
     BOOST_TEST(tree.empty());
@@ -130,9 +130,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_spatial_predicate,
 
   // tree has a single leaf (unit box)
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{1., 1., 1.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{1., 1., 1.}}},
+                                          });
 
   BOOST_TEST(!tree.empty());
   BOOST_TEST(tree.size() == 1);
@@ -176,9 +176,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_nearest_predicate,
 
   // tree has a single leaf (unit box)
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{1., 1., 1.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{1., 1., 1.}}},
+                                          });
 
   BOOST_TEST(!tree.empty());
   BOOST_TEST(tree.size() == 1);
@@ -213,10 +213,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_spatial_predicate,
   using DeviceType = typename TreeTypeTraits::device_type;
 
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{0., 0., 0.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{0., 0., 0.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                          });
 
   BOOST_TEST(!tree.empty());
   BOOST_TEST(tree.size() == 2);
@@ -276,10 +276,10 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_nearest_predicate,
   using DeviceType = typename TreeTypeTraits::device_type;
 
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{0., 0., 0.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{0., 0., 0.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                          });
 
   BOOST_TEST(!tree.empty());
   BOOST_TEST(tree.size() == 2);
@@ -315,12 +315,12 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(duplicated_leaves_spatial_predicate,
   // at construction had leaves with no parent which yielded a segfault later
   // when computing bounding boxes and walking the hierarchy toward the root.
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{0., 0., 0.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{0., 0., 0.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                          });
 
   ARBORX_TEST_QUERY_TREE(
       ExecutionSpace{}, tree,
@@ -356,7 +356,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(not_exceeding_stack_capacity_spatial_predicate,
   }
   ExecutionSpace space;
   auto const bvh =
-      make<ArborX::BVH<typename DeviceType::memory_space>>(space, boxes);
+      make<ArborX::BVH<typename DeviceType::memory_space>, true /*APIv1*/>(
+          space, boxes);
 
   Kokkos::View<int *, DeviceType> indices("indices", 0);
   Kokkos::View<int *, DeviceType> offset("offset", 0);
@@ -390,7 +391,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(not_exceeding_stack_capacity_nearest_predicate,
   }
   ExecutionSpace space;
   auto const bvh =
-      make<ArborX::BVH<typename DeviceType::memory_space>>(space, boxes);
+      make<ArborX::BVH<typename DeviceType::memory_space>, true /*APIv1*/>(
+          space, boxes);
 
   Kokkos::View<int *, DeviceType> indices("indices", 0);
   Kokkos::View<int *, DeviceType> offset("offset", 0);

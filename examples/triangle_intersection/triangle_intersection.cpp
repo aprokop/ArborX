@@ -36,6 +36,7 @@ constexpr float hx = Lx / (nx - 1);
 constexpr float hy = Ly / (ny - 1);
 
 using Point = ArborX::ExperimentalHyperGeometry::Point<2>;
+using Box = ArborX::ExperimentalHyperGeometry::Box<2>;
 using Triangle = ArborX::ExperimentalHyperGeometry::Triangle<2>;
 
 #ifdef PRECOMPUTE_MAPPING
@@ -206,9 +207,10 @@ struct ArborX::AccessTraits<Triangles<MemorySpace>, ArborX::PrimitivesTag>
   {
     auto const &triangle = triangles(i);
     ArborX::ExperimentalHyperGeometry::Box<2> box{};
-    box += triangle.a;
-    box += triangle.b;
-    box += triangle.c;
+    using ArborX::Details::expand;
+    expand(box, triangle.a);
+    expand(box, triangle.b);
+    expand(box, triangle.c);
     return box;
   }
 };
@@ -319,9 +321,8 @@ int main()
 
   // Create BVH tree
   ArborX::BasicBoundingVolumeHierarchy<
-      MemorySpace, ArborX::Details::PairIndexVolume<
-                       ArborX::ExperimentalHyperGeometry::Box<2>>> const
-      tree(execution_space, triangles);
+      MemorySpace, ArborX::Details::PairIndexVolume<Box>> const
+      tree(execution_space, ArborX::Details::LegacyValues{triangles, Box{}});
 
   // Create the points used for queries
   Points<MemorySpace> points(execution_space);

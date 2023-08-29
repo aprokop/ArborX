@@ -103,7 +103,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_spatial_predicate, TreeTypeTraits,
   auto values = initialize_values(points, /*delta*/ 0.f);
   std::vector<int> offsets = {0, n};
 
+#ifdef ARBORX_APIV1
   Tree const tree(ExecutionSpace{}, points);
+#else
+  Tree const tree(ExecutionSpace{},
+                  ArborX::Details::LegacyValues{
+                      points, typename Tree::bounding_volume_type{}});
+#endif
 
   ARBORX_TEST_QUERY_TREE_CALLBACK(ExecutionSpace{}, tree,
                                   makeIntersectsBoxQueries<DeviceType>({
@@ -140,7 +146,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_nearest_predicate, TreeTypeTraits,
   auto values = initialize_values(points, /*delta*/ 0.f);
   std::vector<int> offsets = {0, n};
 
+#ifdef ARBORX_APIV1
   Tree const tree(ExecutionSpace{}, points);
+#else
+  Tree const tree(ExecutionSpace{},
+                  ArborX::Details::LegacyValues{
+                      points, typename Tree::bounding_volume_type{}});
+#endif
 
   ARBORX_TEST_QUERY_TREE_CALLBACK(ExecutionSpace{}, tree,
                                   makeNearestQueries<DeviceType>({
@@ -186,12 +198,12 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_early_exit, TreeTypeTraits,
   using DeviceType = typename TreeTypeTraits::device_type;
 
   auto const tree =
-      make<Tree>(ExecutionSpace{}, {
-                                       {{{0., 0., 0.}}, {{0., 0., 0.}}},
-                                       {{{1., 1., 1.}}, {{1., 1., 1.}}},
-                                       {{{2., 2., 2.}}, {{2., 2., 2.}}},
-                                       {{{3., 3., 3.}}, {{3., 3., 3.}}},
-                                   });
+      make<Tree, APIv1>(ExecutionSpace{}, {
+                                              {{{0., 0., 0.}}, {{0., 0., 0.}}},
+                                              {{{1., 1., 1.}}, {{1., 1., 1.}}},
+                                              {{{2., 2., 2.}}, {{2., 2., 2.}}},
+                                              {{{3., 3., 3.}}, {{3., 3., 3.}}},
+                                          });
 
   Kokkos::View<int *, DeviceType> counts("counts", 4);
 
@@ -274,7 +286,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment_spatial_predicate,
   auto values = initialize_values(points, delta);
   std::vector<int> offsets = {0, n};
 
+#ifdef ARBORX_APIV1
   Tree const tree(ExecutionSpace{}, points);
+#else
+  Tree const tree(ExecutionSpace{},
+                  ArborX::Details::LegacyValues{
+                      points, typename Tree::bounding_volume_type{}});
+#endif
 
   ARBORX_TEST_QUERY_TREE_CALLBACK(
       ExecutionSpace{}, tree,
@@ -313,7 +331,13 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment_nearest_predicate,
   auto values = initialize_values(points, delta);
   std::vector<int> offsets = {0, n};
 
+#ifdef ARBORX_APIV1
   Tree const tree(ExecutionSpace{}, points);
+#else
+  Tree const tree(ExecutionSpace{},
+                  ArborX::Details::LegacyValues{
+                      points, typename Tree::bounding_volume_type{}});
+#endif
 
   ARBORX_TEST_QUERY_TREE_CALLBACK(
       ExecutionSpace{}, tree,

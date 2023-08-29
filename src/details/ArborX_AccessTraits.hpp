@@ -153,7 +153,7 @@ void check_valid_access_traits(PredicatesTag, Predicates const &)
                 "Invalid tag for the predicates");
 }
 
-template <typename Primitives>
+template <typename Primitives, bool ReturnAny = false>
 void check_valid_access_traits(PrimitivesTag, Primitives const &)
 {
   using Access = AccessTraits<Primitives, PrimitivesTag>;
@@ -187,10 +187,31 @@ void check_valid_access_traits(PrimitivesTag, Primitives const &)
       "member function");
   using T = std::decay_t<Kokkos::detected_t<AccessTraitsGetArchetypeExpression,
                                             Access, Primitives>>;
-  static_assert(GeometryTraits::is_point<T>{} || GeometryTraits::is_box<T>{},
-                "AccessTraits<Primitives,PrimitivesTag>::get() return type "
-                "must decay to a point or a box type");
+  if constexpr (!ReturnAny)
+  {
+    static_assert(GeometryTraits::is_point<T>{} || GeometryTraits::is_box<T>{},
+                  "AccessTraits<Primitives,PrimitivesTag>::get() return type "
+                  "must decay to a point or a box type");
+  }
 }
+
+template <typename Values>
+class AccessValues
+{
+private:
+  using Access = AccessTraits<Values, PrimitivesTag>;
+
+public:
+  Values _values;
+
+  using memory_space = typename Access::memory_space;
+
+  KOKKOS_FUNCTION
+  decltype(auto) operator()(int i) const { return Access::get(_values, i); }
+
+  KOKKOS_FUNCTION
+  auto size() const { return Access::size(_values); }
+};
 
 } // namespace Details
 

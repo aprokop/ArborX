@@ -15,7 +15,10 @@
 #include <ArborX_AccessTraits.hpp>
 #include <ArborX_DetailsNode.hpp>
 
-namespace ArborX::Details
+namespace ArborX
+{
+
+namespace Details
 {
 
 template <typename Primitives, typename BoundingVolume>
@@ -32,6 +35,10 @@ public:
                          Primitives>;
 
   LegacyValues(Primitives const &primitives)
+      : _primitives(primitives)
+  {}
+
+  LegacyValues(Primitives const &primitives, BoundingVolume const &)
       : _primitives(primitives)
   {}
 
@@ -55,6 +62,10 @@ public:
   size_type size() const { return Access::size(_primitives); }
 };
 
+template <typename Primitives, typename BoundingVolume>
+LegacyValues(Primitives const &, BoundingVolume const &)
+    -> LegacyValues<Primitives, BoundingVolume>;
+
 template <typename Callback, typename Value>
 struct LegacyCallbackWrapper
 {
@@ -68,6 +79,28 @@ struct LegacyCallbackWrapper
   }
 };
 
-} // namespace ArborX::Details
+} // namespace Details
+
+template <typename Primitives, typename BoundingVolume>
+struct AccessTraits<Details::LegacyValues<Primitives, BoundingVolume>,
+                    PrimitivesTag>
+{
+  using Values = Details::LegacyValues<Primitives, BoundingVolume>;
+
+  using memory_space = typename Values::memory_space;
+  using size_type = typename Values::size_type;
+  using value_type = typename Values::value_type;
+
+  KOKKOS_FUNCTION static size_type size(Values const &values)
+  {
+    return values.size();
+  }
+  KOKKOS_FUNCTION static decltype(auto) get(Values const &values, size_type i)
+  {
+    return values(i);
+  }
+};
+
+} // namespace ArborX
 
 #endif

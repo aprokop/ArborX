@@ -98,8 +98,15 @@ void boost_rtree_nearest_predicate()
   auto nearest_queries_host = Kokkos::create_mirror_view(nearest_queries);
   Kokkos::deep_copy(nearest_queries_host, nearest_queries);
 
+#ifdef ARBORX_APIV1
   Tree tree(ExecutionSpace{},
             Kokkos::create_mirror_view_and_copy(MemorySpace{}, cloud));
+#else
+  Tree tree(ExecutionSpace{},
+            ArborX::Details::LegacyValues{
+                Kokkos::create_mirror_view_and_copy(MemorySpace{}, cloud),
+                typename Tree::bounding_volume_type{}});
+#endif
 
   BoostExt::RTree<decltype(cloud)::value_type> rtree(ExecutionSpace{}, cloud);
 
@@ -178,8 +185,15 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_spatial_predicate, TreeTypeTraits,
   auto intersects_queries_host = Kokkos::create_mirror_view(intersects_queries);
   Kokkos::deep_copy(intersects_queries_host, intersects_queries);
 
+#ifdef ARBORX_APIV1
   Tree tree(ExecutionSpace{},
             Kokkos::create_mirror_view_and_copy(MemorySpace{}, cloud));
+#else
+  Tree tree(ExecutionSpace{},
+            ArborX::Details::LegacyValues{
+                Kokkos::create_mirror_view_and_copy(MemorySpace{}, cloud),
+                typename Tree::bounding_volume_type{}});
+#endif
 
   BoostExt::RTree<decltype(cloud)::value_type> rtree(ExecutionSpace{}, cloud);
 
