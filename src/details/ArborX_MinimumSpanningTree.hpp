@@ -29,8 +29,42 @@
 #endif
 #include <Kokkos_Core.hpp>
 
-namespace ArborX::Details
+namespace ArborX
 {
+
+namespace Details
+{
+
+template <typename MemorySpace>
+struct IotaN
+{
+  unsigned int _n;
+};
+} // namespace Details
+
+template <typename MemorySpace>
+struct AccessTraits<Details::IotaN<MemorySpace>, PrimitivesTag>
+{
+  using Primitives = Details::IotaN<MemorySpace>;
+  using memory_space = MemorySpace;
+  KOKKOS_FUNCTION static auto get(Primitives, int i) { return i; }
+  KOKKOS_FUNCTION static auto size(Primitives iota) { return iota._n; }
+};
+
+namespace Details
+{
+
+template <typename Primitives>
+struct CustomIndexableGetter
+{
+  Primitives _primitives;
+
+  KOKKOS_FUNCTION decltype(auto) operator()(int i) const
+  {
+    using Access = AccessTraits<Primitives, PrimitivesTag>;
+    return Access::get(_primitives, i);
+  }
+};
 
 enum class BoruvkaMode
 {
@@ -192,7 +226,7 @@ struct FindComponentNearestNeighbors
     auto const predicate = [label_i = component, &labels = _labels](int j) {
       return label_i != labels(j);
     };
-    auto const leaf_permutation_i = HappyTreeFriends::getValue(_bvh, i).index;
+    auto const leaf_permutation_i = HappyTreeFriends::getValue(_bvh, i);
 
     DirectedEdge current_best{};
 
@@ -246,10 +280,9 @@ struct FindComponentNearestNeighbors
         {
           if (HappyTreeFriends::isLeaf(_bvh, left_child))
           {
-            float const candidate_dist =
-                _metric(leaf_permutation_i,
-                        HappyTreeFriends::getValue(_bvh, left_child).index,
-                        distance_left);
+            float const candidate_dist = _metric(
+                leaf_permutation_i,
+                HappyTreeFriends::getValue(_bvh, left_child), distance_left);
             DirectedEdge const candidate_edge{i, left_child, candidate_dist};
             if (candidate_edge < current_best)
             {
@@ -271,10 +304,9 @@ struct FindComponentNearestNeighbors
         {
           if (HappyTreeFriends::isLeaf(_bvh, right_child))
           {
-            float const candidate_dist =
-                _metric(leaf_permutation_i,
-                        HappyTreeFriends::getValue(_bvh, right_child).index,
-                        distance_right);
+            float const candidate_dist = _metric(
+                leaf_permutation_i,
+                HappyTreeFriends::getValue(_bvh, right_child), distance_right);
             DirectedEdge const candidate_edge{i, right_child, candidate_dist};
             if (candidate_edge < current_best)
             {
@@ -493,10 +525,8 @@ void finalizeEdges(ExecutionSpace const &space, BVH const &bvh,
       "ArborX::MST::finalize_edges",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, n - 1),
       KOKKOS_LAMBDA(int i) {
-        edges(i).source =
-            HappyTreeFriends::getValue(bvh, edges(i).source).index;
-        edges(i).target =
-            HappyTreeFriends::getValue(bvh, edges(i).target).index;
+        edges(i).source = HappyTreeFriends::getValue(bvh, edges(i).source);
+        edges(i).target = HappyTreeFriends::getValue(bvh, edges(i).target);
       });
 }
 
@@ -553,7 +583,7 @@ void assignVertexParents(ExecutionSpace const &space, Labels const &labels,
         auto const &edge = out_edges(e);
 
         int i = labels(edge.source());
-        parents(HappyTreeFriends::getValue(bvh, i).index + vertices_offset) =
+        parents(HappyTreeFriends::getValue(bvh, i) + vertices_offset) =
             edges_mapping(i);
       });
 }
@@ -677,8 +707,8 @@ void resetSharedRadii(ExecutionSpace const &space, BVH const &bvh,
         if (label_i != label_j)
         {
           auto const r =
-              metric(HappyTreeFriends::getValue(bvh, i).index,
-                     HappyTreeFriends::getValue(bvh, j).index,
+              metric(HappyTreeFriends::getValue(bvh, i),
+                     HappyTreeFriends::getValue(bvh, j),
                      distance(HappyTreeFriends::getIndexable(bvh, i),
                               HappyTreeFriends::getIndexable(bvh, j)));
           Kokkos::atomic_min(&radii(label_i), r);
@@ -714,8 +744,12 @@ struct MinimumSpanningTree
     auto const n = AccessTraits<Primitives, PrimitivesTag>::size(primitives);
 
     Kokkos::Profiling::pushRegion("ArborX::MST::construction");
-    BasicBoundingVolumeHierarchy<MemorySpace, PairIndexVolume<Point>> bvh(
-        space, Details::LegacyValues{primitives, Point{}});
+    BasicBoundingVolumeHierarchy<
+        MemorySpace, int, CustomIndexableGetter<Primitives>,
+        ExperimentalHyperGeometry::Box<GeometryTraits::dimension_v<Point>,
+                                       Kokkos::Experimental::half_t>>
+        bvh(space, IotaN<MemorySpace>{(unsigned)n},
+            CustomIndexableGetter<Primitives>{primitives});
     Kokkos::Profiling::popRegion();
 
     if (k > 1)
@@ -945,6 +979,7 @@ private:
   }
 };
 
-} // namespace ArborX::Details
+} // namespace Details
+} // namespace ArborX
 
 #endif

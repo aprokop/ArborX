@@ -33,11 +33,9 @@ struct MaxDistance
   using memory_space = typename Access::memory_space;
   using size_type = typename memory_space::size_type;
 
-  template <class Predicate, typename Value>
-  KOKKOS_FUNCTION void operator()(Predicate const &predicate,
-                                  Value const &value) const
+  template <class Predicate>
+  KOKKOS_FUNCTION void operator()(Predicate const &predicate, int i) const
   {
-    size_type const i = value.index;
     size_type const j = getData(predicate);
     using KokkosExt::max;
     auto const distance_ij =
