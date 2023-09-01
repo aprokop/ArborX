@@ -49,7 +49,8 @@ struct Indexables
   using Access = AccessTraits<Values, PrimitivesTag>;
   using memory_space = typename Access::memory_space;
 
-  KOKKOS_FUNCTION decltype(auto) operator()(int i) const
+  // FIXME: why is using `delctype(auto)` or `auto const &` here not work?
+  KOKKOS_FUNCTION auto operator()(int i) const
   {
     return _indexable_getter(Access::get(_values, i));
   }
