@@ -612,9 +612,10 @@ void computeParents(ExecutionSpace const &space, Edges const &edges,
           key = INT_MAX;
 
         // Comparison of weights as ints is the same as their comparison as
-        // floats as long as they are positive and are not NaNs or inf
+        // floats as long as they are positive and are not NaNs or inf.
         static_assert(sizeof(int) == sizeof(float));
-        keys(e) = (key << shift) + KokkosExt::bit_cast<int>(edge.weight);
+        keys(e) = (key << shift) +
+                  (edge.weight ? KokkosExt::bit_cast<int>(edge.weight) : 0);
       });
 
   auto permute = sortObjects(space, keys);
