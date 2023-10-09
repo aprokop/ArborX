@@ -188,4 +188,53 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_boruvka, DeviceType,
   BOOST_TEST(heights_boruvka == heights_union_find, tt::per_element());
 }
 
+BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_boruvka_same_weights, DeviceType,
+                              ARBORX_DEVICE_TYPES)
+{
+  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = typename DeviceType::memory_space;
+
+  using namespace ArborX::Details;
+  using Point = ArborX::ExperimentalHyperGeometry::Point<2, float>;
+
+  ExecutionSpace space;
+
+  int const N = 101;
+  int const n = N * N;
+  std::vector<Point> points_v(N * N);
+  for (int i = 0; i < N; ++i)
+    for (int j = 0; j < N; ++j)
+      points_v[(2 * i % N) * N + (2 * j % N)] = Point{(float)i, (float)j};
+  auto points = ArborXTest::toView<DeviceType>(points_v, "Testing::points");
+
+  int const minpts = 5;
+  MinimumSpanningTree<MemorySpace, BoruvkaMode::HDBSCAN> mst(space, points,
+                                                             minpts);
+  ArborX::Experimental::Dendrogram<MemorySpace> dendrogram(space, mst.edges);
+
+  // Check that the dendrogram is binary
+  Kokkos::View<int *, MemorySpace> counts(
+      Kokkos::view_alloc(space, "Testing::count"), 2 * n - 1);
+
+  Kokkos::parallel_for(
+      "Testing::count_children",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 2 * n - 1),
+      KOKKOS_LAMBDA(int i) {
+        Kokkos::atomic_inc(&counts(mst.dendrogram_parents(i)));
+      });
+
+  int wrong_counts = 0;
+  Kokkos::parallel_reduce(
+      "Testing::check_counts",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, 2 * n - 1),
+      KOKKOS_LAMBDA(int i, int &update) {
+        if (i >= n - 1 && counts(i) != 0)
+          ++update;
+        if (i < n - 1 && counts(i) != 2)
+          ++update;
+      },
+      wrong_counts);
+  BOOST_TEST(wrong_counts == 0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
