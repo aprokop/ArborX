@@ -1070,27 +1070,14 @@ private:
       auto &counts = counts_hierarchical;
 
       KokkosExt::ScopedProfileRegion guard(
-          "ArborX::HDBSCAN::flat_clustering::counts_hierarchical");
+          "ArborX::HDBSCAN::flat_clustering::counts_hierarchical_1");
 
       int num_levels = offsets.size() - 1;
       auto offsets_host =
           Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, offsets);
 
-      // std::cout << "offsets:";
-      // for (int i = 0; i < (int)offsets.size(); ++i)
-      // std::cout << " " << offsets(i);
-      // std::cout << std::endl;
-
-      // for (int i = 0; i < 2 * (int)n - 1; ++i)
-      // printf("[%d]: %d\n", i, parents(i));
-
-      Kokkos::View<int *, MemorySpace> skip_parents(
-          Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                             "ArborX::HDBSCAN::flat_clustering::skip_parents"),
-          n - 1);
-      Kokkos::deep_copy(
-          space, skip_parents,
-          Kokkos::subview(parents, std::make_pair(0, (int)n - 1)));
+      auto skip_parents = KokkosExt::clone(
+          space, parents, "ArborX::HDBSCAN::flat_clustering::skip_parents");
 
       for (int k = 1; k < num_levels; ++k)
       {
@@ -1112,14 +1099,20 @@ private:
             });
       }
 
-      // std::cout << "Skip parents:\n";
-      // for (int i = 0; i < (int)n - 1; ++i)
-      // printf("[%d]: %d\n", i, skip_parents(i));
-
       // Forward loop
-      Kokkos::View<int *, MemorySpace> marks(
-          Kokkos::view_alloc(space, "ArborX::HDBSCAN::flat_clustering::marks"),
+      Kokkos::View<int *, MemorySpace> threads_up(
+          Kokkos::view_alloc(space,
+                             "ArborX::HDBSCAN::flat_clustering::threads_up"),
           n - 1);
+      Kokkos::parallel_for(
+          "ArborX::HDBSCAN::flat_clustering::calculate_thread_up_criteria",
+          Kokkos::RangePolicy<ExecutionSpace>(space, 0, 2 * n - 1),
+          KOKKOS_LAMBDA(int i) {
+            auto parent = skip_parents(i);
+            if (parent != -1)
+              Kokkos::atomic_inc(&threads_up(parent));
+          });
+
       int max_traversal = 0;
       Kokkos::parallel_reduce(
           "ArborX::HDBSCAN::flat_clustering::counts_forward",
@@ -1130,7 +1123,10 @@ private:
             int hops = 0;
             while (parent != -1)
             {
-              Kokkos::atomic_add(&counts(parent), count);
+              auto old_count = Kokkos::atomic_fetch_add(&counts(parent), count);
+              if (Kokkos::atomic_sub_fetch(&threads_up(parent), 1))
+                break;
+              count += old_count;
               parent = skip_parents(parent);
               ++hops;
             }
@@ -1139,10 +1135,6 @@ private:
           },
           Kokkos::Max<int>(max_traversal));
       printf("max hops: %d\n", max_traversal);
-
-      // std::cout << "Counts (forward):\n";
-      // for (int i = 0; i < (int)n - 1; ++i)
-      // printf("[%d]: %d\n", i, counts(i));
 
       // Backward loop
       for (int k = num_levels - 1; k >= 0; --k)
@@ -1166,10 +1158,6 @@ private:
               }
             });
       }
-
-      // std::cout << "Counts:\n";
-      // for (int i = 0; i < (int)n - 1; ++i)
-      // printf("[%d]: %d\n", i, counts(i));
     }
 
     // Check
