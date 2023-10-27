@@ -13,6 +13,7 @@
 #define ARBORX_MINIMUM_SPANNING_TREE_HPP
 
 #include <ArborX_AccessTraits.hpp>
+#include <ArborX_DetailsFlatClustering.hpp>
 #include <ArborX_DetailsKokkosExtStdAlgorithms.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsMinimumSpanningTree.hpp>
@@ -37,6 +38,8 @@ struct MinimumSpanningTree
   Kokkos::View<WeightedEdge *, MemorySpace> edges;
   Kokkos::View<int *, MemorySpace> dendrogram_parents;
   Kokkos::View<float *, MemorySpace> dendrogram_parent_heights;
+  Kokkos::View<int *, MemorySpace> _chain_offsets;
+  Kokkos::View<int *, MemorySpace> _chain_levels;
 
   template <class ExecutionSpace, class Primitives>
   MinimumSpanningTree(ExecutionSpace const &space, Primitives const &primitives,
@@ -46,6 +49,8 @@ struct MinimumSpanningTree
               AccessTraits<Primitives, PrimitivesTag>::size(primitives) - 1)
       , dendrogram_parents("ArborX::MST::dendrogram_parents", 0)
       , dendrogram_parent_heights("ArborX::MST::dendrogram_parent_heights", 0)
+      , _chain_offsets("ArborX::MST::chain_offsets", 0)
+      , _chain_levels("ArborX::MST::chain_levels", 0)
   {
     Kokkos::Profiling::pushRegion("ArborX::MST::MST");
 
@@ -89,6 +94,8 @@ struct MinimumSpanningTree
 
     finalizeEdges(space, bvh, edges);
 
+    computeFlatClustering(space, dendrogram_parents, dendrogram_parent_heights,
+                          _chain_offsets, _chain_levels);
     Kokkos::Profiling::popRegion();
   }
 
@@ -183,6 +190,8 @@ private:
     int num_components = n;
     [[maybe_unused]] int edges_start = 0;
     [[maybe_unused]] int edges_end = 0;
+    std::vector<int> edge_offsets;
+    edge_offsets.push_back(0);
     do
     {
       Kokkos::Profiling::pushRegion("ArborX::Boruvka_" +
@@ -224,6 +233,8 @@ private:
       int num_edges_host;
       Kokkos::deep_copy(space, num_edges_host, num_edges);
       space.fence();
+
+      edge_offsets.push_back(num_edges_host);
 
       if constexpr (Mode == BoruvkaMode::HDBSCAN)
       {
@@ -278,7 +289,19 @@ private:
                                         std::make_pair(edges_start, edges_end)),
                         ROOT_CHAIN_VALUE);
 
-      computeParents(space, edges, sided_parents, dendrogram_parents);
+      Kokkos::View<int *, MemorySpace> edge_hierarchy_offsets(
+          Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                             "ArborX::MST::edge_hierarchy_offsets"),
+          edge_offsets.size());
+      Kokkos::deep_copy(
+          space, edge_hierarchy_offsets,
+          Kokkos::View<int *, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>{
+              edge_offsets.data(), edge_offsets.size()});
+
+      computeParentsAndReorderEdges(space, edges, edge_hierarchy_offsets,
+                                    sided_parents, dendrogram_parents,
+                                    _chain_offsets, _chain_levels);
+      Kokkos::resize(sided_parents, 0);
 
       KokkosExt::reallocWithoutInitializing(space, dendrogram_parent_heights,
                                             n - 1);

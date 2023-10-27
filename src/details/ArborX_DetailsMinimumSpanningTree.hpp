@@ -554,10 +554,14 @@ void assignVertexParents(ExecutionSpace const &space, Labels const &labels,
       });
 }
 
-template <typename ExecutionSpace, typename Edges, typename SidedParents,
-          typename Parents>
-void computeParents(ExecutionSpace const &space, Edges const &edges,
-                    SidedParents const &sided_parents, Parents &parents)
+template <typename ExecutionSpace, typename Edges,
+          typename EdgeHierarchyOffsets, typename SidedParents,
+          typename Parents, typename ChainOffsets, typename ChainLevels>
+void computeParentsAndReorderEdges(
+    ExecutionSpace const &space, Edges &edges,
+    EdgeHierarchyOffsets const &edge_hierarchy_offsets,
+    SidedParents const &sided_parents, Parents &parents,
+    ChainOffsets &chain_offsets, ChainLevels &chain_levels)
 {
   Kokkos::Profiling::ScopedRegion guard("ArborX::MST::compute_edge_parents");
 
@@ -663,29 +667,153 @@ void computeParents(ExecutionSpace const &space, Edges const &edges,
         }
       });
 
+// #define PRINT
+
+#ifdef PRINT
+  printf("Keys:\n");
+  auto keys_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, keys);
+  auto permute_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, permute);
+  for (int i = 0; i < num_edges; ++i)
+  {
+    int key = (keys_host(i) >> shift);
+    if (key == INT_MAX)
+      printf("[%d]: -1\n", permute_host(i));
+    else
+      printf("[%d]: %d(%c)\n", permute_host(i), key / 2, (key % 2 ? 'l' : 'r'));
+  }
+#endif
+
+#ifdef PRINT
+  printf("Hierarchy offsets:");
+  auto edge_hierarchy_offsets_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, edge_hierarchy_offsets);
+  for (int i = 0; i < (int)edge_hierarchy_offsets_host.size(); ++i)
+    printf(" %d", edge_hierarchy_offsets_host(i));
+  printf("\n");
+#endif
+
+  auto rev_permute =
+      KokkosExt::cloneWithoutInitializingNorCopying(space, permute);
   Kokkos::parallel_for(
+      "ArborX::MST::compute_rev_permute",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
+      KOKKOS_LAMBDA(int const i) { rev_permute(permute(i)) = i; });
+
+  Kokkos::parallel_for(
+      "ArborX::MST::update_vertex_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(space, num_edges, parents.size()),
+      KOKKOS_LAMBDA(int const i) { parents(i) = rev_permute(parents(i)); });
+
+  KokkosExt::reallocWithoutInitializing(space, chain_offsets, num_edges + 1);
+  int num_chains;
+  Kokkos::parallel_scan(
       "ArborX::MST::compute_parents",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
-      KOKKOS_LAMBDA(int const i) {
-        int e = permute(i);
-        if (i == num_edges - 1)
+      KOKKOS_LAMBDA(int const i, int &update, bool final_pass) {
+        if (i == num_edges - 1 || (keys(i) >> shift) != (keys(i + 1) >> shift))
+          ++update;
+
+        if (final_pass)
         {
-          // The parent of the root node is set to -1
-          parents(e) = -1;
+          if (i == num_edges - 1)
+          {
+            // The parent of the root node is set to -1
+            parents(i) = -1;
+            chain_offsets(update) = num_edges;
+            chain_offsets(0) = 0;
+          }
+          else if ((keys(i) >> shift) == (keys(i + 1) >> shift))
+          {
+            // For the edges belonging to the same chain, assign the parent of
+            // an edge to the edge with the next larger value
+            parents(i) = i + 1;
+          }
+          else
+          {
+            // For an edge which points to the root of a chain, assign edge's
+            // parent to be that root
+            parents(i) = rev_permute((keys(i) >> shift) / 2);
+            chain_offsets(update) = i + 1;
+          }
         }
-        else if ((keys(i) >> shift) == (keys(i + 1) >> shift))
+      },
+      num_chains);
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_offsets, num_chains + 1);
+#ifdef PRINT
+  printf("#chains: %d\n", num_chains);
+  printf("Chain offsets:");
+  auto chain_offsets_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_offsets);
+  for (int i = 0; i < (int)chain_offsets_host.size(); ++i)
+    printf(" %d", chain_offsets_host(i));
+  printf("\n");
+#endif
+#ifdef PRINT
+  printf("Parents:\n");
+  auto parents_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, parents);
+  for (int i = 0; i < (int)parents_host.size(); ++i)
+    printf("[%d] %d\n", i, parents_host(i));
+#endif
+
+  {
+    auto edges_clone =
+        KokkosExt::cloneWithoutInitializingNorCopying(space, edges);
+    Kokkos::parallel_for(
+        "ArborX::MST::reorder_edges",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
+        KOKKOS_LAMBDA(int const i) { edges_clone(i) = edges(permute(i)); });
+    edges = edges_clone;
+  }
+
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_chains + 1);
+  int num_levels = 0;
+  Kokkos::parallel_scan(
+      "ArborX::MST::compute_chain_levels",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_chains),
+      KOKKOS_LAMBDA(int i, int &level, bool final_pass) {
+        auto upper_bound = [&v = edge_hierarchy_offsets](int x) {
+          int first = 0;
+          int last = v.extent_int(0);
+          int count = last - first;
+          while (count > 0)
+          {
+            int step = count / 2;
+            int mid = first + step;
+            if (!(x < v(mid)))
+            {
+              first = ++mid;
+              count -= step + 1;
+            }
+            else
+            {
+              count = step;
+            }
+          }
+          return first;
+        };
+
+#ifdef PRINT
+        printf("-- [%d]: level %d\n", i,
+               upper_bound(permute(chain_offsets(i))) - 1);
+#endif
+
+        if (i == num_chains - 1 ||
+            upper_bound(permute(chain_offsets(i))) !=
+                upper_bound(permute(chain_offsets(i + 1))))
         {
-          // For the edges belonging to the same chain, assign the parent of an
-          // edge to the edge with the next larger value
-          parents(e) = permute(i + 1);
+          ++level;
+          if (final_pass)
+            chain_levels(level) = i + 1;
         }
-        else
-        {
-          // For an edge which points to the root of a chain, assign edge's
-          // parent to be that root
-          parents(e) = (keys(i) >> shift) / 2;
-        }
-      });
+      },
+      num_levels);
+  ++num_levels;
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_levels);
+#ifdef PRINT
+  printf("Chain levels:");
+  auto chain_levels_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_levels);
+  for (int i = 0; i < (int)chain_levels_host.size(); ++i)
+    printf(" %d", chain_levels_host(i));
+  printf("\n");
+#endif
 }
 
 // Compute upper bound on the shortest edge of each component.
