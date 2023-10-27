@@ -13,6 +13,7 @@
 #define ARBORX_MINIMUM_SPANNING_TREE_HPP
 
 #include <ArborX_AccessTraits.hpp>
+#include <ArborX_DetailsFlatClustering.hpp>
 #include <ArborX_DetailsKokkosExtScopedProfileRegion.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsMinimumSpanningTree.hpp>
@@ -34,6 +35,7 @@ struct MinimumSpanningTree
   Kokkos::View<WeightedEdge *, MemorySpace> edges;
   Kokkos::View<int *, MemorySpace> dendrogram_parents;
   Kokkos::View<float *, MemorySpace> dendrogram_parent_heights;
+  Kokkos::View<int *, MemorySpace> _chain_offsets;
 
   template <class ExecutionSpace, class Primitives>
   MinimumSpanningTree(ExecutionSpace const &space, Primitives const &primitives,
@@ -43,6 +45,7 @@ struct MinimumSpanningTree
               AccessTraits<Primitives, PrimitivesTag>::size(primitives) - 1)
       , dendrogram_parents("ArborX::MST::dendrogram_parents", 0)
       , dendrogram_parent_heights("ArborX::MST::dendrogram_parent_heights", 0)
+      , _chain_offsets("ArborX::MST::chain_offsets", 0)
   {
     Kokkos::Profiling::pushRegion("ArborX::MST::MST");
 
@@ -81,6 +84,8 @@ struct MinimumSpanningTree
 
     finalizeEdges(space, bvh, edges);
 
+    computeFlatClustering(space, dendrogram_parents, dendrogram_parent_heights,
+                          _chain_offsets);
     Kokkos::Profiling::popRegion();
   }
 
@@ -267,7 +272,9 @@ private:
                                         std::make_pair(edges_start, edges_end)),
                         ROOT_CHAIN_VALUE);
 
-      computeParents(space, edges, sided_parents, dendrogram_parents);
+      computeParentsAndReorderEdges(space, edges, sided_parents,
+                                    dendrogram_parents, _chain_offsets);
+      Kokkos::resize(sided_parents, 0);
 
       KokkosExt::reallocWithoutInitializing(space, dendrogram_parent_heights,
                                             n - 1);
