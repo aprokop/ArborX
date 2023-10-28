@@ -311,8 +311,8 @@ bool verifyDBSCAN(ExecutionSpace exec_space, Primitives const &primitives,
   static_assert(GeometryTraits::is_point<Point>{});
   constexpr int dim = GeometryTraits::dimension_v<Point>;
   using Box = ExperimentalHyperGeometry::Box<dim>;
-  ArborX::BasicBoundingVolumeHierarchy<MemorySpace,
-                                       ArborX::Details::PairIndexVolume<Box>>
+  ArborX::BoundingVolumeHierarchy<MemorySpace,
+                                  ArborX::Details::PairIndexVolume<Box>>
       bvh(exec_space,
           ArborX::Details::LegacyValues<Primitives, Box>{primitives});
 
