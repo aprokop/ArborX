@@ -554,12 +554,14 @@ void assignVertexParents(ExecutionSpace const &space, Labels const &labels,
       });
 }
 
-template <typename ExecutionSpace, typename Edges, typename SidedParents,
-          typename Parents, typename ChainOffsets>
-void computeParentsAndReorderEdges(ExecutionSpace const &space, Edges &edges,
-                                   SidedParents const &sided_parents,
-                                   Parents &parents,
-                                   ChainOffsets &chain_offsets)
+template <typename ExecutionSpace, typename Edges,
+          typename EdgeHierarchyOffsets, typename SidedParents,
+          typename Parents, typename ChainOffsets, typename ChainLevels>
+void computeParentsAndReorderEdges(
+    ExecutionSpace const &space, Edges &edges,
+    EdgeHierarchyOffsets const &edge_hierarchy_offsets,
+    SidedParents const &sided_parents, Parents &parents,
+    ChainOffsets &chain_offsets, ChainLevels &chain_levels)
 {
   KokkosExt::ScopedProfileRegion guard("ArborX::MST::compute_edge_parents");
 
@@ -678,6 +680,7 @@ void computeParentsAndReorderEdges(ExecutionSpace const &space, Edges &edges,
 #endif
 
   KokkosExt::reallocWithoutInitializing(space, chain_offsets, num_edges + 1);
+  int num_chains;
   {
     auto rev_permute =
         KokkosExt::cloneWithoutInitializingNorCopying(space, permute);
@@ -691,7 +694,6 @@ void computeParentsAndReorderEdges(ExecutionSpace const &space, Edges &edges,
         Kokkos::RangePolicy<ExecutionSpace>(space, num_edges, parents.size()),
         KOKKOS_LAMBDA(int const i) { parents(i) = rev_permute(parents(i)); });
 
-    int num_chains;
     Kokkos::parallel_scan(
         "ArborX::MST::compute_parents",
         Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
@@ -731,7 +733,7 @@ void computeParentsAndReorderEdges(ExecutionSpace const &space, Edges &edges,
       printf(" %d\n", chain_offsets(i));
 #endif
   }
-#if 0
+#if 1
   printf("Parents:");
   for (int i = 0; i < (int)parents.size(); ++i)
     printf("[%d] %d\n", i, parents(i));
@@ -746,6 +748,53 @@ void computeParentsAndReorderEdges(ExecutionSpace const &space, Edges &edges,
         KOKKOS_LAMBDA(int const i) { edges_clone(i) = edges(permute(i)); });
     edges = edges_clone;
   }
+
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_chains + 1);
+  int num_levels = 0;
+  Kokkos::parallel_scan(
+      "ArborX::MST::compute_chain_levesl",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_chains),
+      KOKKOS_LAMBDA(int i, int &level, bool final_pass) {
+        auto upper_bound = [&edge_hierarchy_offsets](int x) {
+          int first = 0;
+          int last = v.extent_int(0);
+          int count = last - first;
+          while (count > 0)
+          {
+            int step = count / 2;
+            int mid = first + step;
+            if (!(x < v(mid)))
+            {
+              first = ++mid;
+              count -= step + 1;
+            }
+            else
+            {
+              count = step;
+            }
+          }
+          return first;
+        };
+
+        bool new_level =
+            (i == 0 ? false
+                    : upper_bound(rev_permute(chain_offsets(i))) !=
+                          upper_bound(rev_permute(chain_offsets(i - 1))));
+
+        if (new_level)
+        {
+          if (final_pass)
+            chain_levels(level) = i;
+          ++level;
+        }
+      },
+      num_levels);
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_levels);
+#if 1
+  printf("Chain levels:");
+  for (int i = 0; i < (int)chain_levels.size(); ++i)
+    printf(" %d\n", chain_levels(i));
+#endif
 }
 
 // Compute upper bound on the shortest edge of each component.
