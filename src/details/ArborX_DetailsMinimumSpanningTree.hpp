@@ -667,7 +667,9 @@ void computeParentsAndReorderEdges(
         }
       });
 
-#if 1
+  // #define PRINT
+
+#if PRINT
   printf("Keys:\n");
   for (int i = 0; i < num_edges; ++i)
   {
@@ -679,62 +681,69 @@ void computeParentsAndReorderEdges(
   }
 #endif
 
+#if PRINT
+  printf("Hierarchy offsets:");
+  for (int i = 0; i < (int)edge_hierarchy_offsets.size(); ++i)
+    printf(" %d", edge_hierarchy_offsets(i));
+  printf("\n");
+#endif
+
+  auto rev_permute =
+      KokkosExt::cloneWithoutInitializingNorCopying(space, permute);
+  Kokkos::parallel_for(
+      "ArborX::MST::compute_rev_permute",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
+      KOKKOS_LAMBDA(int const i) { rev_permute(permute(i)) = i; });
+
+  Kokkos::parallel_for(
+      "ArborX::MST::update_vertex_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(space, num_edges, parents.size()),
+      KOKKOS_LAMBDA(int const i) { parents(i) = rev_permute(parents(i)); });
+
   KokkosExt::reallocWithoutInitializing(space, chain_offsets, num_edges + 1);
   int num_chains;
-  {
-    auto rev_permute =
-        KokkosExt::cloneWithoutInitializingNorCopying(space, permute);
-    Kokkos::parallel_for(
-        "ArborX::MST::compute_rev_permute",
-        Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
-        KOKKOS_LAMBDA(int const i) { rev_permute(permute(i)) = i; });
+  Kokkos::parallel_scan(
+      "ArborX::MST::compute_parents",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
+      KOKKOS_LAMBDA(int const i, int &update, bool final_pass) {
+        if (i == num_edges - 1 || (keys(i) >> shift) != (keys(i + 1) >> shift))
+          ++update;
 
-    Kokkos::parallel_for(
-        "ArborX::MST::update_vertex_parents",
-        Kokkos::RangePolicy<ExecutionSpace>(space, num_edges, parents.size()),
-        KOKKOS_LAMBDA(int const i) { parents(i) = rev_permute(parents(i)); });
-
-    Kokkos::parallel_scan(
-        "ArborX::MST::compute_parents",
-        Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_edges),
-        KOKKOS_LAMBDA(int const i, int &update, bool final_pass) {
-          if (i < num_edges - 1 && (keys(i) >> shift) != (keys(i + 1) >> shift))
-            ++update;
-
-          if (final_pass)
+        if (final_pass)
+        {
+          if (i == num_edges - 1)
           {
-            if (i == num_edges - 1)
-            {
-              // The parent of the root node is set to -1
-              parents(i) = -1;
-              chain_offsets(update) = num_edges;
-              chain_offsets(0) = 0;
-            }
-            else if ((keys(i) >> shift) == (keys(i + 1) >> shift))
-            {
-              // For the edges belonging to the same chain, assign the parent of
-              // an edge to the edge with the next larger value
-              parents(i) = i + 1;
-            }
-            else
-            {
-              // For an edge which points to the root of a chain, assign edge's
-              // parent to be that root
-              parents(i) = rev_permute((keys(i) >> shift) / 2);
-              chain_offsets(update) = i + 1;
-            }
+            // The parent of the root node is set to -1
+            parents(i) = -1;
+            chain_offsets(update) = num_edges;
+            chain_offsets(0) = 0;
           }
-        },
-        num_chains);
-    Kokkos::resize(Kokkos::WithoutInitializing, chain_offsets, num_chains + 1);
-#if 1
-    printf("Chain offsets:");
-    for (int i = 0; i < (int)chain_offsets.size(); ++i)
-      printf(" %d\n", chain_offsets(i));
+          else if ((keys(i) >> shift) == (keys(i + 1) >> shift))
+          {
+            // For the edges belonging to the same chain, assign the parent of
+            // an edge to the edge with the next larger value
+            parents(i) = i + 1;
+          }
+          else
+          {
+            // For an edge which points to the root of a chain, assign edge's
+            // parent to be that root
+            parents(i) = rev_permute((keys(i) >> shift) / 2);
+            chain_offsets(update) = i + 1;
+          }
+        }
+      },
+      num_chains);
+  Kokkos::resize(Kokkos::WithoutInitializing, chain_offsets, num_chains + 1);
+#if PRINT
+  printf("#chains: %d\n", num_chains);
+  printf("Chain offsets:");
+  for (int i = 0; i < (int)chain_offsets.size(); ++i)
+    printf(" %d", chain_offsets(i));
+  printf("\n");
 #endif
-  }
-#if 1
-  printf("Parents:");
+#if PRINT
+  printf("Parents:\n");
   for (int i = 0; i < (int)parents.size(); ++i)
     printf("[%d] %d\n", i, parents(i));
 #endif
@@ -752,10 +761,10 @@ void computeParentsAndReorderEdges(
   Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_chains + 1);
   int num_levels = 0;
   Kokkos::parallel_scan(
-      "ArborX::MST::compute_chain_levesl",
+      "ArborX::MST::compute_chain_levels",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, num_chains),
       KOKKOS_LAMBDA(int i, int &level, bool final_pass) {
-        auto upper_bound = [&edge_hierarchy_offsets](int x) {
+        auto upper_bound = [&v = edge_hierarchy_offsets](int x) {
           int first = 0;
           int last = v.extent_int(0);
           int count = last - first;
@@ -776,24 +785,28 @@ void computeParentsAndReorderEdges(
           return first;
         };
 
-        bool new_level =
-            (i == 0 ? false
-                    : upper_bound(rev_permute(chain_offsets(i))) !=
-                          upper_bound(rev_permute(chain_offsets(i - 1))));
+#if PRINT
+        printf("-- [%d]: level %d\n", i,
+               upper_bound(permute(chain_offsets(i))) - 1);
+#endif
 
-        if (new_level)
+        if (i == num_chains - 1 ||
+            upper_bound(permute(chain_offsets(i))) !=
+                upper_bound(permute(chain_offsets(i + 1))))
         {
-          if (final_pass)
-            chain_levels(level) = i;
           ++level;
+          if (final_pass)
+            chain_levels(level) = i + 1;
         }
       },
       num_levels);
+  ++num_levels;
   Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_levels);
-#if 1
+#if PRINT
   printf("Chain levels:");
   for (int i = 0; i < (int)chain_levels.size(); ++i)
-    printf(" %d\n", chain_levels(i));
+    printf(" %d", chain_levels(i));
+  printf("\n");
 #endif
 }
 

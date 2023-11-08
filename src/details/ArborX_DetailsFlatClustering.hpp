@@ -18,10 +18,11 @@ namespace ArborX::Details
 {
 
 template <class ExecutionSpace, typename Parents, typename Heights,
-          typename ChainOffsets>
+          typename ChainOffsets, typename ChainLevels>
 void computeFlatClustering(ExecutionSpace const &space, Parents const &parents,
                            Heights const &heights,
-                           ChainOffsets const &chain_offsets)
+                           ChainOffsets const &chain_offsets,
+                           ChainLevels const &chain_levels)
 {
   using MemorySpace = typename Parents::memory_space;
 
@@ -74,6 +75,31 @@ void computeFlatClustering(ExecutionSpace const &space, Parents const &parents,
 
     KokkosExt::ScopedProfileRegion guard(
         "ArborX::HDBSCAN::flat_clustering::counts_hierarchical_1");
+
+    Kokkos::parallel_for(
+        "ArborX::HDBSCAN::flat_clustering::compute_counts_hier_vertices",
+        Kokkos::RangePolicy<ExecutionSpace>(space, n - 1, 2 * n - 1),
+        KOKKOS_LAMBDA(int i) { Kokkos::atomic_add(&counts(parents(i)), 1); });
+
+    auto chain_levels_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_levels);
+    for (int level = 0; level < (int)chain_levels.size() - 1; ++level)
+      Kokkos::parallel_for(
+          "ArborX::HDBSCAN::flat_clustering::compute_counts_hier_level_" +
+              std::to_string(level),
+          Kokkos::RangePolicy<ExecutionSpace>(space, chain_levels_host(level),
+                                              chain_levels_host(level + 1)),
+          KOKKOS_LAMBDA(int chain)
+
+          {
+            int first = chain_offsets(chain);
+            int last = chain_offsets(chain + 1) - 1;
+
+            for (int i = first; i < last; ++i)
+              counts(i + 1) += counts(i);
+            if (parents(last) != -1)
+              Kokkos::atomic_add(&counts(parents(last)), counts(last));
+          });
   }
 
   // Check

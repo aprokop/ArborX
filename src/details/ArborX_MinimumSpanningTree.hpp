@@ -87,7 +87,7 @@ struct MinimumSpanningTree
     finalizeEdges(space, bvh, edges);
 
     computeFlatClustering(space, dendrogram_parents, dendrogram_parent_heights,
-                          _chain_offsets);
+                          _chain_offsets, _chain_levels);
     Kokkos::Profiling::popRegion();
   }
 
