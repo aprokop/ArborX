@@ -83,22 +83,29 @@ void computeFlatClustering(ExecutionSpace const &space, Parents const &parents,
 
     auto chain_levels_host =
         Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_levels);
+    using TeamPolicy =
+        Kokkos::TeamPolicy<ExecutionSpace, Kokkos::Schedule<Kokkos::Dynamic>>;
     for (int level = 0; level < (int)chain_levels.size() - 1; ++level)
       Kokkos::parallel_for(
           "ArborX::HDBSCAN::flat_clustering::compute_counts_hier_level_" +
               std::to_string(level),
-          Kokkos::RangePolicy<ExecutionSpace>(space, chain_levels_host(level),
-                                              chain_levels_host(level + 1)),
-          KOKKOS_LAMBDA(int chain)
+          TeamPolicy(space,
+                     chain_levels_host(level + 1) - chain_levels_host(level),
+                     Kokkos::AUTO),
+          KOKKOS_LAMBDA(typename TeamPolicy::member_type const &team) {
+            int chain = chain_levels(level) + team.league_rank();
 
-          {
-            int first = chain_offsets(chain);
-            int last = chain_offsets(chain + 1) - 1;
+            int begin = chain_offsets(chain);
+            int end = chain_offsets(chain + 1);
 
-            for (int i = first; i < last; ++i)
-              counts(i + 1) += counts(i);
-            if (parents(last) != -1)
-              Kokkos::atomic_add(&counts(parents(last)), counts(last));
+            Kokkos::parallel_scan(Kokkos::TeamThreadRange(team, begin, end),
+                                  [=](int i, int &update, bool final_pass) {
+                                    update += counts(i);
+                                    if (final_pass)
+                                      counts(i) = update;
+                                  });
+            if (parents(end - 1) != -1)
+              Kokkos::atomic_add(&counts(parents(end - 1)), counts(end - 1));
           });
   }
 
