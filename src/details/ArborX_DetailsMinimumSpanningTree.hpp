@@ -667,24 +667,27 @@ void computeParentsAndReorderEdges(
         }
       });
 
-  // #define PRINT
+#define PRINT
 
-#if PRINT
+#ifdef PRINT
   printf("Keys:\n");
+  auto keys_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, keys);
+  auto permute_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, permute);
   for (int i = 0; i < num_edges; ++i)
   {
-    int key = (keys(i) >> shift);
+    int key = (keys_host(i) >> shift);
     if (key == INT_MAX)
-      printf("[%d]: -1\n", permute(i));
+      printf("[%d]: -1\n", permute_host(i));
     else
-      printf("[%d]: %d(%c)\n", permute(i), key / 2, (key % 2 ? 'l' : 'r'));
+      printf("[%d]: %d(%c)\n", permute_host(i), key / 2, (key % 2 ? 'l' : 'r'));
   }
 #endif
 
-#if PRINT
+#ifdef PRINT
   printf("Hierarchy offsets:");
-  for (int i = 0; i < (int)edge_hierarchy_offsets.size(); ++i)
-    printf(" %d", edge_hierarchy_offsets(i));
+  auto edge_hierarchy_offsets_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, edge_hierarchy_offsets);
+  for (int i = 0; i < (int)edge_hierarchy_offsets_host.size(); ++i)
+    printf(" %d", edge_hierarchy_offsets_host(i));
   printf("\n");
 #endif
 
@@ -735,17 +738,19 @@ void computeParentsAndReorderEdges(
       },
       num_chains);
   Kokkos::resize(Kokkos::WithoutInitializing, chain_offsets, num_chains + 1);
-#if PRINT
+#ifdef PRINT
   printf("#chains: %d\n", num_chains);
   printf("Chain offsets:");
-  for (int i = 0; i < (int)chain_offsets.size(); ++i)
-    printf(" %d", chain_offsets(i));
+  auto chain_offsets_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_offsets);
+  for (int i = 0; i < (int)chain_offsets_host.size(); ++i)
+    printf(" %d", chain_offsets_host(i));
   printf("\n");
 #endif
-#if PRINT
+#ifdef PRINT
   printf("Parents:\n");
-  for (int i = 0; i < (int)parents.size(); ++i)
-    printf("[%d] %d\n", i, parents(i));
+  auto parents_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, parents);
+  for (int i = 0; i < (int)parents_host.size(); ++i)
+    printf("[%d] %d\n", i, parents_host(i));
 #endif
 
   {
@@ -785,7 +790,7 @@ void computeParentsAndReorderEdges(
           return first;
         };
 
-#if PRINT
+#ifdef PRINT
         printf("-- [%d]: level %d\n", i,
                upper_bound(permute(chain_offsets(i))) - 1);
 #endif
@@ -802,10 +807,11 @@ void computeParentsAndReorderEdges(
       num_levels);
   ++num_levels;
   Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_levels);
-#if PRINT
+#ifdef PRINT
   printf("Chain levels:");
-  for (int i = 0; i < (int)chain_levels.size(); ++i)
-    printf(" %d", chain_levels(i));
+  auto chain_levels_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, chain_levels);
+  for (int i = 0; i < (int)chain_levels_host.size(); ++i)
+    printf(" %d", chain_levels_host(i));
   printf("\n");
 #endif
 }
