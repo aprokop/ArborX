@@ -98,14 +98,18 @@ void computeFlatClustering(ExecutionSpace const &space, Parents const &parents,
             int begin = chain_offsets(chain);
             int end = chain_offsets(chain + 1);
 
+
+
             Kokkos::parallel_scan(Kokkos::TeamThreadRange(team, begin, end),
                                   [=](int i, int &update, bool final_pass) {
                                     update += counts(i);
                                     if (final_pass)
                                       counts(i) = update;
                                   });
-            if (parents(end - 1) != -1)
-              Kokkos::atomic_add(&counts(parents(end - 1)), counts(end - 1));
+            Kokkos::single(Kokkos::PerTeam(team), [&]() {
+              if (parents(end - 1) != -1)
+                Kokkos::atomic_add(&counts(parents(end - 1)), counts(end - 1));
+            });
           });
   }
 
