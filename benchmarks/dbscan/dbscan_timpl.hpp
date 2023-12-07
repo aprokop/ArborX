@@ -15,6 +15,7 @@
 #include <ArborX_MinimumSpanningTree.hpp>
 
 #include <Kokkos_Core.hpp>
+#include <Kokkos_ScatterView.hpp>
 
 #include <cstdlib>
 #include <fstream>
@@ -72,6 +73,8 @@ void sortAndFilterClusters(ExecutionSpace const &exec_space,
 
   Kokkos::View<int *, MemorySpace> cluster_sizes(
       "ArborX::DBSCAN::cluster_sizes", n);
+  auto scatter_cluster_sizes =
+      Kokkos::Experimental::create_scatter_view(cluster_sizes);
   Kokkos::parallel_for(
       "ArborX::DBSCAN::compute_cluster_sizes",
       Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
@@ -80,8 +83,10 @@ void sortAndFilterClusters(ExecutionSpace const &exec_space,
         if (labels(i) < 0)
           return;
 
-        Kokkos::atomic_increment(&cluster_sizes(labels(i)));
+        auto access = scatter_cluster_sizes.access();
+        ++access(labels(i));
       });
+  Kokkos::Experimental::contribute(cluster_sizes, scatter_cluster_sizes);
 
   // This kernel serves dual purpose:
   // - it constructs an offset array through exclusive prefix sum, with a
