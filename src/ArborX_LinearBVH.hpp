@@ -316,10 +316,12 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
-  // Generate bounding volume hierarchy
+  Details::TreeConstruction::initializeLeafNodes(
+      space, values, permutation_indices, _leaf_nodes);
+  Kokkos::resize(permutation_indices, 0); // reduce memory high water mark
   Details::TreeConstruction::generateHierarchy(
-      space, values, _indexable_getter, permutation_indices,
-      linear_ordering_indices, _leaf_nodes, _internal_nodes, _bounds);
+      space, _indexable_getter, linear_ordering_indices, _leaf_nodes,
+      _internal_nodes, _bounds);
 
   Kokkos::Profiling::popRegion();
 }
