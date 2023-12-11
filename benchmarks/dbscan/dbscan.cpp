@@ -186,20 +186,8 @@ int main(int argc, char *argv[])
   bool success;
   switch (dim)
   {
-  case 2:
-    success = run<2>(params);
-    break;
   case 3:
     success = run<3>(params);
-    break;
-  case 4:
-    success = run<4>(params);
-    break;
-  case 5:
-    success = run<5>(params);
-    break;
-  case 6:
-    success = run<6>(params);
     break;
   default:
     std::cerr << "Error: dimension " << dim << " not allowed\n" << std::endl;
