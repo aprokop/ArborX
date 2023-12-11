@@ -233,7 +233,7 @@ struct Parameters
 template <typename ExecutionSpace, typename Primitives>
 Kokkos::View<int *,
              typename AccessTraits<Primitives, PrimitivesTag>::memory_space>
-dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
+dbscan(ExecutionSpace const &exec_space, Primitives &primitives,
        float eps, int core_min_size,
        DBSCAN::Parameters const &parameters = DBSCAN::Parameters())
 {
@@ -278,9 +278,10 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   {
     // Build the tree
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
+    Details::LegacyValues<Points, Point> legacy_values{points};
     ArborX::BasicBoundingVolumeHierarchy<MemorySpace,
                                          Details::PairIndexVolume<Point>>
-        bvh(exec_space, Details::LegacyValues<Points, Point>{points});
+        bvh(exec_space, legacy_values);
     Kokkos::Profiling::popRegion();
 
     // Initialize labels after the hierarchy construction to lower memory high
@@ -340,6 +341,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       Kokkos::Profiling::popRegion();
     }
   }
+#if 0
   else if (parameters._implementation ==
            DBSCAN::Implementation::FDBSCAN_DenseBox)
   {
@@ -487,6 +489,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       Kokkos::Profiling::popRegion();
     }
   }
+#endif
 
   // Per [1]:
   //

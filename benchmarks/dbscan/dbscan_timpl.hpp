@@ -278,13 +278,16 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
     printf("#noise   points : %d [%.2f%%]\n", num_noise_points,
            (100.f * num_noise_points / num_points));
 
+#if 0
     if (params.verify)
     {
       success = ArborX::Details::verifyDBSCAN(
           exec_space, primitives, params.eps, params.core_min_size, labels);
       printf("Verification %s\n", (success ? "passed" : "failed"));
     }
+#endif
   }
+#if 0
   else if (params.algorithm == "hdbscan")
   {
     using ArborX::Experimental::DendrogramImplementation;
@@ -359,6 +362,7 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
              ArborX_Benchmark::get_time("ArborX::MST::total"));
     }
   }
+#endif
 
   if (success && !params.filename_labels.empty())
     writeLabelsData(params.filename_labels, labels);

@@ -21,10 +21,11 @@ namespace ArborX::Details
 template <typename Primitives, typename BoundingVolume>
 class LegacyValues
 {
-  Primitives _primitives;
   using Access = AccessTraits<Primitives, PrimitivesTag>;
 
 public:
+  Primitives _primitives;
+
   using memory_space = typename Access::memory_space;
   using value_type = Details::PairIndexVolume<BoundingVolume>;
   using size_type =

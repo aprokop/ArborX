@@ -68,7 +68,7 @@ public:
   template <typename ExecutionSpace, typename Values,
             typename SpaceFillingCurve = Experimental::Morton64>
   BasicBoundingVolumeHierarchy(
-      ExecutionSpace const &space, Values const &values,
+      ExecutionSpace const &space, Values &values,
       IndexableGetter const &indexable_getter = IndexableGetter(),
       SpaceFillingCurve const &curve = SpaceFillingCurve());
 
@@ -237,16 +237,14 @@ template <typename ExecutionSpace, typename UserValues,
 BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
                              BoundingVolume>::
     BasicBoundingVolumeHierarchy(ExecutionSpace const &space,
-                                 UserValues const &user_values,
+                                 UserValues &user_values,
                                  IndexableGetter const &indexable_getter,
                                  SpaceFillingCurve const &curve)
     : _size(AccessTraits<UserValues, PrimitivesTag>::size(user_values))
     , _leaf_nodes(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                                      "ArborX::BVH::leaf_nodes"),
                   _size)
-    , _internal_nodes(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                                         "ArborX::BVH::internal_nodes"),
-                      _size > 1 ? _size - 1 : 0)
+    , _internal_nodes("ArborX::BVH::internal_nodes", 0)
     , _indexable_getter(indexable_getter)
 {
   static_assert(
@@ -319,6 +317,10 @@ BasicBoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter,
   Details::TreeConstruction::initializeLeafNodes(
       space, values, permutation_indices, _leaf_nodes);
   Kokkos::resize(permutation_indices, 0); // reduce memory high water mark
+  std::cout << "Size: user_values._primitives._values" << user_values._primitives._values.size() << std::endl;
+  Kokkos::resize(Kokkos::view_alloc(space), user_values._primitives._values, 0);
+  std::cout << "Size: user_values._primitives._values" << user_values._primitives._values.size() << std::endl;
+  Kokkos::resize(Kokkos::view_alloc(space, Kokkos::WithoutInitializing), _internal_nodes, size() - 1);
   Details::TreeConstruction::generateHierarchy(
       space, _indexable_getter, linear_ordering_indices, _leaf_nodes,
       _internal_nodes, _bounds);
