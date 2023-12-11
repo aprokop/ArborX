@@ -182,9 +182,36 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
     data = GanTao<DIM>(params.n, params.variable_density);
   }
 
-  auto const primitives = vec2view<MemorySpace>(data, "Benchmark::primitives");
+  auto primitives = vec2view<MemorySpace>(data, "Benchmark::primitives");
 
   using Primitives = decltype(primitives);
+
+#if 1
+  {
+    ArborX::ExperimentalHyperGeometry::Box<3> bounds;
+    ArborX::Details::TreeConstruction::calculateBoundingBoxOfTheScene(
+        exec_space,
+        ArborX::Details::Indexables<decltype(primitives),
+                                    ArborX::Details::DefaultIndexableGetter>{
+            primitives, ArborX::Details::DefaultIndexableGetter{}},
+        bounds);
+    printf("Bounds: [ (%.2f, %.2f, %.2f ), (%.2f, %.2f, %.2f ) ]\n",
+           bounds.minCorner()[0], bounds.minCorner()[1], bounds.minCorner()[2],
+           bounds.maxCorner()[0], bounds.maxCorner()[1], bounds.maxCorner()[2]);
+
+    auto const n = primitives.size();
+    Kokkos::resize(Kokkos::view_alloc(exec_space), primitives, 2 * n);
+    Kokkos::parallel_for(
+        "Benchmark::duplicate_and_shift_points",
+        Kokkos::RangePolicy<ExecutionSpace>(exec_space, n, 2 * n),
+        KOKKOS_LAMBDA(int i) {
+          Point p = primitives(i - n);
+          for (int d = 0; d < 3; ++d)
+            p[d] += bounds.maxCorner()[d] - bounds.minCorner()[d];
+          primitives(i) = p;
+        });
+  }
+#endif
 
   Kokkos::View<int *, MemorySpace> labels("Example::labels", 0);
   bool success = true;
@@ -313,7 +340,6 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
   }
   else if (params.algorithm == "mst")
   {
-
     Kokkos::Profiling::pushRegion("ArborX::MST::total");
     ArborX::Details::MinimumSpanningTree<MemorySpace> mst(
         exec_space, primitives, params.core_min_size);
