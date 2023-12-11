@@ -85,9 +85,26 @@ initializeSingleLeafTree(ExecutionSpace const &space, Values const &values,
       bounding_volume);
 }
 
-template <typename Values, typename IndexableGetter,
-          typename PermutationIndices, typename LinearOrdering,
-          typename LeafNodes, typename InternalNodes>
+template <typename ExecutionSpace, typename Values, typename Indices,
+          typename Nodes>
+inline void
+initializeLeafNodes(ExecutionSpace const &space, Values const &values,
+                    Indices const &permutation_indices, Nodes const &leaf_nodes)
+{
+  int const n = values.size();
+
+  ARBORX_ASSERT((int)permutation_indices.extent(0) == n);
+  ARBORX_ASSERT((int)leaf_nodes.extent(0) == n);
+
+  Kokkos::parallel_for(
+      "ArborX::TreeConstruction::initialize_leaf_nodes",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, n), KOKKOS_LAMBDA(int i) {
+        leaf_nodes(i) = makeLeafNode(values(permutation_indices(i)));
+      });
+}
+
+template <typename IndexableGetter, typename LinearOrdering, typename LeafNodes,
+          typename InternalNodes>
 class GenerateHierarchy
 {
   static constexpr int UNTOUCHED_NODE = -1;
@@ -99,15 +116,12 @@ class GenerateHierarchy
 
 public:
   template <typename ExecutionSpace>
-  GenerateHierarchy(ExecutionSpace const &space, Values const &values,
+  GenerateHierarchy(ExecutionSpace const &space,
                     IndexableGetter const &indexable_getter,
-                    PermutationIndices const &permutation_indices,
                     LinearOrdering const &sorted_morton_codes,
                     LeafNodes leaf_nodes, InternalNodes internal_nodes,
                     BoundingVolume &bounds)
-      : _values(values)
-      , _indexable_getter(indexable_getter)
-      , _permutation_indices(permutation_indices)
+      : _indexable_getter(indexable_getter)
       , _sorted_morton_codes(sorted_morton_codes)
       , _leaf_nodes(leaf_nodes)
       , _internal_nodes(internal_nodes)
@@ -214,12 +228,7 @@ public:
 
   KOKKOS_FUNCTION void operator()(int i) const
   {
-    // Index in the original order values were given in
-    auto const original_index = _permutation_indices(i);
-
-    // Initialize leaf node
     auto &leaf_node = _leaf_nodes(i);
-    leaf_node = makeLeafNode(_values(original_index));
 
     BoundingVolume bounding_volume{};
     expand(bounding_volume, _indexable_getter(leaf_node.value));
@@ -329,9 +338,7 @@ public:
   }
 
 private:
-  Values _values;
   IndexableGetter _indexable_getter;
-  PermutationIndices _permutation_indices;
   LinearOrdering _sorted_morton_codes;
   LeafNodes _leaf_nodes;
   InternalNodes _internal_nodes;
@@ -339,28 +346,21 @@ private:
   int _num_internal_nodes;
 };
 
-template <typename ExecutionSpace, typename Values, typename IndexableGetter,
-          typename... PermutationIndicesViewProperties,
+template <typename ExecutionSpace, typename IndexableGetter,
           typename LinearOrderingValueType,
           typename... LinearOrderingViewProperties, typename LeafNodes,
           typename InternalNodes>
 void generateHierarchy(
-    ExecutionSpace const &space, Values const &values,
-    IndexableGetter const &indexable_getter,
-    Kokkos::View<unsigned int *, PermutationIndicesViewProperties...>
-        permutation_indices,
+    ExecutionSpace const &space, IndexableGetter const &indexable_getter,
     Kokkos::View<LinearOrderingValueType *, LinearOrderingViewProperties...>
         sorted_morton_codes,
     LeafNodes leaf_nodes, InternalNodes internal_nodes,
     typename InternalNodes::value_type::bounding_volume_type &bounds)
 {
-  using ConstPermutationIndices =
-      Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>;
   using ConstLinearOrdering = Kokkos::View<LinearOrderingValueType const *,
                                            LinearOrderingViewProperties...>;
 
-  GenerateHierarchy(space, values, indexable_getter,
-                    ConstPermutationIndices(permutation_indices),
+  GenerateHierarchy(space, indexable_getter,
                     ConstLinearOrdering(sorted_morton_codes), leaf_nodes,
                     internal_nodes, bounds);
 }
