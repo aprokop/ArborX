@@ -201,9 +201,11 @@ bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
 
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::total");
 
-    labels = ArborX::dbscan<ExecutionSpace, Primitives>(
-        exec_space, primitives, params.eps, params.core_min_size,
-        dbscan_params);
+    for (int i = 0; i < 100; ++i) {
+      labels = ArborX::dbscan<ExecutionSpace, Primitives>(
+          exec_space, primitives, params.eps, params.core_min_size,
+          dbscan_params);
+    }
 
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::postprocess");
     Kokkos::View<int *, MemorySpace> cluster_indices("Testing::cluster_indices",
