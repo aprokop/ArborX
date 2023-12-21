@@ -272,16 +272,6 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
                        HappyTreeFriends::getInternalBoundingVolume(bvh, j));
     };
 
-    auto update_heap = [&heap, k](int index, float dist, float &radius) {
-      auto leaf_pair = Kokkos::make_pair(index, dist);
-      if ((int)heap.size() < k)
-        heap.push(leaf_pair);
-      else
-        heap.popPush(leaf_pair);
-      if ((int)heap.size() == k)
-        radius = heap.top().second;
-    };
-
     constexpr int SENTINEL = -1;
     int stack_node[64];
     auto *stack_node_ptr = stack_node;
@@ -293,69 +283,70 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
 #endif
 
     int node = HappyTreeFriends::getRoot(_bvh);
+    float distance_node = 0;
     do
     {
-      int child_first = HappyTreeFriends::getLeftChild(_bvh, node);
-      int child_second = HappyTreeFriends::getRightChild(_bvh, node);
+      bool grab_from_stack = true;
 
-      float distance_first = distance(child_first);
-      float distance_second = distance(child_second);
-
-      if (distance_first > distance_second)
+      if (distance_node < radius)
       {
-        KokkosExt::swap(child_first, child_second);
-        KokkosExt::swap(distance_first, distance_second);
-      }
-
-      // Start with the closest child
-      if (distance_first < radius)
-      {
-        if (HappyTreeFriends::isLeaf(_bvh, child_first))
-          update_heap(child_first, distance_first, radius);
-        else
-          node = child_first;
-      }
-
-      // Radius may have been already updated from the first child
-      if (distance_second < radius)
-      {
-        if (HappyTreeFriends::isLeaf(_bvh, child_second))
+        if (HappyTreeFriends::isLeaf(_bvh, node))
         {
-          update_heap(child_second, distance_second, radius);
+          auto leaf_pair = Kokkos::make_pair(node, distance_node);
+          if ((int)heap.size() < k)
+            heap.push(leaf_pair);
+          else
+            heap.popPush(leaf_pair);
+          if ((int)heap.size() == k)
+            radius = heap.top().second;
         }
         else
         {
-          if (node != child_first)
-            node = child_second;
-          else
+          int child_first = HappyTreeFriends::getLeftChild(_bvh, node);
+          int child_second = HappyTreeFriends::getRightChild(_bvh, node);
+
+          float distance_first = distance(child_first);
+          float distance_second = distance(child_second);
+
+          if (distance_first > distance_second)
           {
-            *stack_node_ptr++ = child_second;
+            KokkosExt::swap(child_first, child_second);
+            KokkosExt::swap(distance_first, distance_second);
+          }
+
+          if (distance_first < radius)
+          {
+            grab_from_stack = false;
+
+            node = child_first;
+            distance_node = distance_first;
+
+            if (distance_second < radius)
+            {
+              *stack_node_ptr++ = child_second;
 #if !defined(__CUDA_ARCH__)
-            *stack_distance_ptr++ = distance_second;
+              *stack_distance_ptr++ = distance_second;
 #endif
+            }
           }
         }
       }
 
-      if (node == child_first || node == child_second)
-        continue;
-
-      do
+      if (grab_from_stack)
       {
         node = *--stack_node_ptr;
-        if (node == SENTINEL ||
 #if !defined(__CUDA_ARCH__)
-            *--stack_distance_ptr
+        distance_node = *--stack_distance_ptr;
 #else
-            // This is a theoretically unnecessary duplication of distance
-            // calculation for stack nodes. However, for Cuda it's better than
-            // putting the distances in stack.
-            distance(node)
+        if (node != SENTINEL)
+        {
+          // This is a theoretically unnecessary duplication of distance
+          // calculation for stack nodes. However, for Cuda it's better than
+          // putting the distances in stack.
+          distance_node = distance(node);
+        }
 #endif
-                < radius)
-          break;
-      } while (true);
-
+      }
     } while (node != SENTINEL);
 
     // Sort the leaf nodes and output the results.
