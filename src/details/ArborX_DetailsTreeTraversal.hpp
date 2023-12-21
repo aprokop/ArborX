@@ -15,6 +15,7 @@
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsHappyTreeFriends.hpp>
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
+#include <ArborX_DetailsKokkosExtSwap.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsNode.hpp> // ROPE_SENTINEL
 #include <ArborX_DetailsPriorityQueue.hpp>
@@ -271,10 +272,20 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
                        HappyTreeFriends::getInternalBoundingVolume(bvh, j));
     };
 
+    auto update_heap = [&heap, k](int index, float dist, float &radius) {
+      auto leaf_pair = Kokkos::make_pair(index, dist);
+      if ((int)heap.size() < k)
+        heap.push(leaf_pair);
+      else
+        heap.popPush(leaf_pair);
+      if ((int)heap.size() == k)
+        radius = heap.top().second;
+    };
+
     constexpr int SENTINEL = -1;
-    int stack[64];
-    auto *stack_ptr = stack;
-    *stack_ptr++ = SENTINEL;
+    int stack_node[64];
+    auto *stack_node_ptr = stack_node;
+    *stack_node_ptr++ = SENTINEL;
 #if !defined(__CUDA_ARCH__)
     float stack_distance[64];
     auto *stack_distance_ptr = stack_distance;
@@ -282,97 +293,69 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
 #endif
 
     int node = HappyTreeFriends::getRoot(_bvh);
-    int left_child;
-    int right_child;
-
-    float distance_left = 0.f;
-    float distance_right = 0.f;
-    float distance_node = 0.f;
-
     do
     {
-      bool traverse_left = false;
-      bool traverse_right = false;
+      int child_first = HappyTreeFriends::getLeftChild(_bvh, node);
+      int child_second = HappyTreeFriends::getRightChild(_bvh, node);
 
-      if (distance_node < radius)
+      float distance_first = distance(child_first);
+      float distance_second = distance(child_second);
+
+      if (distance_first > distance_second)
       {
-        // Insert children into the stack and make sure that the
-        // closest one ends on top.
-        left_child = HappyTreeFriends::getLeftChild(_bvh, node);
-        right_child = HappyTreeFriends::getRightChild(_bvh, node);
-
-        distance_left = distance(left_child);
-        distance_right = distance(right_child);
-
-        if (distance_left < radius)
-        {
-          if (HappyTreeFriends::isLeaf(_bvh, left_child))
-          {
-            auto leaf_pair = Kokkos::make_pair(left_child, distance_left);
-            if ((int)heap.size() < k)
-              heap.push(leaf_pair);
-            else
-              heap.popPush(leaf_pair);
-            if ((int)heap.size() == k)
-              radius = heap.top().second;
-          }
-          else
-          {
-            traverse_left = true;
-          }
-        }
-
-        // Note: radius may have been already updated here from the left child
-        if (distance_right < radius)
-        {
-          if (HappyTreeFriends::isLeaf(_bvh, right_child))
-          {
-            auto leaf_pair = Kokkos::make_pair(right_child, distance_right);
-            if ((int)heap.size() < k)
-              heap.push(leaf_pair);
-            else
-              heap.popPush(leaf_pair);
-            if ((int)heap.size() == k)
-              radius = heap.top().second;
-          }
-          else
-          {
-            traverse_right = true;
-          }
-        }
+        KokkosExt::swap(child_first, child_second);
+        KokkosExt::swap(distance_first, distance_second);
       }
 
-      if (!traverse_left && !traverse_right)
+      // Start with the closest child
+      if (distance_first < radius)
       {
-        node = *--stack_ptr;
-#if defined(__CUDA_ARCH__)
-        if (node != SENTINEL)
-        {
-          // This is a theoretically unnecessary duplication of distance
-          // calculation for stack nodes. However, for Cuda it's better than
-          // putting the distances in stack.
-          distance_node = distance(node);
-        }
-#else
-        distance_node = *--stack_distance_ptr;
-#endif
+        if (HappyTreeFriends::isLeaf(_bvh, child_first))
+          update_heap(child_first, distance_first, radius);
+        else
+          node = child_first;
       }
-      else
+
+      // Radius may have been already updated from the first child
+      if (distance_second < radius)
       {
-        node = (traverse_left &&
-                (distance_left <= distance_right || !traverse_right))
-                   ? left_child
-                   : right_child;
-        distance_node = (node == left_child ? distance_left : distance_right);
-        if (traverse_left && traverse_right)
+        if (HappyTreeFriends::isLeaf(_bvh, child_second))
         {
-          *stack_ptr++ = (node == left_child ? right_child : left_child);
+          update_heap(child_second, distance_second, radius);
+        }
+        else
+        {
+          if (node != child_first)
+            node = child_second;
+          else
+          {
+            *stack_node_ptr++ = child_second;
 #if !defined(__CUDA_ARCH__)
-          *stack_distance_ptr++ =
-              (node == left_child ? distance_right : distance_left);
+            *stack_distance_ptr++ = distance_second;
 #endif
+          }
         }
       }
+
+      if (node == child_first || node == child_second)
+        continue;
+
+      do
+      {
+        node = *--stack_node_ptr;
+        if (node == SENTINEL ||
+#if !defined(__CUDA_ARCH__)
+            *--stack_distance_ptr
+#else
+            // This is a theoretically unnecessary duplication of distance
+            // calculation for stack nodes. However, for Cuda it's better than
+            // putting the distances in stack.
+            distance(node)
+#endif
+                < radius)
+          break;
+      } while (true);
+
     } while (node != SENTINEL);
 
     // Sort the leaf nodes and output the results.
@@ -385,7 +368,7 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
                 HappyTreeFriends::getValue(_bvh, (heap.data() + i)->first));
     }
   }
-};
+}; // namespace Details
 
 template <class BVH, class Predicates, class Callback>
 struct TreeTraversal<BVH, Predicates, Callback,
