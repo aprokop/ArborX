@@ -1,0 +1,16 @@
+[
+  { include: ["@<ArborX_.*>", "private", "<ArborX.hpp>", "public"] },
+
+
+  { include: ["@<KokkosExp_.*>", "private", "<Kokkos_Core.hpp>", "public"] },
+  { include: ["@<Kokkos_.*>", "private", "<Kokkos_Core.hpp>", "public"] },
+  { include: ["@<desul/.*>", "private", "<Kokkos_Core.hpp>", "public"] },
+  { include: ["@<impl/.*>", "private", "<Kokkos_Core.hpp>", "public"] },
+
+  { include: ["@<boost/.*>", "private", "<boost/program_options.hpp>", "public"] },
+
+  { include: ["<__fwd/fstream.h>", "private", "<fstream>", "public"] },
+  { include: ["<__fwd/ostream.h>", "private", "<ostream>", "public"] },
+  { include: ["<stdlib.h>", "public", "<cstdlib>", "public"] },
+  { include: ["<stdio.h>", "public", "<cstdio>", "public"] }
+]

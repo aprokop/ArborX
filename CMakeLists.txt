@@ -194,3 +194,27 @@ endif()
 if(ARBORX_ENABLE_BENCHMARKS)
   add_subdirectory(benchmarks)
 endif()
+
+set(ARBORX_ENABLE_IWYU OFF CACHE BOOL "Add 'iwyu' build target to call the include-what-you-use tool")
+mark_as_advanced(ENABLE_IWYU)
+if(ARBORX_ENABLE_IWYU AND ARBORX_ENABLE_EXAMPLES AND NOT ARBORX_ENABLE_TESTS AND NOT ARBORX_ENABLE_BENCHMARKS)
+  # Enforce these settings
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Enable reporting compilation commands to compile_commands.json" FORCE)
+  message(STATUS "Compiler id: ${CMAKE_CXX_COMPILER_ID}")
+  if(NOT ((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") OR (CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR ((CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))))
+    message(FATAL_ERROR "IWYU is only supported with Clang or GNU compilers")
+  endif()
+
+  find_program(IWYU_EXE NAMES include-what-you-use iwyu)
+  find_program(IWYU_TOOL NAMES iwyu_tool iwyu-tool iwyu_tool.py)
+  if (IWYU_EXE AND IWYU_TOOL)
+    add_custom_target(
+      iwyu
+      ${IWYU_TOOL} -o clang -p ${CMAKE_CURRENT_BINARY_DIR} -- -Xiwyu --mapping_file=${CMAKE_CURRENT_SOURCE_DIR}/cmake/iwyu/iwyu-external-map.imp
+      COMMENT "Running IWYU")
+    add_dependencies(iwyu ArborX)
+  else()
+    message(FATAL_ERROR "To use IWYU you need the include-what-you-use/iwyu executable"
+      "and the iwyu-tool/iwyu_tool script installed in your PATH")
+  endif()
+endif()
