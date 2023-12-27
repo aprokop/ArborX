@@ -12,17 +12,31 @@
 #ifndef ARBORX_HPP
 #define ARBORX_HPP
 
-#include <ArborX_Config.hpp>
+#include <ArborX_Config.hpp> // IWYU pragma: export
 
-#include <ArborX_Box.hpp>
+#include <ArborX_AccessTraits.hpp>       // IWYU pragma: export
+#include <ArborX_Box.hpp>                // IWYU pragma: export
+#include <ArborX_BruteForce.hpp>         // IWYU pragma: export
+#include <ArborX_Callbacks.hpp>          // IWYU pragma: export
+#include <ArborX_CrsGraphWrapper.hpp>    // IWYU pragma: export
+#include <ArborX_Exception.hpp>          // IWYU pragma: export
+#include <ArborX_GeometryTraits.hpp>     // IWYU pragma: export
+#include <ArborX_HyperBox.hpp>           // IWYU pragma: export
+#include <ArborX_HyperPoint.hpp>         // IWYU pragma: export
+#include <ArborX_HyperSphere.hpp>        // IWYU pragma: export
+#include <ArborX_IndexableGetter.hpp>    // IWYU pragma: export
+#include <ArborX_KDOP.hpp>               // IWYU pragma: export
+#include <ArborX_LinearBVH.hpp>          // IWYU pragma: export
+#include <ArborX_PairValueIndex.hpp>     // IWYU pragma: export
+#include <ArborX_Point.hpp>              // IWYU pragma: export
+#include <ArborX_Predicates.hpp>         // IWYU pragma: export
+#include <ArborX_SpaceFillingCurves.hpp> // IWYU pragma: export
+#include <ArborX_Sphere.hpp>             // IWYU pragma: export
+#include <ArborX_TraversalPolicy.hpp>    // IWYU pragma: export
+
 #ifdef ARBORX_ENABLE_MPI
-#include <ArborX_DistributedTree.hpp>
+#include <ArborX_DistributedTree.hpp> // IWYU pragma: export
+#include <ArborX_PairIndexRank.hpp>   // IWYU pragma: export
 #endif
-#include <ArborX_CrsGraphWrapper.hpp>
-#include <ArborX_Exception.hpp>
-#include <ArborX_LinearBVH.hpp>
-#include <ArborX_Point.hpp>
-#include <ArborX_Predicates.hpp>
-#include <ArborX_Sphere.hpp>
 
 #endif
