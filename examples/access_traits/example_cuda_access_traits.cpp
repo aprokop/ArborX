@@ -14,7 +14,6 @@
 #include <Kokkos_Core.hpp>
 
 #include <array>
-#include <iostream>
 #include <numeric>
 
 struct PointCloud

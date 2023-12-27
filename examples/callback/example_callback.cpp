@@ -13,7 +13,10 @@
 
 #include <Kokkos_Core.hpp>
 
+#include <algorithm>
+#include <cstddef>
 #include <iostream>
+#include <iterator>
 #include <random>
 #include <vector>
 
