@@ -345,14 +345,9 @@ int main()
       KOKKOS_LAMBDA(int i, bool &update) {
         constexpr float eps = 1.e-3;
 
-#if KOKKOS_VERSION >= 40200
-        using Kokkos::printf;
-#elif defined(__SYCL_DEVICE_ONLY__)
-        using sycl::ext::oneapi::experimental::printf;
-#endif
         if (offsets(i) != i)
         {
-          printf("Offsets are wrong for query %d.\n", i);
+          Kokkos::printf("Offsets are wrong for query %d.\n", i);
           update = false;
         }
         auto const &c = coefficients(i);
@@ -363,7 +358,7 @@ int main()
         if ((Kokkos::abs(p[0] - p_ref[0]) > eps) ||
             Kokkos::abs(p[1] - p_ref[1]) > eps)
         {
-          printf("Coefficients are wrong for query %d.\n", i);
+          Kokkos::printf("Coefficients are wrong for query %d.\n", i);
           update = false;
         }
       },
