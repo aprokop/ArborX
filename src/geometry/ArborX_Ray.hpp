@@ -311,7 +311,7 @@ bool intersection(Ray const &ray,
   int ky = (kz + 2) % 3;
 
   if (dir[kz] < 0)
-    KokkosExt::swap(kx, ky);
+    KokkosExt::kokkos_swap(kx, ky);
 
   Vector s;
 
@@ -438,7 +438,7 @@ bool intersection(Ray const &ray,
       // we want tmin = -1 and tmax = -2, when the
       // ray travels backward
       if (tmin < 0)
-        KokkosExt::swap(tmin, tmax);
+        KokkosExt::kokkos_swap(tmin, tmax);
     }
     return true;
   }
@@ -537,7 +537,7 @@ KOKKOS_INLINE_FUNCTION bool intersection(Ray const &ray, Sphere const &sphere,
   {
     // ensures that tmin <= tmax
     if (tmin > tmax)
-      KokkosExt::swap(tmin, tmax);
+      KokkosExt::kokkos_swap(tmin, tmax);
 
     return true;
   }
