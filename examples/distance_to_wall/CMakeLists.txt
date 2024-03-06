@@ -1,0 +1,3 @@
+add_executable(ArborX_Example_DistanceToWall.exe example_distance_to_wall.cpp)
+target_link_libraries(ArborX_Example_DistanceToWall.exe ArborX::ArborX Boost::program_options)
+add_test(NAME ArborX_Example_DistanceToWall COMMAND ArborX_Example_DistanceToWall.exe)

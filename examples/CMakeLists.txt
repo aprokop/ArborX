@@ -16,6 +16,7 @@ add_subdirectory(triangle_intersection)
 
 find_package(Boost COMPONENTS program_options)
 if(Boost_FOUND)
+  add_subdirectory(distance_to_wall)
   add_subdirectory(viz)
   add_subdirectory(raytracing)
   add_subdirectory(moving_least_squares)
