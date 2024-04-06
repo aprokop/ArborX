@@ -16,7 +16,6 @@
 #include <ArborX_DetailsDistributedTreeImpl.hpp>
 #include <ArborX_DetailsDistributedTreeUtils.hpp>
 #include <ArborX_DetailsHappyTreeFriends.hpp>
-#include <ArborX_DetailsKokkosExtMinMaxOperations.hpp>
 #include <ArborX_DetailsKokkosExtStdAlgorithms.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_LinearBVH.hpp>
@@ -26,6 +25,7 @@
 #include <ArborX_Sphere.hpp>
 
 #include <Kokkos_Core.hpp>
+#include <Kokkos_MinMax.hpp>
 #include <Kokkos_Profiling_ScopedRegion.hpp>
 
 // Don't really need it, but our self containment tests rely on its presence
@@ -281,10 +281,10 @@ void DistributedTreeImpl::reassessStrategy(
       "ArborX::DistributedTree::query::nearest::most_distant_neighbor_so_far",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
       KOKKOS_LAMBDA(int i) {
-        using KokkosExt::max;
         farthest_distances(i) = 0.;
         for (int j = offset(i); j < offset(i + 1); ++j)
-          farthest_distances(i) = max(farthest_distances(i), distances(j));
+          farthest_distances(i) =
+              Kokkos::max(farthest_distances(i), distances(j));
       });
 
   check_valid_access_traits(

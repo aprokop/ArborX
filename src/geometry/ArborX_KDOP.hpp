@@ -21,6 +21,7 @@
 
 #include <Kokkos_Array.hpp>
 #include <Kokkos_Macros.hpp>
+#include <Kokkos_MinMax.hpp>
 
 namespace ArborX
 {
@@ -157,8 +158,8 @@ struct KDOP : private Details::KDOP_Directions<k>
   }
   KOKKOS_FUNCTION KDOP &operator+=(Point const &p)
   {
-    using Details::KokkosExt::max;
-    using Details::KokkosExt::min;
+    using Kokkos::max;
+    using Kokkos::min;
     for (int i = 0; i < n_directions; ++i)
     {
       auto const proj_i = Details::project(p, this->directions()[i]);
@@ -205,8 +206,8 @@ struct KDOP : private Details::KDOP_Directions<k>
   }
   KOKKOS_FUNCTION KDOP &operator+=(KDOP const &other)
   {
-    using Details::KokkosExt::max;
-    using Details::KokkosExt::min;
+    using Kokkos::max;
+    using Kokkos::min;
     for (int i = 0; i < n_directions; ++i)
     {
       _min_values[i] = min(_min_values[i], other._min_values[i]);

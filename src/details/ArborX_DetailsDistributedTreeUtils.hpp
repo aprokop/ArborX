@@ -15,13 +15,13 @@
 
 #include <ArborX_DetailsContainers.hpp>
 #include <ArborX_DetailsDistributor.hpp>
-#include <ArborX_DetailsKokkosExtMinMaxOperations.hpp>
 #include <ArborX_DetailsKokkosExtStdAlgorithms.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsPriorityQueue.hpp>
 #include <ArborX_DetailsUtils.hpp> // create_layout*
 
 #include <Kokkos_Core.hpp>
+#include <Kokkos_MinMax.hpp>
 #include <Kokkos_Profiling_ScopedRegion.hpp>
 
 #include <mpi.h>
@@ -347,8 +347,8 @@ void filterResults(ExecutionSpace const &space, Predicates const &queries,
       "ArborX::DistributedTree::query::discard_results",
       Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
       KOKKOS_LAMBDA(int q) {
-        using KokkosExt::min;
-        new_offset(q) = min(offset(q + 1) - offset(q), getK(queries(q)));
+        new_offset(q) =
+            Kokkos::min(offset(q + 1) - offset(q), getK(queries(q)));
       });
 
   KokkosExt::exclusive_scan(space, new_offset, new_offset, 0);

@@ -13,11 +13,11 @@
 #define ARBORX_BOX_HPP
 
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
-#include <ArborX_DetailsKokkosExtMinMaxOperations.hpp>
 #include <ArborX_GeometryTraits.hpp>
 #include <ArborX_Point.hpp>
 
 #include <Kokkos_Macros.hpp>
+#include <Kokkos_MinMax.hpp>
 #include <Kokkos_ReductionIdentity.hpp>
 
 namespace ArborX
@@ -61,8 +61,8 @@ struct Box
 
   KOKKOS_FUNCTION Box &operator+=(Box const &other)
   {
-    using Details::KokkosExt::max;
-    using Details::KokkosExt::min;
+    using Kokkos::max;
+    using Kokkos::min;
 
     for (int d = 0; d < 3; ++d)
     {
@@ -74,8 +74,8 @@ struct Box
 
   KOKKOS_FUNCTION Box &operator+=(Point const &point)
   {
-    using Details::KokkosExt::max;
-    using Details::KokkosExt::min;
+    using Kokkos::max;
+    using Kokkos::min;
 
     for (int d = 0; d < 3; ++d)
     {
