@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(ArborX CXX)
 
-find_package(Kokkos 4.2 REQUIRED CONFIG)
+find_package(Kokkos 4.3 REQUIRED CONFIG)
 message(STATUS "Found Kokkos: ${Kokkos_DIR} (version \"${Kokkos_VERSION}\")")
 
 add_library(ArborX INTERFACE)
@@ -15,15 +15,7 @@ add_dependencies(ArborX record_hash)
 include(CMakeDependentOption)
 
 if(Kokkos_ENABLE_HIP)
-  if (Kokkos_VERSION VERSION_LESS 4.3)
-    cmake_dependent_option(ARBORX_ENABLE_ROCTHRUST "Enable rocThrust support" ON "Kokkos_ENABLE_HIP" OFF)
-    if(Kokkos_ENABLE_HIP AND ARBORX_ENABLE_ROCTHRUST)
-      find_package(rocthrust REQUIRED CONFIG)
-      target_link_libraries(ArborX INTERFACE roc::rocthrust)
-    endif()
-  else()
-    set(ARBORX_ENABLE_ROCTHRUST ${Kokkos_ENABLE_ROCTHRUST})
-  endif()
+  set(ARBORX_ENABLE_ROCTHRUST ${Kokkos_ENABLE_ROCTHRUST})
 endif()
 
 if(Kokkos_ENABLE_HIP AND NOT ARBORX_ENABLE_ROCTHRUST)
