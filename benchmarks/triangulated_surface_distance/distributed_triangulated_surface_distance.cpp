@@ -11,10 +11,10 @@
 
 #include <ArborX.hpp>
 #include <ArborXBenchmark_PointClouds.hpp>
+#include <ArborXBenchmark_TimeMonitor.hpp>
 #include <ArborX_HyperTriangle.hpp>
 #include <ArborX_Version.hpp>
 
-#include <Kokkos_Profiling_ScopedRegion.hpp>
 #include <Kokkos_Timer.hpp>
 
 #include <boost/program_options.hpp>
@@ -71,7 +71,7 @@ struct DistanceCallback
 
 template <typename Points, typename Triangles>
 void writeVtk(std::string const &filename, Points const &vertices,
-              Triangles const &triangles)
+              Triangles const &triangles, int comm_rank = -1)
 {
   int const num_vertices = vertices.size();
   int const num_elements = triangles.size();
@@ -108,6 +108,13 @@ void writeVtk(std::string const &filename, Points const &vertices,
       out << " " << triangles(i)[j];
     out << '\n';
   }
+
+  out << "\nCELL_DATA " << num_elements << '\n';
+  out << "SCALARS ranks int\n";
+  out << "LOOKUP_TABLE default\n";
+  for (int i = 0; i < num_elements; ++i)
+    out << " " << comm_rank;
+  out << '\n';
 }
 
 template <typename T>
@@ -124,15 +131,25 @@ std::string vec2string(std::vector<T> const &s, std::string const &delim = ", ")
 
 int main(int argc, char *argv[])
 {
-  Kokkos::ScopeGuard guard(argc, argv);
+  MPI_Init(&argc, &argv);
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int comm_rank;
+  MPI_Comm_rank(comm, &comm_rank);
+  int comm_size;
+  MPI_Comm_size(comm, &comm_size);
+
+  Kokkos::initialize(argc, argv);
 
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
   using MemorySpace = typename ExecutionSpace::memory_space;
 
-  std::cout << "ArborX version    : " << ArborX::version() << '\n';
-  std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << '\n';
-  std::cout << "Kokkos version    : " << ArborX::Details::KokkosExt::version()
-            << '\n';
+  if (comm_rank == 0)
+  {
+    std::cout << "ArborX version    : " << ArborX::version() << '\n';
+    std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << '\n';
+    std::cout << "Kokkos version    : " << ArborX::Details::KokkosExt::version()
+              << '\n';
+  }
 
   namespace bpo = boost::program_options;
 
@@ -160,7 +177,8 @@ int main(int argc, char *argv[])
 
   if (vm.count("help") > 0)
   {
-    std::cout << desc << '\n';
+    if (comm_rank == 0)
+      std::cout << desc << '\n';
     return 1;
   }
 
@@ -176,55 +194,73 @@ int main(int argc, char *argv[])
 
   ExecutionSpace space;
 
-  Kokkos::Profiling::pushRegion("Benchmark::build_triangles");
-  auto [vertices, triangles] = buildTriangles<MemorySpace>(space, params);
-  Kokkos::Profiling::popRegion();
-
-  if (n == -1)
-    n = vertices.size();
-
-  Kokkos::Profiling::pushRegion("Benchmark::build_points");
-  Kokkos::View<Point *, MemorySpace> random_points(
-      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                         "Benchmark::points"),
-      n);
-  ArborXBenchmark::generatePointCloud(
-      ArborXBenchmark::PointCloudType::filled_box, std::cbrt(n), random_points);
-  Kokkos::Profiling::popRegion();
-
-  if (angle != 0)
   {
-    rotateVertices(space, vertices, angle);
-    rotateVertices(space, random_points, angle);
+    Kokkos::Profiling::pushRegion("Benchmark::build_triangles");
+    auto [vertices, triangles_all] = buildTriangles<MemorySpace>(space, params);
+    int num_total_triangles = triangles_all.size();
+    int per_rank = num_total_triangles / comm_size;
+    int start = comm_rank * per_rank;
+    int end = std::min((comm_rank + 1) * per_rank, num_total_triangles);
+    auto triangles = Kokkos::subview(triangles_all, std::make_pair(start, end));
+    Kokkos::Profiling::popRegion();
+
+    if (n == -1)
+      n = vertices.size();
+
+    Kokkos::Profiling::pushRegion("Benchmark::build_points");
+    Kokkos::View<Point *, MemorySpace> random_points(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                           "Benchmark::points"),
+        n);
+    ArborXBenchmark::generatePointCloud(
+        ArborXBenchmark::PointCloudType::filled_box, std::cbrt(n),
+        random_points);
+    Kokkos::Profiling::popRegion();
+
+    if (angle != 0)
+    {
+      rotateVertices(space, vertices, angle);
+      rotateVertices(space, random_points, angle);
+    }
+
+    if (!vtk_filename.empty())
+    {
+      writeVtk(vtk_filename + "." + std::to_string(comm_rank), vertices,
+               triangles, comm_rank);
+    }
+
+    if (comm_rank == 0)
+    {
+      std::cout << "geometry          : " << params.type << '\n';
+      std::cout << "#triangles        : " << num_total_triangles << '\n';
+      std::cout << "#queries          : " << comm_size * n << '\n';
+    }
+
+    ArborXBenchmark::TimeMonitor time_monitor;
+
+    auto construction = time_monitor.getNewTimer("construction");
+    MPI_Barrier(comm);
+    construction->start();
+    ArborX::DistributedTree<MemorySpace, Triangle> index(
+        comm, space, Triangles<MemorySpace>{vertices, triangles});
+    construction->stop();
+
+    auto search = time_monitor.getNewTimer("search");
+    MPI_Barrier(comm);
+    search->start();
+    Kokkos::View<int *, MemorySpace> offset("Benchmark::offsets", 0);
+    Kokkos::View<float *, MemorySpace> distances("Benchmark::distances", 0);
+    index.query(
+        space, ArborX::Experimental::make_nearest(random_points, 1),
+        ArborX::Experimental::declare_callback_constrained(DistanceCallback{}),
+        distances, offset);
+    search->stop();
+
+    time_monitor.summarize(comm);
   }
 
-  if (!vtk_filename.empty())
-    writeVtk(vtk_filename, vertices, triangles);
-
-  std::cout << "geometry          : " << params.type << '\n';
-  std::cout << "#triangles        : " << triangles.size() << '\n';
-  std::cout << "#queries          : " << random_points.size() << '\n';
-
-  Kokkos::Timer timer;
-
-  Kokkos::fence();
-  ArborX::BVH<MemorySpace, Triangle> index(
-      space, Triangles<MemorySpace>{vertices, triangles});
-  Kokkos::fence();
-  auto construction_time = timer.seconds();
-
-  Kokkos::fence();
-  timer.reset();
-  Kokkos::View<int *, MemorySpace> offset("Benchmark::offsets", 0);
-  Kokkos::View<float *, MemorySpace> distances("Benchmark::distances", 0);
-  index.query(space, ArborX::Experimental::make_nearest(random_points, 1),
-              DistanceCallback{}, distances, offset);
-  Kokkos::fence();
-  auto query_time = timer.seconds();
-
-  printf("-- construction   : %5.3f\n", construction_time);
-  printf("-- query          : %5.3f\n", query_time);
-  printf("-- rate           : %5.3f\n", n / (1'000'000 * query_time));
+  Kokkos::finalize();
+  MPI_Finalize();
 
   return 0;
 }
