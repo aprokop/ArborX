@@ -10,8 +10,11 @@
  ****************************************************************************/
 
 #include <ArborX.hpp>
+#include <ArborX_HyperTriangle.hpp>
+#include <ArborX_TypeErasedGeometry.hpp>
 
 #include <Kokkos_Core.hpp>
+#include <Kokkos_Random.hpp>
 
 #include <iostream>
 #include <random>
@@ -65,69 +68,53 @@ int main(int argc, char *argv[])
 {
   Kokkos::ScopeGuard guard(argc, argv);
 
+  using Point = ArborX::ExperimentalHyperGeometry::Point<3>;
+  using Box = ArborX::ExperimentalHyperGeometry::Box<3>;
+  using Triangle = ArborX::ExperimentalHyperGeometry::Triangle<3>;
+
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  ExecutionSpace exec;
+
   int const n = 100;
-  std::vector<ArborX::Point> points;
-  // Fill vector with random points in [-1, 1]^3
-  std::uniform_real_distribution<float> dis{-1., 1.};
-  std::default_random_engine gen;
-  auto rd = [&]() { return dis(gen); };
-  std::generate_n(std::back_inserter(points), n, [&]() {
-    return ArborX::Point{rd(), rd(), rd()};
-  });
-
-  ArborX::BVH<MemorySpace> bvh{
-      ExecutionSpace{},
-      Kokkos::create_mirror_view_and_copy(
-          MemorySpace{},
-          Kokkos::View<ArborX::Point *, Kokkos::HostSpace,
-                       Kokkos::MemoryUnmanaged>(points.data(), points.size()))};
-
-  {
-    Kokkos::View<int *, MemorySpace> values("Example::values", 0);
-    Kokkos::View<int *, MemorySpace> offsets("Example::offsets", 0);
-    ArborX::query(bvh, ExecutionSpace{}, FirstOctant{}, PrintfCallback{},
-                  values, offsets);
-#ifndef __NVCC__
-    ArborX::query(
-        bvh, ExecutionSpace{}, FirstOctant{},
-        KOKKOS_LAMBDA(auto /*predicate*/, int primitive,
-                      auto /*output_functor*/) {
-          Kokkos::printf("Found %d from generic lambda\n", primitive);
-        },
-        values, offsets);
-#endif
-  }
-
-  {
-    int const k = 10;
-    Kokkos::View<int *, MemorySpace> values("Example::values", 0);
-    Kokkos::View<int *, MemorySpace> offsets("Example::offsets", 0);
-    ArborX::query(bvh, ExecutionSpace{}, NearestToOrigin{k}, PrintfCallback{},
-                  values, offsets);
-#ifndef __NVCC__
-    ArborX::query(
-        bvh, ExecutionSpace{}, NearestToOrigin{k},
-        KOKKOS_LAMBDA(auto /*predicate*/, int primitive,
-                      auto /*output_functor*/) {
-          Kokkos::printf("Found %d from generic lambda\n", primitive);
-        },
-        values, offsets);
-#endif
-  }
-
-  {
-    // EXPERIMENTAL
-    Kokkos::View<int, ExecutionSpace, Kokkos::MemoryTraits<Kokkos::Atomic>> c(
-        "counter");
-
-#ifndef __NVCC__
-    bvh.query(
-        ExecutionSpace{}, FirstOctant{},
-        KOKKOS_LAMBDA(auto /*predicate*/, int j) {
-          Kokkos::printf("%d %d %d\n", ++c(), -1, j);
+  Kokkos::View<ArborX::Experimental::Geometry<64> *, ExecutionSpace> geometries(
+      Kokkos::view_alloc("geometries", Kokkos::WithoutInitializing, exec), n);
+  { // scope so that random number generation resources are released
+    using RandomPool = Kokkos::Random_XorShift64_Pool<ExecutionSpace>;
+    RandomPool random_pool(123456);
+    Kokkos::parallel_for(
+        Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n), KOKKOS_LAMBDA(int i) {
+          RandomPool::generator_type generator = random_pool.get_state();
+          switch (generator.urand(3))
+          {
+          case 0:
+            geometries(i) = Point{(float)i, (float)i, (float)i};
+            break;
+          case 1:
+            geometries(i) = Box{{(float)i, (float)i, (float)i},
+                                {(float)i + 1, (float)i + 1, (float)i + 1}};
+            break;
+          case 2:
+            geometries(i) = Triangle{
+                {(float)i + 1, (float)i, (float)i},
+                {(float)i, (float)i + 1, (float)i},
+                {(float)i, (float)i, (float)i},
+            };
+            break;
+          default:
+            Kokkos::abort("bug");
+          }
+          random_pool.free_state(generator);
         });
-#endif
   }
+
+  Box b;
+  Kokkos::parallel_reduce(
+      Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
+      KOKKOS_LAMBDA(int i, Box &u) {
+        using ArborX::Details::expand;
+        expand(u, geometries(i));
+      },
+      b);
 
   return 0;
 }
