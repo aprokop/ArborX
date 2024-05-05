@@ -68,6 +68,7 @@ int main(int argc, char *argv[])
 {
   Kokkos::ScopeGuard guard(argc, argv);
 
+  using Geometry = ArborX::Experimental::Geometry<64>;
   using Point = ArborX::ExperimentalHyperGeometry::Point<3>;
   using Box = ArborX::ExperimentalHyperGeometry::Box<3>;
   using Triangle = ArborX::ExperimentalHyperGeometry::Triangle<3>;
@@ -76,7 +77,7 @@ int main(int argc, char *argv[])
   ExecutionSpace exec;
 
   int const n = 100;
-  Kokkos::View<ArborX::Experimental::Geometry<64> *, ExecutionSpace> geometries(
+  Kokkos::View<Geometry *, ExecutionSpace> geometries(
       Kokkos::view_alloc("geometries", Kokkos::WithoutInitializing, exec), n);
   { // scope so that random number generation resources are released
     using RandomPool = Kokkos::Random_XorShift64_Pool<ExecutionSpace>;
@@ -88,18 +89,20 @@ int main(int argc, char *argv[])
           switch (generator.urand(3))
           {
           case 0:
-            geometries(i) = Point{(float)i, (float)i, (float)i};
+            ::new (&geometries(i))
+                Geometry(Point{(float)i, (float)i, (float)i});
             break;
           case 1:
-            geometries(i) = Box{{(float)i, (float)i, (float)i},
-                                {(float)i + 1, (float)i + 1, (float)i + 1}};
+            ::new (&geometries(i))
+                Geometry(Box{{(float)i, (float)i, (float)i},
+                             {(float)i + 1, (float)i + 1, (float)i + 1}});
             break;
           case 2:
-            geometries(i) = Triangle{
+            ::new (&geometries(i)) Geometry(Triangle{
                 {(float)i + 1, (float)i, (float)i},
                 {(float)i, (float)i + 1, (float)i},
                 {(float)i, (float)i, (float)i},
-            };
+            });
             break;
           default:
             Kokkos::abort("bug");
