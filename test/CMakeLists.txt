@@ -67,6 +67,7 @@ add_executable(ArborX_Test_Geometry.exe
   tstCompileOnlyGeometry.cpp
   tstRay.cpp
   tstKDOP.cpp
+  tstTypeErasedGeometry.cpp
 )
 target_link_libraries(ArborX_Test_Geometry.exe PRIVATE ArborX Boost::unit_test_framework)
 target_compile_definitions(ArborX_Test_Geometry.exe PRIVATE BOOST_TEST_DYN_LINK)

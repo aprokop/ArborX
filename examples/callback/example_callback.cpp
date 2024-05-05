@@ -82,7 +82,8 @@ int main(int argc, char *argv[])
     using RandomPool = Kokkos::Random_XorShift64_Pool<ExecutionSpace>;
     RandomPool random_pool(123456);
     Kokkos::parallel_for(
-        Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n), KOKKOS_LAMBDA(int i) {
+        "Example::random_fill", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
+        KOKKOS_LAMBDA(int i) {
           RandomPool::generator_type generator = random_pool.get_state();
           switch (generator.urand(3))
           {
@@ -109,7 +110,7 @@ int main(int argc, char *argv[])
 
   Box b;
   Kokkos::parallel_reduce(
-      Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
+      "Example::reduce_bounds", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
       KOKKOS_LAMBDA(int i, Box &u) {
         using ArborX::Details::expand;
         expand(u, geometries(i));
