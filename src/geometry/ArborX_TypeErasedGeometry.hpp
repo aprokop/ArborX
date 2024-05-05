@@ -84,7 +84,7 @@ class Geometry
   {
     return reinterpret_cast<Concept const *>(buffer_);
   }
-  alignas(Alignment) std::byte buffer_[Capacity];
+  alignas(Alignment) std::byte buffer_[Capacity] = {};
 
   static KOKKOS_FUNCTION void poor_mans_raw_memory_swap(std::byte *a,
                                                         std::byte *b) noexcept
