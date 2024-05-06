@@ -29,6 +29,7 @@ namespace ArborX::Experimental
 template <size_t Capacity = 32, size_t Alignment = alignof(void *)>
 class Geometry
 {
+  using Centroid = ExperimentalHyperGeometry::Point<3>;
   using OtherGeometry = ExperimentalHyperGeometry::Box<3>;
 
   struct Concept
@@ -36,6 +37,7 @@ class Geometry
     virtual KOKKOS_DEFAULTED_FUNCTION ~Concept() = default;
     virtual KOKKOS_FUNCTION void expand(OtherGeometry &) const = 0;
     virtual KOKKOS_FUNCTION bool intersects(OtherGeometry const &) const = 0;
+    virtual KOKKOS_FUNCTION Centroid returnCentroid() const = 0;
     virtual KOKKOS_FUNCTION void clone(Concept *) const = 0;
     virtual KOKKOS_FUNCTION void move(Concept *) = 0;
   };
@@ -57,6 +59,11 @@ class Geometry
     {
       using Details::intersects;
       return intersects(geometry_, other);
+    }
+    KOKKOS_FUNCTION Centroid returnCentroid() const override
+    {
+      using Details::returnCentroid;
+      return returnCentroid(geometry_);
     }
     KOKKOS_FUNCTION void clone(Concept *memory) const override
     {
@@ -106,6 +113,11 @@ class Geometry
                                          OtherGeometry const &other)
   {
     geometry.pimpl()->intersects(other);
+  }
+
+  friend KOKKOS_FUNCTION Centroid returnCentroid(Geometry const &geometry)
+  {
+    return geometry.pimpl()->returnCentroid();
   }
 
 public:
@@ -159,6 +171,12 @@ struct ArborX::GeometryTraits::dimension<
     ArborX::Experimental::Geometry<Capacity, Alignment>>
 {
   static constexpr int value = 3;
+};
+template <size_t Capacity, size_t Alignment>
+struct ArborX::GeometryTraits::coordinate_type<
+    ArborX::Experimental::Geometry<Capacity, Alignment>>
+{
+  using type = float;
 };
 
 #endif
