@@ -28,7 +28,7 @@ struct ArborX::AccessTraits<TypeErasureWrapper<Geometries, Capacity>,
                             ArborX::PrimitivesTag>
 {
   using Self = TypeErasureWrapper<Geometries, Capacity>;
-  using Geometry = ArborX::Experimental::Geometry<64>;
+  using Geometry = ArborX::Experimental::Geometry<Capacity>;
 
   using memory_space = typename Geometries::memory_space;
 
@@ -100,6 +100,7 @@ void BM_construction_points(benchmark::State &state)
   }
 }
 
+template <int Capacity>
 void BM_construction_point_geometries(benchmark::State &state)
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
@@ -109,38 +110,18 @@ void BM_construction_point_geometries(benchmark::State &state)
   ExecutionSpace exec_space;
 
   auto const n = state.range(0);
-  auto const capacity = state.range(1);
 
   auto points = constructPoints<DeviceType>(
       n, ArborXBenchmark::PointCloudType::filled_box);
 
-  using Geometry = ArborX::Experimental::Geometry<64>;
-
-  if (capacity == 32)
+  exec_space.fence();
+  for (auto _ : state)
   {
+    ArborX::BVH<MemorySpace, ArborX::Experimental::Geometry<Capacity>,
+                CustomIndexableGetter>
+        bvh(exec_space, TypeErasureWrapper<decltype(points), Capacity>{points});
+
     exec_space.fence();
-    for (auto _ : state)
-    {
-      ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
-          exec_space, TypeErasureWrapper<decltype(points), 32>{points});
-
-      exec_space.fence();
-    }
-  }
-  else if (capacity == 64)
-  {
-    exec_space.fence();
-    for (auto _ : state)
-    {
-      ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
-          exec_space, TypeErasureWrapper<decltype(points), 64>{points});
-
-      exec_space.fence();
-    }
-  }
-  else
-  {
-    return;
   }
 }
 
@@ -150,8 +131,12 @@ int main(int argc, char *argv[])
   benchmark::Initialize(&argc, argv);
 
   BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
-  BENCHMARK(BM_construction_point_geometries)
-      ->ArgsProduct({{100, 1000, 10000}, {32, 64}});
+  BENCHMARK(BM_construction_point_geometries<32>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000);
+  BENCHMARK(BM_construction_point_geometries<64>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000);
 
   benchmark::RunSpecifiedBenchmarks();
 
