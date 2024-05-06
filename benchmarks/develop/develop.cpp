@@ -9,31 +9,138 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
+#include <ArborX.hpp>
+#include <ArborXBenchmark_PointClouds.hpp>
+#include <ArborX_TypeErasedGeometry.hpp>
+
 #include <Kokkos_Core.hpp>
 
 #include <benchmark/benchmark.h>
 
-void BM_benchmark(benchmark::State &state)
+template <typename Geometries, int Capacity>
+struct TypeErasureWrapper
+{
+  Geometries _geometries;
+};
+
+template <typename Geometries, int Capacity>
+struct ArborX::AccessTraits<TypeErasureWrapper<Geometries, Capacity>,
+                            ArborX::PrimitivesTag>
+{
+  using Self = TypeErasureWrapper<Geometries, Capacity>;
+  using Geometry = ArborX::Experimental::Geometry<64>;
+
+  using memory_space = typename Geometries::memory_space;
+
+  static KOKKOS_FUNCTION auto size(Self const &x)
+  {
+    return x._geometries.size();
+  }
+  static KOKKOS_FUNCTION auto get(Self const &x, int i)
+  {
+    return Geometry(x._geometries(i));
+  }
+};
+
+struct CustomIndexableGetter
+{
+  KOKKOS_DEFAULTED_FUNCTION
+  CustomIndexableGetter() = default;
+
+  template <typename Geometry>
+  KOKKOS_FUNCTION auto const &operator()(Geometry const &geometry) const
+  {
+    return geometry;
+  }
+
+  template <typename Geometry>
+  KOKKOS_FUNCTION auto operator()(Geometry &&geometry) const
+  {
+    return geometry;
+  }
+};
+
+template <typename DeviceType>
+Kokkos::View<ArborX::ExperimentalHyperGeometry::Point<3> *, DeviceType>
+constructPoints(int n_values, ArborXBenchmark::PointCloudType point_cloud_type)
+{
+  Kokkos::View<ArborX::ExperimentalHyperGeometry::Point<3> *, DeviceType>
+      random_points(Kokkos::view_alloc(Kokkos::WithoutInitializing,
+                                       "Benchmark::random_points"),
+                    n_values);
+  // Generate random points uniformly distributed within a box.  The edge
+  // length of the box chosen such that object density (here objects will be
+  // boxes 2x2x2 centered around a random point) will remain constant as
+  // problem size is changed.
+  auto const a = std::cbrt(n_values);
+  ArborXBenchmark::generatePointCloud(point_cloud_type, a, random_points);
+
+  return random_points;
+}
+
+void BM_construction_points(benchmark::State &state)
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = typename ExecutionSpace::memory_space;
+  using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
 
   ExecutionSpace exec_space;
 
   auto const n = state.range(0);
 
-  Kokkos::View<int *> view(Kokkos::view_alloc(exec_space, "Benchmark::view",
-                                              Kokkos::WithoutInitializing),
-                           n);
+  auto points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
 
   exec_space.fence();
   for (auto _ : state)
   {
-    // This code gets timed
-    Kokkos::parallel_for(
-        "Benchmark::iota",
-        Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-        KOKKOS_LAMBDA(int i) { view(i) = i; });
+    ArborX::BVH<MemorySpace, decltype(points)::value_type> bvh(exec_space,
+                                                               points);
     exec_space.fence();
+  }
+}
+
+void BM_construction_point_geometries(benchmark::State &state)
+{
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = typename ExecutionSpace::memory_space;
+  using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
+
+  ExecutionSpace exec_space;
+
+  auto const n = state.range(0);
+  auto const capacity = state.range(1);
+
+  auto points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
+
+  using Geometry = ArborX::Experimental::Geometry<64>;
+
+  if (capacity == 32)
+  {
+    exec_space.fence();
+    for (auto _ : state)
+    {
+      ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+          exec_space, TypeErasureWrapper<decltype(points), 32>{points});
+
+      exec_space.fence();
+    }
+  }
+  else if (capacity == 64)
+  {
+    exec_space.fence();
+    for (auto _ : state)
+    {
+      ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+          exec_space, TypeErasureWrapper<decltype(points), 64>{points});
+
+      exec_space.fence();
+    }
+  }
+  else
+  {
+    return;
   }
 }
 
@@ -42,7 +149,9 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
   benchmark::Initialize(&argc, argv);
 
-  BENCHMARK(BM_benchmark)->RangeMultiplier(10)->Range(100, 10000);
+  BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
+  BENCHMARK(BM_construction_point_geometries)
+      ->ArgsProduct({{100, 1000, 10000}, {32, 64}});
 
   benchmark::RunSpecifiedBenchmarks();
 
