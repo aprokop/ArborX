@@ -116,7 +116,7 @@ public:
   KOKKOS_FUNCTION Geometry &operator=(Geometry const &other)
   {
     Geometry copy(other);
-    poor_mans_raw_memory_swap(buffer_, other.buffer_);
+    poor_mans_raw_memory_swap(buffer_, copy.buffer_);
     return *this;
   }
   KOKKOS_FUNCTION Geometry(Geometry &&other) noexcept
