@@ -31,6 +31,22 @@ std::ostream &operator<<(std::ostream &os, Point const &p)
   return os;
 }
 
+struct CustomIndexableGetter
+{
+  KOKKOS_DEFAULTED_FUNCTION
+  CustomIndexableGetter() = default;
+
+  KOKKOS_FUNCTION auto const &operator()(Geometry const &geometry) const
+  {
+    return geometry;
+  }
+
+  KOKKOS_FUNCTION auto operator()(Geometry &&geometry) const
+  {
+    return geometry;
+  }
+};
+
 int main(int argc, char *argv[])
 {
   Kokkos::ScopeGuard guard(argc, argv);
@@ -75,9 +91,12 @@ int main(int argc, char *argv[])
       },
       bounds);
 
+  // expected output: min_corner=(0,0,0), max_corner=(n-1,n-1,n-1)
   std::cout << "min_corner=" << bounds.minCorner()
             << ", max_corner=" << bounds.maxCorner() << '\n';
-  // expected output: min_corner=(0,0,0), max_corner=(n-1,n-1,n-1)
+
+  ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+      ExecutionSpace{}, geometries);
 
   return 0;
 }
