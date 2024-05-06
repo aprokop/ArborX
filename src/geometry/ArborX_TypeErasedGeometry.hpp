@@ -138,7 +138,7 @@ public:
   KOKKOS_FUNCTION Geometry &operator=(Geometry &&other) noexcept
   {
     Geometry copy(std::move(other));
-    poor_mans_raw_memory_swap(buffer_, other.buffer_);
+    poor_mans_raw_memory_swap(buffer_, copy.buffer_);
     return *this;
   }
   KOKKOS_FUNCTION ~Geometry()
