@@ -78,7 +78,6 @@ BOOST_AUTO_TEST_CASE(expand_box)
   BOOST_TEST(b.maxCorner()[2] == 1);
 
   g = Box{{1, 2, 3}, {4, 5, 6}};
-  g = Point{4, 5, 6}; // FIXME
   expand(b, g);
 
   BOOST_TEST(b.minCorner()[0] == 0);
@@ -106,7 +105,6 @@ BOOST_AUTO_TEST_CASE(expand_triangle)
   BOOST_TEST(b.maxCorner()[2] == 1);
 
   g = Triangle{{1, 2, 3}, {2, 3, 1}, {3, 1, 2}};
-  g = Point{3, 3, 3}; // FIXME
   expand(b, g);
 
   BOOST_TEST(b.minCorner()[0] == 0);
