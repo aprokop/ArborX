@@ -15,6 +15,8 @@
 
 #include <Kokkos_Core.hpp>
 
+#include <chrono>
+
 #include <benchmark/benchmark.h>
 
 template <typename Geometries, int Capacity>
@@ -100,6 +102,44 @@ void BM_construction_points(benchmark::State &state)
   }
 }
 
+void BM_search_knn_points(benchmark::State &state)
+{
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = typename ExecutionSpace::memory_space;
+  using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
+
+  ExecutionSpace exec_space;
+
+  auto const n = state.range(0);
+
+  auto points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
+
+  using Points = decltype(points);
+
+  ArborX::BVH<MemorySpace, typename Points::value_type> bvh(exec_space, points);
+  auto query_points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
+
+  for (auto _ : state)
+  {
+    Kokkos::View<int *, DeviceType> offset("offset", 0);
+    Kokkos::View<typename Points::value_type *, DeviceType> values("values", 0);
+
+    exec_space.fence();
+    auto const start = std::chrono::high_resolution_clock::now();
+
+    bvh.query(exec_space, ArborX::Experimental::make_nearest(query_points, 1),
+              values, offset);
+
+    exec_space.fence();
+    auto const end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+
+    state.SetIterationTime(elapsed_seconds.count());
+  }
+}
+
 template <int Capacity>
 void BM_construction_point_geometries(benchmark::State &state)
 {
@@ -114,14 +154,64 @@ void BM_construction_point_geometries(benchmark::State &state)
   auto points = constructPoints<DeviceType>(
       n, ArborXBenchmark::PointCloudType::filled_box);
 
+  using Points = decltype(points);
+  using Geometry = ArborX::Experimental::Geometry<Capacity>;
+
   exec_space.fence();
   for (auto _ : state)
   {
-    ArborX::BVH<MemorySpace, ArborX::Experimental::Geometry<Capacity>,
-                CustomIndexableGetter>
-        bvh(exec_space, TypeErasureWrapper<decltype(points), Capacity>{points});
+    ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+        exec_space, TypeErasureWrapper<Points, Capacity>{points});
 
     exec_space.fence();
+  }
+}
+
+template <int Capacity>
+void BM_search_knn_point_geometries(benchmark::State &state)
+{
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = typename ExecutionSpace::memory_space;
+  using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
+
+  ExecutionSpace exec_space;
+
+  auto const n = state.range(0);
+
+  auto points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
+
+  using Points = decltype(points);
+  using Geometry = ArborX::Experimental::Geometry<Capacity>;
+
+  ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+      exec_space, TypeErasureWrapper<Points, Capacity>{points});
+
+  auto query_points = constructPoints<DeviceType>(
+      n, ArborXBenchmark::PointCloudType::filled_box);
+
+  for (auto _ : state)
+  {
+    Kokkos::View<int *, DeviceType> offset("offset", 0);
+    // Kokkos::View<Geometry *, DeviceType> values("values", 0);
+    Kokkos::View<Geometry *, DeviceType> values(
+        Kokkos::view_alloc("values", Kokkos::WithoutInitializing, exec_space),
+        0);
+
+    exec_space.fence();
+    auto const start = std::chrono::high_resolution_clock::now();
+
+    bvh.query(exec_space,
+              ArborX::Experimental::make_nearest(
+                  // TypeErasureWrapper<Points, Capacity>{query_points}, 1),
+                  query_points, 1),
+              values, offset);
+
+    exec_space.fence();
+    auto const end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_seconds = end - start;
+
+    state.SetIterationTime(elapsed_seconds.count());
   }
 }
 
@@ -137,6 +227,19 @@ int main(int argc, char *argv[])
   BENCHMARK(BM_construction_point_geometries<64>)
       ->RangeMultiplier(10)
       ->Range(100, 10000);
+
+  BENCHMARK(BM_search_knn_points)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000)
+      ->UseManualTime();
+  // BENCHMARK(BM_search_knn_point_geometries<32>)
+  // ->RangeMultiplier(10)
+  // ->Range(100, 10000)
+  // ->UseManualTime();
+  BENCHMARK(BM_search_knn_point_geometries<64>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000)
+      ->UseManualTime();
 
   benchmark::RunSpecifiedBenchmarks();
 
