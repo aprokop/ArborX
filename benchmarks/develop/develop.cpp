@@ -193,7 +193,6 @@ void BM_search_knn_point_geometries(benchmark::State &state)
   for (auto _ : state)
   {
     Kokkos::View<int *, DeviceType> offset("offset", 0);
-    // Kokkos::View<Geometry *, DeviceType> values("values", 0);
     Kokkos::View<Geometry *, DeviceType> values(
         Kokkos::view_alloc("values", Kokkos::WithoutInitializing, exec_space),
         0);
@@ -201,10 +200,7 @@ void BM_search_knn_point_geometries(benchmark::State &state)
     exec_space.fence();
     auto const start = std::chrono::high_resolution_clock::now();
 
-    bvh.query(exec_space,
-              ArborX::Experimental::make_nearest(
-                  // TypeErasureWrapper<Points, Capacity>{query_points}, 1),
-                  query_points, 1),
+    bvh.query(exec_space, ArborX::Experimental::make_nearest(query_points, 1),
               values, offset);
 
     exec_space.fence();
@@ -220,26 +216,26 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
   benchmark::Initialize(&argc, argv);
 
-  BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
-  BENCHMARK(BM_construction_point_geometries<32>)
-      ->RangeMultiplier(10)
-      ->Range(100, 10000);
-  BENCHMARK(BM_construction_point_geometries<64>)
-      ->RangeMultiplier(10)
-      ->Range(100, 10000);
-
-  BENCHMARK(BM_search_knn_points)
-      ->RangeMultiplier(10)
-      ->Range(100, 10000)
-      ->UseManualTime();
-  // BENCHMARK(BM_search_knn_point_geometries<32>)
+  // BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
+  // BENCHMARK(BM_construction_point_geometries<32>)
+  // ->RangeMultiplier(10)
+  // ->Range(100, 10000);
+  // BENCHMARK(BM_construction_point_geometries<64>)
+  // ->RangeMultiplier(10)
+  // ->Range(100, 10000);
+  //
+  // BENCHMARK(BM_search_knn_points)
   // ->RangeMultiplier(10)
   // ->Range(100, 10000)
   // ->UseManualTime();
-  BENCHMARK(BM_search_knn_point_geometries<64>)
+  BENCHMARK(BM_search_knn_point_geometries<32>)
       ->RangeMultiplier(10)
       ->Range(100, 10000)
       ->UseManualTime();
+  // BENCHMARK(BM_search_knn_point_geometries<64>)
+  // ->RangeMultiplier(10)
+  // ->Range(100, 10000)
+  // ->UseManualTime();
 
   benchmark::RunSpecifiedBenchmarks();
 

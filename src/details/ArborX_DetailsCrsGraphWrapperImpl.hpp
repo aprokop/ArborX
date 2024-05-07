@@ -81,7 +81,7 @@ struct InsertGenerator
       return _callback(raw_predicate, value, [&](ValueType const &v) {
         int count_old = Kokkos::atomic_fetch_add(&count, 1);
         if (count_old < buffer_size)
-          _out(offset + count_old) = v;
+          ::new (&_out(offset + count_old)) ValueType(v);
       });
     }
     else if constexpr (std::is_same_v<PassTag,
@@ -102,7 +102,7 @@ struct InsertGenerator
       // offset is problematic for OpenMP as you potentially constantly steal
       // cache lines.
       return _callback(raw_predicate, value, [&](ValueType const &v) {
-        _out(Kokkos::atomic_fetch_add(&offset, 1)) = v;
+        ::new (&_out(Kokkos::atomic_fetch_add(&offset, 1))) ValueType(v);
       });
     }
   }
