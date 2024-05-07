@@ -117,12 +117,20 @@ int main(int argc, char *argv[])
   ArborX::Details::Indexables<decltype(primitives), CustomIndexableGetter>
           indexables{primitives, ig};
 
+  printf("-------------\n");
+
+  // Indexable getter -> AccessValues -> AccessTraits -> geometry
   Box bounds;
   Kokkos::parallel_reduce(
       "Example::reduce_bounds", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
       KOKKOS_LAMBDA(int i, Box &u) {
+          (void)u;
         using ArborX::Details::expand;
-        expand(u, indexables(i));
+        auto blah = geometries(i);
+        // auto blah = primitives(i);
+        // auto blah = indexables(i);
+        // expand(u, blah);
+        // expand(u, geometries(i));
       },
       bounds);
 

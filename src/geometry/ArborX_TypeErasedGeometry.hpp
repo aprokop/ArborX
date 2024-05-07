@@ -80,7 +80,9 @@ class Geometry
     KOKKOS_FUNCTION void clone(Concept *memory) const override
     {
 #ifdef KOKKOS_ENABLE_CXX17
-      ::new (static_cast<void *>(memory)) OwningModel(*this);
+      // ::new (static_cast<void *>(memory)) OwningModel(*this);
+      ::new (const_cast<void*>(static_cast<const volatile void*>(memory)))
+              OwningModel(*this);
 #else
       std::construct_at(static_cast<OwningModel *>(memory), *this);
 #endif
@@ -88,7 +90,9 @@ class Geometry
     KOKKOS_FUNCTION void move(Concept *memory) override
     {
 #ifdef KOKKOS_ENABLE_CXX17
-      ::new (static_cast<void *>(memory)) OwningModel(std::move(*this));
+      // ::new (static_cast<void *>(memory)) OwningModel(std::move(*this));
+      ::new (const_cast<void*>(static_cast<const volatile void*>(memory)))
+              OwningModel(std::move(*this));
 #else
       std::construct_at(static_cast<OwningModel *>(memory), std::move(*this));
 #endif
@@ -144,6 +148,7 @@ class Geometry
 public:
   KOKKOS_FUNCTION Geometry(Geometry const &other)
   {
+      printf("copy constructor\n");
     other.pimpl()->clone(pimpl());
   }
   KOKKOS_FUNCTION Geometry &operator=(Geometry const &other)
@@ -154,6 +159,7 @@ public:
   }
   KOKKOS_FUNCTION Geometry(Geometry &&other) noexcept
   {
+      printf("move constructor\n");
     other.pimpl()->move(pimpl());
   }
   KOKKOS_FUNCTION Geometry &operator=(Geometry &&other) noexcept
@@ -178,7 +184,9 @@ public:
     static_assert(sizeof(Model) <= Capacity, "Given type is too large");
     static_assert(alignof(Model) <= Alignment, "Given type is misaligned");
 #ifdef KOKKOS_ENABLE_CXX17
-    ::new (static_cast<void *>(pimpl())) Model(std::move(geometry));
+    // ::new (static_cast<void *>(pimpl())) Model(std::move(geometry));
+    ::new (const_cast<void*>(static_cast<const volatile void*>(pimpl())))
+            Model(std::move(geometry));
 #else
     std::construct_at(static_cast<Model *>(pimpl()), std::move(geometry));
 #endif
