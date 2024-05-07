@@ -219,7 +219,8 @@ public:
 
     // Initialize leaf node
     auto &leaf_node = _leaf_nodes(i);
-    leaf_node = makeLeafNode(_values(original_index));
+    ::new (&leaf_node)
+        typename LeafNodes::value_type(makeLeafNode(_values(original_index)));
 
     BoundingVolume bounding_volume{};
     expand(bounding_volume, _indexable_getter(leaf_node.value));
