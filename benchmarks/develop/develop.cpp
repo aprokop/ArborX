@@ -216,26 +216,26 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
   benchmark::Initialize(&argc, argv);
 
-  // BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
-  // BENCHMARK(BM_construction_point_geometries<32>)
-  // ->RangeMultiplier(10)
-  // ->Range(100, 10000);
-  // BENCHMARK(BM_construction_point_geometries<64>)
-  // ->RangeMultiplier(10)
-  // ->Range(100, 10000);
-  //
-  // BENCHMARK(BM_search_knn_points)
-  // ->RangeMultiplier(10)
-  // ->Range(100, 10000)
-  // ->UseManualTime();
+  BENCHMARK(BM_construction_points)->RangeMultiplier(10)->Range(100, 10000);
+  BENCHMARK(BM_construction_point_geometries<32>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000);
+  BENCHMARK(BM_construction_point_geometries<64>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000);
+
+  BENCHMARK(BM_search_knn_points)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000)
+      ->UseManualTime();
   BENCHMARK(BM_search_knn_point_geometries<32>)
       ->RangeMultiplier(10)
       ->Range(100, 10000)
       ->UseManualTime();
-  // BENCHMARK(BM_search_knn_point_geometries<64>)
-  // ->RangeMultiplier(10)
-  // ->Range(100, 10000)
-  // ->UseManualTime();
+  BENCHMARK(BM_search_knn_point_geometries<64>)
+      ->RangeMultiplier(10)
+      ->Range(100, 10000)
+      ->UseManualTime();
 
   benchmark::RunSpecifiedBenchmarks();
 
