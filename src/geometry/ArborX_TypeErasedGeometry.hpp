@@ -29,15 +29,17 @@ namespace ArborX::Experimental
 template <size_t Capacity = 32, size_t Alignment = alignof(void *)>
 class Geometry
 {
-  using Centroid = ExperimentalHyperGeometry::Point<3>;
-  using OtherGeometry = ExperimentalHyperGeometry::Box<3>;
+  using Point = ExperimentalHyperGeometry::Point<3>;
+  using Box = ExperimentalHyperGeometry::Box<3>;
 
   struct Concept
   {
     virtual KOKKOS_DEFAULTED_FUNCTION ~Concept() = default;
-    virtual KOKKOS_FUNCTION void expand(OtherGeometry &) const = 0;
-    virtual KOKKOS_FUNCTION bool intersects(OtherGeometry const &) const = 0;
-    virtual KOKKOS_FUNCTION Centroid returnCentroid() const = 0;
+    virtual KOKKOS_FUNCTION void expand(Box &) const = 0;
+    virtual KOKKOS_FUNCTION bool intersects(Box const &) const = 0;
+    virtual KOKKOS_FUNCTION float distance(Point const &) const = 0;
+    virtual KOKKOS_FUNCTION float distance(Box const &) const = 0;
+    virtual KOKKOS_FUNCTION Point returnCentroid() const = 0;
     virtual KOKKOS_FUNCTION void clone(Concept *) const = 0;
     virtual KOKKOS_FUNCTION void move(Concept *) = 0;
   };
@@ -50,17 +52,27 @@ class Geometry
     KOKKOS_FUNCTION OwningModel(GeometryT geometry)
         : geometry_(std::move(geometry))
     {}
-    KOKKOS_FUNCTION void expand(OtherGeometry &other) const override
+    KOKKOS_FUNCTION void expand(Box &other) const override
     {
       using Details::expand;
       expand(other, geometry_);
     }
-    KOKKOS_FUNCTION bool intersects(OtherGeometry const &other) const override
+    KOKKOS_FUNCTION bool intersects(Box const &other) const override
     {
       using Details::intersects;
       return intersects(geometry_, other);
     }
-    KOKKOS_FUNCTION Centroid returnCentroid() const override
+    KOKKOS_FUNCTION float distance(Box const &other) const override
+    {
+      using Details::distance;
+      return distance(other, geometry_);
+    }
+    KOKKOS_FUNCTION float distance(Point const &other) const override
+    {
+      using Details::distance;
+      return distance(other, geometry_);
+    }
+    KOKKOS_FUNCTION Point returnCentroid() const override
     {
       using Details::returnCentroid;
       return returnCentroid(geometry_);
@@ -104,18 +116,27 @@ class Geometry
     }
   }
 
-  friend KOKKOS_FUNCTION void expand(OtherGeometry &other,
-                                     Geometry const &geometry)
+  friend KOKKOS_FUNCTION void expand(Box &other, Geometry const &geometry)
   {
     geometry.pimpl()->expand(other);
   }
   friend KOKKOS_FUNCTION void intersects(Geometry const &geometry,
-                                         OtherGeometry const &other)
+                                         Box const &other)
   {
     geometry.pimpl()->intersects(other);
   }
+  friend KOKKOS_FUNCTION auto distance(Geometry const &geometry,
+                                       Box const &other)
+  {
+    return geometry.pimpl()->distance(other);
+  }
+  friend KOKKOS_FUNCTION auto distance(Geometry const &geometry,
+                                       Point const &other)
+  {
+    return geometry.pimpl()->distance(other);
+  }
 
-  friend KOKKOS_FUNCTION Centroid returnCentroid(Geometry const &geometry)
+  friend KOKKOS_FUNCTION Point returnCentroid(Geometry const &geometry)
   {
     return geometry.pimpl()->returnCentroid();
   }

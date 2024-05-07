@@ -53,7 +53,7 @@ struct Nearest
   KOKKOS_FUNCTION auto distance(OtherGeometry const &other) const
   {
     using Details::distance;
-    return distance(_geometry, other);
+    return distance(other, _geometry);
   }
 
   Geometry _geometry;
