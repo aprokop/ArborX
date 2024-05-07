@@ -217,7 +217,9 @@ void queryImpl(ExecutionSpace const &space, Tree const &tree,
     // Exit early if either no results were found for any of the queries, or
     // nothing was inserted inside a callback for found results. This check
     // guarantees that the second pass will not be executed.
-    Kokkos::resize(out, 0);
+    // Kokkos::resize(out, 0);
+    out = OutputView(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing, out.label()), 0);
     // FIXME: do we need to reset offset if it was preallocated here?
     Kokkos::Profiling::popRegion();
     return;
@@ -239,7 +241,10 @@ void queryImpl(ExecutionSpace const &space, Tree const &tree,
         Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
         KOKKOS_LAMBDA(int const i) { counts(i) = permuted_offset(i); });
 
-    KokkosExt::reallocWithoutInitializing(space, out, n_results);
+    // KokkosExt::reallocWithoutInitializing(space, out, n_results);
+    out = OutputView(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing, out.label()),
+        n_results);
 
     tree.query(
         space, permuted_predicates,
