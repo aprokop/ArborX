@@ -19,31 +19,6 @@
 
 #include <benchmark/benchmark.h>
 
-template <typename Geometries, int Capacity>
-struct TypeErasureWrapper
-{
-  Geometries _geometries;
-};
-
-template <typename Geometries, int Capacity>
-struct ArborX::AccessTraits<TypeErasureWrapper<Geometries, Capacity>,
-                            ArborX::PrimitivesTag>
-{
-  using Self = TypeErasureWrapper<Geometries, Capacity>;
-  using Geometry = ArborX::Experimental::Geometry<Capacity>;
-
-  using memory_space = typename Geometries::memory_space;
-
-  static KOKKOS_FUNCTION auto size(Self const &x)
-  {
-    return x._geometries.size();
-  }
-  static KOKKOS_FUNCTION auto get(Self const &x, int i)
-  {
-    return Geometry(x._geometries(i));
-  }
-};
-
 struct CustomIndexableGetter
 {
   KOKKOS_DEFAULTED_FUNCTION
@@ -154,14 +129,20 @@ void BM_construction_point_geometries(benchmark::State &state)
   auto points = constructPoints<DeviceType>(
       n, ArborXBenchmark::PointCloudType::filled_box);
 
-  using Points = decltype(points);
   using Geometry = ArborX::Experimental::Geometry<Capacity>;
+
+  Kokkos::View<Geometry *, ExecutionSpace> geometries(
+      Kokkos::view_alloc("geometries", Kokkos::WithoutInitializing, exec_space),
+      n);
+  Kokkos::parallel_for(
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+      KOKKOS_LAMBDA(int i) { ::new (&geometries(i)) Geometry(points(i)); });
 
   exec_space.fence();
   for (auto _ : state)
   {
-    ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
-        exec_space, TypeErasureWrapper<Points, Capacity>{points});
+    ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(exec_space,
+                                                                  geometries);
 
     exec_space.fence();
   }
@@ -181,11 +162,17 @@ void BM_search_knn_point_geometries(benchmark::State &state)
   auto points = constructPoints<DeviceType>(
       n, ArborXBenchmark::PointCloudType::filled_box);
 
-  using Points = decltype(points);
   using Geometry = ArborX::Experimental::Geometry<Capacity>;
 
-  ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
-      exec_space, TypeErasureWrapper<Points, Capacity>{points});
+  Kokkos::View<Geometry *, ExecutionSpace> geometries(
+      Kokkos::view_alloc("geometries", Kokkos::WithoutInitializing, exec_space),
+      n);
+  Kokkos::parallel_for(
+      Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
+      KOKKOS_LAMBDA(int i) { ::new (&geometries(i)) Geometry(points(i)); });
+
+  ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(exec_space,
+                                                                geometries);
 
   auto query_points = constructPoints<DeviceType>(
       n, ArborXBenchmark::PointCloudType::filled_box);
