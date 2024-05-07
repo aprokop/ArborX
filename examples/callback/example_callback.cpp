@@ -31,6 +31,30 @@ std::ostream &operator<<(std::ostream &os, Point const &p)
   return os;
 }
 
+template <typename MemorySpace>
+struct GeometryCloud
+{
+  Geometry *data;
+  int n;
+};
+
+template <typename MemorySpace>
+struct ArborX::AccessTraits<GeometryCloud<MemorySpace>, ArborX::PrimitivesTag>
+{
+  using Points = GeometryCloud<MemorySpace>;
+
+  static KOKKOS_FUNCTION std::size_t size(Points const &points)
+  {
+    return points.n;
+  }
+  static KOKKOS_FUNCTION auto get(Points const &points, std::size_t i)
+  {
+    return points.data[i];
+  }
+  using memory_space = MemorySpace;
+};
+
+
 struct CustomIndexableGetter
 {
   KOKKOS_DEFAULTED_FUNCTION
@@ -59,7 +83,7 @@ int main(int argc, char *argv[])
   Kokkos::parallel_for(
       "Example::fill", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
       KOKKOS_LAMBDA(int i) {
-        switch (i % 3)
+        switch (i % 2)
         {
         case 0:
           ::new (&geometries(i)) Geometry(Point{(float)i, (float)i, (float)i});
@@ -69,25 +93,36 @@ int main(int argc, char *argv[])
               Geometry(Box{{(float)i, (float)i, (float)i},
                            {(float)i + 1, (float)i + 1, (float)i + 1}});
           break;
-        case 2:
-          ::new (&geometries(i)) Geometry(Triangle{
-              {(float)i + 1, (float)i, (float)i},
-              {(float)i, (float)i + 1, (float)i},
-              {(float)i, (float)i, (float)i},
-          });
-          break;
+        // case 2:
+          // ::new (&geometries(i)) Geometry(Triangle{
+              // {(float)i + 1, (float)i, (float)i},
+              // {(float)i, (float)i + 1, (float)i},
+              // {(float)i, (float)i, (float)i},
+          // });
+          // break;
         default:
           Kokkos::abort("bug");
         }
       });
   assert(n % 3 == 1); // last geometry is a point
 
+  GeometryCloud<MemorySpace> geometries_cloud{geometries.data(),
+      (int)geometries.size()};
+
+  using Primitives = ArborX::Details::AccessValues<decltype(geometries_cloud),
+                                                     ArborX::PrimitivesTag>;
+  Primitives primitives(geometries_cloud);
+
+  CustomIndexableGetter ig;
+  ArborX::Details::Indexables<decltype(primitives), CustomIndexableGetter>
+          indexables{primitives, ig};
+
   Box bounds;
   Kokkos::parallel_reduce(
       "Example::reduce_bounds", Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n),
       KOKKOS_LAMBDA(int i, Box &u) {
         using ArborX::Details::expand;
-        expand(u, geometries(i));
+        expand(u, indexables(i));
       },
       bounds);
 
@@ -95,8 +130,8 @@ int main(int argc, char *argv[])
   std::cout << "min_corner=" << bounds.minCorner()
             << ", max_corner=" << bounds.maxCorner() << '\n';
 
-  ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
-      ExecutionSpace{}, geometries);
+  // ArborX::BVH<MemorySpace, Geometry, CustomIndexableGetter> bvh(
+      // ExecutionSpace{}, geometries);
 
   return 0;
 }
