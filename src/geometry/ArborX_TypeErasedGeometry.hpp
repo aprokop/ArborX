@@ -148,7 +148,6 @@ class Geometry
 public:
   KOKKOS_FUNCTION Geometry(Geometry const &other)
   {
-      printf("copy constructor\n");
     other.pimpl()->clone(pimpl());
   }
   KOKKOS_FUNCTION Geometry &operator=(Geometry const &other)
@@ -159,7 +158,6 @@ public:
   }
   KOKKOS_FUNCTION Geometry(Geometry &&other) noexcept
   {
-      printf("move constructor\n");
     other.pimpl()->move(pimpl());
   }
   KOKKOS_FUNCTION Geometry &operator=(Geometry &&other) noexcept
@@ -171,7 +169,7 @@ public:
   KOKKOS_FUNCTION ~Geometry()
   {
 #ifdef KOKKOS_ENABLE_CXX17
-    pimpl()->~Concept();
+    // pimpl()->~Concept();
 #else
     std::destroy_at(pimpl());
 #endif
