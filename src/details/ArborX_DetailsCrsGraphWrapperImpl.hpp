@@ -327,8 +327,11 @@ allocateAndInitializeStorage(Tag, ExecutionSpace const &space,
       KOKKOS_LAMBDA(int i) { offset(i) = getK(predicates(i)); });
   KokkosExt::exclusive_scan(space, offset, offset, 0);
 
-  KokkosExt::reallocWithoutInitializing(space, out,
-                                        KokkosExt::lastElement(space, offset));
+  // KokkosExt::reallocWithoutInitializing(space, out,
+  // KokkosExt::lastElement(space, offset));
+  out = OutView(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing, out.label()),
+      KokkosExt::lastElement(space, offset));
 }
 
 // Views are passed by reference here because internally Kokkos::realloc()
