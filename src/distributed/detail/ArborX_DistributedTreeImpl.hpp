@@ -59,6 +59,15 @@ struct DistributedTreeImpl
                           Values &values, Offset &offset);
 
   template <typename DistributedTree, typename ExecutionSpace,
+            Details::Concepts::Predicates Predicates, typename Callback,
+            typename Values, typename Offset>
+  static void
+  queryDispatch3RoundImpl(NearestPredicateTag, DistributedTree const &tree,
+                          ExecutionSpace const &space,
+                          Predicates const &queries, Callback const &callback,
+                          Values &values, Offset &offset);
+
+  template <typename DistributedTree, typename ExecutionSpace,
             Details::Concepts::Predicates Predicates, typename Values,
             typename Offset>
     requires(Kokkos::is_view_v<Values> && Kokkos::is_view_v<Offset>)
