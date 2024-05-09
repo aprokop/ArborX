@@ -17,6 +17,7 @@
 #include <detail/ArborX_HappyTreeFriends.hpp>
 #include <detail/ArborX_Predicates.hpp>
 #include <kokkos_ext/ArborX_KokkosExtKernelStdAlgorithms.hpp>
+#include <kokkos_ext/ArborX_KokkosExtMinMaxReduce.hpp>
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 #include <kokkos_ext/ArborX_KokkosExtViewHelpers.hpp>
 
@@ -217,6 +218,184 @@ void DistributedTreeImpl::queryDispatch2RoundImpl(
           values);
 }
 
+struct DefaultCallbackWithRank
+{
+  int _rank;
+
+  template <typename Predicate, typename Value, typename OutputFunctor>
+  KOKKOS_FUNCTION void operator()(Predicate const &, Value const &value,
+                                  OutputFunctor const &out) const
+  {
+    out({value, _rank});
+  }
+};
+
+template <typename Query, typename Value>
+struct TupleQueryIndexValue
+{
+  Query query;
+  Value value;
+  int query_id;
+  int rank;
+};
+
+template <typename Tree, typename ExecutionSpace,
+          Details::Concepts::Predicates Predicates, typename Callback,
+          typename Values, typename Offset>
+void DistributedTreeImpl::queryDispatch3RoundImpl(
+    NearestPredicateTag, Tree const &tree, ExecutionSpace const &space,
+    Predicates const &predicates, Callback const &callback, Values &values,
+    Offset &offset)
+{
+  std::string prefix = "ArborX::DistributedTree::query::nearest_3round";
+  Kokkos::Profiling::ScopedRegion guard(prefix);
+  prefix += "::";
+
+  KOKKOS_ASSERT(!tree.empty());
+
+  using MemorySpace = typename Tree::memory_space;
+  using Query = typename Predicates::value_type;
+  using Value = typename Tree::value_type;
+
+  auto comm = tree.getComm();
+  int comm_rank;
+  MPI_Comm_rank(comm, &comm_rank);
+
+  // Find the ranks and index values for each predicate
+  Kokkos::View<int *, MemorySpace> ranks(prefix + "ranks", 0);
+  Kokkos::View<Value *, MemorySpace> index_values(prefix + "index_values", 0);
+  {
+    Kokkos::View<PairValueIndex<Value, int> *, MemorySpace> aux(
+        prefix + "index_values", 0);
+    queryDispatch2RoundImpl(NearestPredicateTag{}, tree, space, predicates,
+                            Experimental::declare_callback_constrained(
+                                DefaultCallbackWithRank{comm_rank}),
+                            aux, offset);
+
+    // unzip
+    Kokkos::resize(Kokkos::view_alloc(space, Kokkos::WithoutInitializing),
+                   ranks, aux.size());
+    Kokkos::resize(Kokkos::view_alloc(space, Kokkos::WithoutInitializing),
+                   index_values, aux.size());
+    Kokkos::parallel_for(
+        prefix + "unzip",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, aux.size()),
+        KOKKOS_LAMBDA(int i) {
+          index_values(i) = aux(i).value;
+          ranks(i) = aux(i).index;
+        });
+  }
+
+  Kokkos::Profiling::pushRegion(prefix + "scatter");
+
+  // Scatter (predicate, tree value) to the correponding ranks
+  using Tuple = TupleQueryIndexValue<Query, Value>;
+  Kokkos::View<Tuple *, MemorySpace> exports(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "exports"),
+      ranks.size());
+  Kokkos::parallel_for(
+      prefix + "zip_predicates_and_values",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, predicates.size()),
+      KOKKOS_LAMBDA(int i) {
+        for (auto j = offset(i); j < offset(i + 1); ++j)
+          exports(j) = {.query = predicates(i),
+                        .value = index_values(j),
+                        .query_id = i,
+                        .rank = comm_rank};
+      });
+
+  Distributor<MemorySpace> distributor(comm);
+  auto const n_imports = distributor.createFromSends(space, ranks);
+
+  Kokkos::View<Tuple *, MemorySpace> imports(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "imports"),
+      n_imports);
+  distributor.doPostsAndWaits(space, exports, imports);
+
+  Kokkos::Profiling::popRegion();
+  Kokkos::Profiling::pushRegion(prefix + "execute_callback");
+
+  // Execute the callback on the process owning the primitives.
+  Values remote_values(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                                          prefix + "remote_values"),
+                       n_imports);
+  Kokkos::View<int *, MemorySpace> remote_predicate_ids(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "remote_predicate_ids"),
+      n_imports);
+  Kokkos::View<int *, MemorySpace> remote_ranks(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "remote_ranks"),
+      n_imports);
+  Kokkos::View<int *, MemorySpace> counts(
+      Kokkos::view_alloc(space, prefix + "counts"), n_imports);
+  Kokkos::parallel_for(
+      prefix + "execute_callbacks_1st_pass",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_imports),
+      KOKKOS_LAMBDA(int i) {
+        int count = 0;
+        callback(imports(i).query, imports(i).value,
+                 [&](typename Values::value_type const &value) {
+                   auto count = Kokkos::atomic_fetch_inc(&counts(i));
+                   if (count == 0)
+                   {
+                     remote_values(i) = value;
+                     remote_predicate_ids(i) = imports(i).query_id;
+                     remote_ranks(i) = imports(i).rank;
+                   }
+                 });
+        counts(i) = count;
+      });
+
+  auto [min_count, max_count] = KokkosExt::minmax_reduce(space, counts);
+  if (min_count != 1 || max_count != 1)
+  {
+    KokkosExt::exclusive_scan(space, counts, offset, 0);
+    Kokkos::deep_copy(space, counts, offset);
+
+    auto const n_results = KokkosExt::lastElement(space, offset);
+    KokkosExt::reallocWithoutInitializing(space, remote_values, n_results);
+    KokkosExt::reallocWithoutInitializing(space, remote_predicate_ids,
+                                          n_results);
+    Kokkos::parallel_for(
+        prefix + "execute_callback_2nd_pass",
+        Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_imports),
+        KOKKOS_LAMBDA(int i) {
+          callback(imports(i).query, imports(i).value,
+                   [&](typename Values::value_type const &value) {
+                     auto j = Kokkos::atomic_fetch_inc(&counts(i));
+                     remote_values(j) = value;
+                     remote_predicate_ids(j) = imports(i).query_id;
+                     remote_ranks(j) = imports(i).rank;
+                   });
+        });
+  }
+  Kokkos::resize(counts, 0); // free space
+
+  Kokkos::Profiling::popRegion();
+  Kokkos::Profiling::pushRegion(prefix + "gather");
+
+  // Send the result back to the process owning the predicates.
+  Distributor<MemorySpace> back_distributor(comm);
+  auto const n_imports_back =
+      back_distributor.createFromSends(space, remote_ranks);
+  KokkosExt::reallocWithoutInitializing(space, values, n_imports_back);
+  Kokkos::View<int *, MemorySpace> predicate_ids(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "query_ids"),
+      n_imports_back);
+
+  // FIXME does combining communication here help?
+  back_distributor.doPostsAndWaits(space, remote_values, values);
+  back_distributor.doPostsAndWaits(space, remote_predicate_ids, predicate_ids);
+
+  KokkosExt::sortByKey(space, predicate_ids, values);
+
+  Kokkos::Profiling::popRegion();
+}
+
 template <typename Tree, typename ExecutionSpace,
           Details::Concepts::Predicates Predicates, typename Values,
           typename Offset>
@@ -250,14 +429,11 @@ void DistributedTreeImpl::queryDispatch(NearestPredicateTag, Tree const &tree,
   }
 
   if constexpr (is_constrained_callback_v<Callback>)
-  {
     queryDispatch2RoundImpl(NearestPredicateTag{}, tree, space, predicates,
                             callback, values, offset);
-  }
   else
-  {
-    Kokkos::abort("3-arg callback not implemented yet.");
-  }
+    queryDispatch3RoundImpl(NearestPredicateTag{}, tree, space, predicates,
+                            callback, values, offset);
 }
 
 } // namespace ArborX::Details
