@@ -17,5 +17,6 @@
 #cmakedefine ARBORX_ENABLE_MPI
 #cmakedefine ARBORX_USE_CUDA_AWARE_MPI
 #cmakedefine ARBORX_ENABLE_GPU_AWARE_MPI
+#cmakedefine ARBORX_ENABLE_KOKKOS_COMM
 
 #endif
