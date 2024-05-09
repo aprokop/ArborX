@@ -74,6 +74,36 @@ cmake_dependent_option(ARBORX_ENABLE_GPU_AWARE_MPI
                        "Allow using device data in MPI communication"
                        OFF "ARBORX_ENABLE_MPI" OFF)
 
+cmake_dependent_option(ARBORX_ENABLE_KOKKOS_COMM
+                       "Allow using kokkos-comm for MPI communication"
+                       OFF "ARBORX_ENABLE_MPI" OFF)
+if (ARBORX_ENABLE_KOKKOS_COMM)
+  find_package(KokkosComm QUIET)
+  if (KokkosComm_FOUND)
+    message(STATUS "Found KokkosComm: ${KokkosComm_DIR} (version \"${KokkosComm_VERSION\")")
+  else()
+    message(STATUS "KokkosComm not found, fetching from GitHub")
+    include(FetchContent)
+
+    list(APPEND CMAKE_MESSAGE_INDENT "[KokkosComm] ")
+    FetchContent_Declare(
+      kokkoscomm
+      GIT_REPOSITORY https://github.com/kokkos/kokkos-comm.git
+      GIT_TAG develop
+    )
+    FetchContent_MakeAvailable(kokkoscomm)
+    list(POP_BACK CMAKE_MESSAGE_INDENT)
+
+    # Suppress clang-tidy diagnostics on code that we do not have control over
+    if(CMAKE_CXX_CLANG_TIDY)
+      set_target_properties(KokkosComm PROPERTIES CXX_CLANG_TIDY "")
+    endif()
+
+    target_compile_options(KokkosComm INTERFACE -w)
+  endif()
+  target_link_libraries(ArborX INTERFACE KokkosComm)
+endif()
+
 target_include_directories(ArborX INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/geometry>
