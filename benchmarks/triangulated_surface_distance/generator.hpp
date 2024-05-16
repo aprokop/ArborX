@@ -36,7 +36,6 @@ struct GeometryParams
 {
   std::string type;
   float radius;
-  float angle;
   int num_refinements;
 };
 
@@ -348,8 +347,6 @@ auto buildTriangles(ExecutionSpace const &space, GeometryParams const &params)
 
   if (params.type == "ball")
     projectVerticesToSphere(space, vertices, params.radius);
-  else
-    rotateVertices(space, vertices, params.angle);
 
   convertTriangles2VertexForm(space, edges, triangles);
 
