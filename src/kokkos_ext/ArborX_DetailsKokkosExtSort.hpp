@@ -15,6 +15,7 @@
 #include <ArborX_Config.hpp> // ARBORX_ENABLE_ROCTHRUST
 
 #include <ArborX_DetailsKokkosExtMinMaxReduce.hpp>
+#include <ArborX_DetailsKokkosExtStdAlgorithms.hpp> // iota
 
 #include <Kokkos_Profiling_ScopedRegion.hpp>
 #include <Kokkos_Sort.hpp>
@@ -184,6 +185,61 @@ void sortByKey(Kokkos::Experimental::SYCL const &space, Keys &keys,
 #endif
 }
 #endif
+
+template <typename ExecutionSpace, typename PermutationView, typename ViewType>
+void applyPermutation(ExecutionSpace const &space,
+                      PermutationView const &permutation, ViewType const &view)
+{
+  static_assert(ViewType::rank == 1);
+  static_assert(std::is_integral<typename PermutationView::value_type>::value);
+
+  auto view_copy = Kokkos::create_mirror(
+      Kokkos::view_alloc(space, typename ExecutionSpace::memory_space{},
+                         Kokkos::WithoutInitializing),
+      view);
+  Kokkos::deep_copy(space, view_copy, view);
+  Kokkos::parallel_for(
+      "Kokkos::sort_by_key_via_sort::permute_" + view.label(),
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, view.extent(0)),
+      KOKKOS_LAMBDA(int i) { view(i) = view_copy(permutation(i)); });
+}
+
+template <typename ExecutionSpace, typename Keys, typename Values,
+          typename... OtherValues,
+          typename Enable = std::enable_if_t<sizeof...(OtherValues) == 1>>
+void sortByKey(ExecutionSpace const &space, Keys &keys, Values &values,
+               OtherValues... other_values)
+{
+  static_assert(Kokkos::is_view_v<Keys> && Kokkos::is_view_v<Values> &&
+                (Kokkos::is_view_v<OtherValues> && ...));
+  static_assert(Keys::rank == 1 && Values::rank == 1 &&
+                ((OtherValues::rank == 1) && ...));
+
+  if constexpr (sizeof...(OtherValues) == 0)
+  {
+    // If there's only one 1D view to process, we can avoid computing the
+    // permutation.
+    KokkosExt::sortByKey(space, keys, values);
+  }
+  else
+  {
+    Kokkos::View<unsigned *, typename Values::memory_space> permute(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                           "ArborX::KokkosExt::sortByKey::permute"),
+        values.extent(0));
+    iota(space, permute);
+
+    sortByKey(space, values, permute);
+
+    applyPermutation(space, permute, values);
+    // Call applyPermutation for every entry in the parameter pack.
+    // We need to use the comma operator here since the function returns void.
+    // The variable we assign to is actually not needed. We just need something
+    // to store the initializer list (that contains only zeros).
+    auto dummy = {(applyPermutation(space, permute, other_values), 0)...};
+    std::ignore = dummy;
+  }
+}
 
 } // namespace ArborX::Details::KokkosExt
 
