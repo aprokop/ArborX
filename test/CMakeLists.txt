@@ -50,6 +50,7 @@ add_executable(ArborX_Test_DetailsUtils.exe
   tstDetailsVector.cpp
   tstDetailsUtils.cpp
   tstDetailsKokkosExtStdAlgorithms.cpp
+  tstDetailsKokkosExtSort.cpp
   tstDetailsKokkosExtKernelStdAlgorithms.cpp
   tstDetailsKokkosExtUninitializedMemoryAlgorithms.cpp
   tstDetailsKokkosExtMinMaxReduce.cpp
