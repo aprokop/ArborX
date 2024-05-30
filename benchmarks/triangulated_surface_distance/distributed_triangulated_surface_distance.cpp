@@ -205,7 +205,7 @@ int main(int argc, char *argv[])
     Kokkos::Profiling::popRegion();
 
     if (n == -1)
-      n = vertices.size();
+      n = triangles.size();
 
     Kokkos::Profiling::pushRegion("Benchmark::build_points");
     Kokkos::View<Point *, MemorySpace> random_points(

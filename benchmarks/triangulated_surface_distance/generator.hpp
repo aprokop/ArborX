@@ -285,11 +285,8 @@ void projectVerticesToSphere(
       });
 }
 
-template <typename ExecutionSpace, typename MemorySpace>
-void rotateVertices(ExecutionSpace const &space,
-                    Kokkos::View<ArborX::ExperimentalHyperGeometry::Point<3> *,
-                                 MemorySpace> &points,
-                    float angle)
+template <typename ExecutionSpace, typename Points>
+void rotateVertices(ExecutionSpace const &space, Points &points, float angle)
 {
   // Rotate points around (1, -1, 0) axis given angle (in degrees)
   using Point = ArborX::ExperimentalHyperGeometry::Point<3>;
