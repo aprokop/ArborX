@@ -10,10 +10,11 @@
  ****************************************************************************/
 
 #include <Kokkos_Core.hpp>
+#include <thrust/device_vector.h>
 
 #include <benchmark/benchmark.h>
 
-void BM_benchmark(benchmark::State &state)
+void BM_kokkos(benchmark::State &state)
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
 
@@ -21,18 +22,38 @@ void BM_benchmark(benchmark::State &state)
 
   auto const n = state.range(0);
 
-  Kokkos::View<int *> view(Kokkos::view_alloc(exec_space, "Benchmark::view",
-                                              Kokkos::WithoutInitializing),
-                           n);
+  Kokkos::View<size_t *> view(Kokkos::view_alloc(exec_space, "Benchmark::view"),
+                              n);
 
   exec_space.fence();
   for (auto _ : state)
   {
-    // This code gets timed
-    Kokkos::parallel_for(
-        "Benchmark::iota",
+    Kokkos::parallel_scan(
+        "Benchmark::scan",
         Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, n),
-        KOKKOS_LAMBDA(int i) { view(i) = i; });
+        KOKKOS_LAMBDA(const size_t i, size_t &update, bool const is_final) {
+          update += i;
+          if (is_final)
+            view(i) = update;
+        });
+    exec_space.fence();
+  }
+}
+void BM_thrust(benchmark::State &state)
+{
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+
+  ExecutionSpace exec_space;
+
+  auto const n = state.range(0);
+
+  thrust::device_vector<size_t> view(n);
+
+  exec_space.fence();
+  for (auto _ : state)
+  {
+    thrust::inclusive_scan(thrust::counting_iterator<size_t>(0),
+                           thrust::counting_iterator<size_t>(n), view.begin());
     exec_space.fence();
   }
 }
@@ -42,7 +63,8 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
   benchmark::Initialize(&argc, argv);
 
-  BENCHMARK(BM_benchmark)->RangeMultiplier(10)->Range(100, 10000);
+  BENCHMARK(BM_thrust)->RangeMultiplier(10)->Range(100, 1000000000);
+  BENCHMARK(BM_kokkos)->RangeMultiplier(10)->Range(100, 1000000000);
 
   benchmark::RunSpecifiedBenchmarks();
 
