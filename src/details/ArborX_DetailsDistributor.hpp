@@ -13,6 +13,7 @@
 
 #include <ArborX_Config.hpp>
 
+#include <ArborX_DetailsKokkosExtDistributedComm.hpp>
 #include <ArborX_DetailsKokkosExtMinMaxReduce.hpp>
 #include <ArborX_DetailsKokkosExtViewHelpers.hpp>
 #include <ArborX_DetailsSortUtils.hpp>
@@ -351,18 +352,18 @@ public:
 
     int const indegrees = _sources.size();
     int const outdegrees = _destinations.size();
+    constexpr int tag = 123;
     std::vector<MPI_Request> requests;
     requests.reserve(outdegrees + indegrees);
     for (int i = 0; i < indegrees; ++i)
     {
       if (_sources[i] != comm_rank)
       {
-        auto const receive_buffer_ptr = imports_comm.data() + _src_offsets[i];
-        auto const message_size =
-            (_src_offsets[i + 1] - _src_offsets[i]) * sizeof(ValueType);
         requests.emplace_back();
-        MPI_Irecv(receive_buffer_ptr, message_size, MPI_BYTE, _sources[i], 123,
-                  _comm, &requests.back());
+        KokkosExt::irecv(
+            Kokkos::subview(imports_comm, std::make_pair(_src_offsets[i],
+                                                         _src_offsets[i + 1])),
+            _sources[i], tag, _comm, requests.back());
       }
     }
 
@@ -375,9 +376,10 @@ public:
       if (_destinations[i] != comm_rank)
       {
         requests.emplace_back();
-        MPI_Isend(exports_comm.data() + _dest_offsets[i],
-                  (_dest_offsets[i + 1] - _dest_offsets[i]) * sizeof(ValueType),
-                  MPI_BYTE, _destinations[i], 123, _comm, &requests.back());
+        KokkosExt::isend(
+            Kokkos::subview(exports_comm, std::make_pair(_dest_offsets[i],
+                                                         _dest_offsets[i + 1])),
+            _destinations[i], tag, _comm, requests.back());
       }
     }
     if (!requests.empty())
@@ -433,8 +435,10 @@ private:
       src_counts_dense[_destinations[i]] =
           _dest_offsets[i + 1] - _dest_offsets[i];
     }
-    MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, src_counts_dense.data(), 1,
-                 MPI_INT, _comm);
+    KokkosExt::alltoall(
+        Kokkos::View<int *, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
+            src_counts_dense.data(), comm_size),
+        _comm);
 
     _src_offsets.push_back(0);
     for (int i = 0; i < comm_size; ++i)
