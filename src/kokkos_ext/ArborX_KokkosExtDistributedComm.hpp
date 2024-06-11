@@ -11,18 +11,25 @@
 #ifndef ARBORX_KOKKOS_EXT_DISTRIBUTED_COMM_HPP
 #define ARBORX_KOKKOS_EXT_DISTRIBUTED_COMM_HPP
 
+#ifndef ARBORX_ENABLE_KOKKOS_COMM
 #include <misc/ArborX_Exception.hpp>
 
 #include <Kokkos_Core.hpp>
 
 #include <type_traits>
 #include <utility>
+#else
+#include <KokkosComm.hpp>
+#include <KokkosComm_alltoall.hpp>
+#include <KokkosComm_irecv.hpp>
+#endif
 
 #include <mpi.h>
 
 namespace ArborX::Details::KokkosExt
 {
 
+#ifndef ARBORX_ENABLE_KOKKOS_COMM
 template <typename View>
 inline constexpr bool is_valid_mpi_view_v =
     (View::rank == 1 &&
@@ -86,6 +93,13 @@ void mpi_alltoall(MPI_Comm comm, View const &view)
   MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, view.data(),
                sizeof(ValueType), MPI_BYTE, comm);
 }
+
+#else
+using KokkosComm::allgather;
+using KokkosComm::isend;
+using KokkosComm::Impl::alltoall;
+using KokkosComm::Impl::irecv;
+#endif
 
 } // namespace ArborX::Details::KokkosExt
 
