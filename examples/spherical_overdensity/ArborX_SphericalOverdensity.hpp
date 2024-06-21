@@ -290,7 +290,7 @@ struct SphericalOverdensityHandle
 
       Kokkos::parallel_for(
           "ArborX::SOHandle::compute_R_delta::update_rdeltas_index",
-          Kokkos::RangePolicy<ExecutionSpace>(0, num_halos),
+          Kokkos::RangePolicy<ExecutionSpace>(exec_space, 0, num_halos),
           KOKKOS_LAMBDA(int const halo_index) {
             for (int bin_id = 0; bin_id < critical_bin_ids(halo_index);
                  ++bin_id)
@@ -316,11 +316,11 @@ struct SphericalOverdensityHandle
       using team_member = typename TeamPolicy::member_type;
 
       constexpr int invalid = INT_MAX;
-      Details::KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas,
-                                                     num_halos);
-      Details::KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas_index,
-                                                     num_halos);
-      Kokkos::deep_copy(sod_halo_rdeltas_index, invalid);
+      Details::KokkosExt::reallocWithoutInitializing(
+          exec_space, sod_halo_rdeltas, num_halos);
+      Details::KokkosExt::reallocWithoutInitializing(
+          exec_space, sod_halo_rdeltas_index, num_halos);
+      Kokkos::deep_copy(exec_space, sod_halo_rdeltas_index, invalid);
 
       // Avoid capturing *this
       auto const &particles = _particles;
