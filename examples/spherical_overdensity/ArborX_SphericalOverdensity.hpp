@@ -146,14 +146,15 @@ struct SphericalOverdensityHandle
                                                counts},
         Experimental::TraversalPolicy().setPredicateSorting(sort_predicates));
 
-    exclusivePrefixSum(exec_space, offsets);
+    Details::KokkosExt::exclusive_scan(exec_space, offsets, offsets, 0);
 
-    auto const num_values = KokkosExt::lastElement(exec_space, offsets);
+    auto const num_values =
+        Details::KokkosExt::lastElement(exec_space, offsets);
     printf("# values for all particles: %d\n", num_values);
 
     Kokkos::View<Details::SOTuple *, MemorySpace> values(
         "ArborX::SOHandle::query::values", num_values);
-    auto offsets_clone = KokkosExt::clone(exec_space, offsets);
+    auto offsets_clone = Details::KokkosExt::clone(exec_space, offsets);
     _bvh.query(
         exec_space,
         SphericalOverdensity::ParticlesWrapper<Particles>{_particles},
@@ -243,10 +244,11 @@ struct SphericalOverdensityHandle
             critical_bin_offsets(halo_index) =
                 sod_halo_bin_counts(halo_index, critical_bin_ids(halo_index));
           });
-      exclusivePrefixSum(exec_space, critical_bin_offsets);
+      Details::KokkosExt::exclusive_scan(exec_space, critical_bin_offsets,
+                                         critical_bin_offsets, 0);
 
       auto num_critical_bin_particles =
-          KokkosExt::lastElement(exec_space, critical_bin_offsets);
+          Details::KokkosExt::lastElement(exec_space, critical_bin_offsets);
       printf("#particles in critical bins: %d\n", num_critical_bin_particles);
 
       // Find particles in critical bins for each halo
@@ -255,7 +257,8 @@ struct SphericalOverdensityHandle
                              "ArborX::SO::critical_bin_values"),
           num_critical_bin_particles);
       {
-        auto offsets = KokkosExt::clone(exec_space, critical_bin_offsets);
+        auto offsets =
+            Details::KokkosExt::clone(exec_space, critical_bin_offsets);
         _bvh.query(
             exec_space,
             SphericalOverdensity::ParticlesWrapper<Particles>{_particles},
@@ -313,8 +316,10 @@ struct SphericalOverdensityHandle
       using team_member = typename TeamPolicy::member_type;
 
       constexpr int invalid = INT_MAX;
-      KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas, num_halos);
-      KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas_index, num_halos);
+      Details::KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas,
+                                                     num_halos);
+      Details::KokkosExt::reallocWithoutInitializing(sod_halo_rdeltas_index,
+                                                     num_halos);
       Kokkos::deep_copy(sod_halo_rdeltas_index, invalid);
 
       // Avoid capturing *this

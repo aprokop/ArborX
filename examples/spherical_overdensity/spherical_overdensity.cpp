@@ -18,6 +18,7 @@
 
 #include <cinttypes>
 #include <fstream>
+#include <iostream>
 
 struct InputData
 {
@@ -76,7 +77,7 @@ applyPermutation(ExecutionSpace const &exec_space, Permute const &permute,
   auto const n = view.extent_int(0);
   ARBORX_ASSERT(permute.extent_int(0) == n);
 
-  auto view_clone = KokkosExt::clone(exec_space, view);
+  auto view_clone = ArborX::Details::KokkosExt::clone(exec_space, view);
   for (int i = 0; i < n; ++i)
     view(i) = view_clone(permute(i));
 }
@@ -91,7 +92,7 @@ applyPermutation2(ExecutionSpace const &exec_space, Permute const &permute,
 
   auto const m = view.extent_int(1);
 
-  auto view_clone = KokkosExt::clone(exec_space, view);
+  auto view_clone = ArborX::Details::KokkosExt::clone(exec_space, view);
   for (int i = 0; i < n; ++i)
     for (int j = 0; j < m; ++j)
       view(i, j) = view_clone(permute(i), j);
@@ -363,7 +364,9 @@ void sod(ExecutionSpace const &exec_space, Particles const &particles,
          int num_sod_bins)
 {
   static_assert(
-      KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value, "");
+      ArborX::Details::KokkosExt::is_accessible_from<MemorySpace,
+                                                     ExecutionSpace>::value,
+      "");
   static_assert(std::is_same<typename Particles::memory_space, MemorySpace>{},
                 "");
   static_assert(
