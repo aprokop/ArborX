@@ -166,7 +166,15 @@ struct SphericalOverdensityHandle
     Kokkos::Profiling::pushRegion("ArborX::SOHandle::query::sort_values");
 
     // Sort
-    sortObjects(exec_space, values);
+    // sortObjects(exec_space, values);
+    auto comparator =
+        KOKKOS_LAMBDA(Details::SOTuple const &l, Details::SOTuple const &r)
+    {
+      if (l.halo_index == r.halo_index)
+        return l.distance < r.distance;
+      return l.halo_index < r.halo_index;
+    };
+    Kokkos::sort(exec_space, values, comparator);
     Kokkos::Profiling::popRegion();
 
     Kokkos::resize(indices, num_values);
@@ -275,7 +283,15 @@ struct SphericalOverdensityHandle
       // center
       Kokkos::Profiling::pushRegion(
           "ArborX::SOHandle::computeRdelta::sort_values");
-      sortObjects(exec_space, critical_bin_values);
+      // sortObjects(exec_space, critical_bin_values);
+      auto comparator =
+          KOKKOS_LAMBDA(Details::SOTuple const &l, Details::SOTuple const &r)
+      {
+        if (l.halo_index == r.halo_index)
+          return l.distance < r.distance;
+        return l.halo_index < r.halo_index;
+      };
+      Kokkos::sort(exec_space, critical_bin_values, comparator);
       Kokkos::Profiling::popRegion();
 
       // Compute R_delta
@@ -328,7 +344,7 @@ struct SphericalOverdensityHandle
 
       Kokkos::parallel_for(
           "ArborX::SOHandle::computeRdelta::compute_rdelta_index",
-          TeamPolicy(exec_space, num_halos, 512),
+          TeamPolicy(exec_space, num_halos, Kokkos::AUTO),
           KOKKOS_LAMBDA(team_member const &team) {
             auto halo_index = team.league_rank();
 
