@@ -323,6 +323,37 @@ struct expand<OBBTag, BoxTag, OBB, Box>
   }
 };
 
+template <typename OBB, typename Triangle>
+struct expand<OBBTag, TriangleTag, OBB, Triangle>
+{
+  KOKKOS_FUNCTION static void apply(OBB &obb, Triangle const &triangle)
+  {
+    constexpr int DIM = GeometryTraits::dimension_v<OBB>;
+    using Coordinate = GeometryTraits::coordinate_type_t<OBB>;
+    using HyperPoint = ExperimentalHyperGeometry::Point<DIM, Coordinate>;
+
+    if (!Details::isValid(obb))
+    {
+      obb = OBB({triangle.a, triangle.b, triangle.c});
+      return;
+    }
+
+    auto const corners = obb.corners();
+    int const num_corners = corners.size();
+
+    Details::StaticVector<HyperPoint, corners.capacity() + 3> points;
+    for (int i = 0; i < num_corners; ++i)
+      points.emplaceBack(corners[i]);
+    points.emplaceBack(triangle.a);
+    points.emplaceBack(triangle.b);
+    points.emplaceBack(triangle.c);
+
+    obb = OBB(Kokkos::View<HyperPoint *, Kokkos::AnonymousSpace,
+                           Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        points.data(), points.size()));
+  }
+};
+
 template <typename Box, typename OBB>
 struct expand<BoxTag, OBBTag, Box, OBB>
 {
