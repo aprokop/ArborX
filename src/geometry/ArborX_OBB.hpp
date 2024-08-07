@@ -334,10 +334,31 @@ struct expand<OBBTag, TriangleTag, OBB, Triangle>
 
     if (!Details::isValid(obb))
     {
+#if 0
+      printf("--TRIANGLE--\n");
+      printf("[%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f] - [%7.3f, "
+             "%7.3f, %7.3f]\n",
+             triangle.a[0], triangle.a[1], triangle.a[2], triangle.b[0],
+             triangle.b[1], triangle.b[2], triangle.c[0], triangle.c[1],
+             triangle.c[2]);
+#endif
+
       obb = OBB({triangle.a, triangle.b, triangle.c});
+
+#if 0
+      printf("--OBB--\n");
+      auto const A = obb.matrix();
+      printf("| %.2f %.2f %.2f |\n", A(0, 0), A(0, 1), A(0, 2));
+      printf("| %.2f %.2f %.2f |\n", A(1, 0), A(1, 1), A(1, 2));
+      printf("| %.2f %.2f %.2f |\n", A(2, 0), A(2, 1), A(2, 2));
+      auto const &box = obb._box;
+      printf("box: [%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f]\n",
+             box.minCorner()[0], box.minCorner()[1], box.minCorner()[2],
+             box.maxCorner()[0], box.maxCorner()[1], box.maxCorner()[2]);
+#endif
+
       return;
     }
-
     auto const corners = obb.corners();
     int const num_corners = corners.size();
 
@@ -382,6 +403,31 @@ struct expand<OBBTag, OBBTag, OBB1, OBB2>
       return;
     }
 
+#if 0
+    {
+      printf("--OBB1--\n");
+      auto const A = obb.matrix();
+      printf("| %.2f %.2f %.2f |\n", A(0, 0), A(0, 1), A(0, 2));
+      printf("| %.2f %.2f %.2f |\n", A(1, 0), A(1, 1), A(1, 2));
+      printf("| %.2f %.2f %.2f |\n", A(2, 0), A(2, 1), A(2, 2));
+      auto const &box = obb._box;
+      printf("box: [%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f]\n",
+             box.minCorner()[0], box.minCorner()[1], box.minCorner()[2],
+             box.maxCorner()[0], box.maxCorner()[1], box.maxCorner()[2]);
+    }
+    {
+      printf("--OBB2--\n");
+      auto const A = other.matrix();
+      printf("| %.2f %.2f %.2f |\n", A(0, 0), A(0, 1), A(0, 2));
+      printf("| %.2f %.2f %.2f |\n", A(1, 0), A(1, 1), A(1, 2));
+      printf("| %.2f %.2f %.2f |\n", A(2, 0), A(2, 1), A(2, 2));
+      auto const &box = other._box;
+      printf("box: [%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f]\n",
+             box.minCorner()[0], box.minCorner()[1], box.minCorner()[2],
+             box.maxCorner()[0], box.maxCorner()[1], box.maxCorner()[2]);
+    }
+#endif
+
     auto corners1 = obb.corners();
     auto corners2 = other.corners();
     int const num_corners1 = corners1.size();
@@ -399,6 +445,19 @@ struct expand<OBBTag, OBBTag, OBB1, OBB2>
     obb = OBB1(Kokkos::View<Point *, Kokkos::AnonymousSpace,
                             Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
         points.data(), points.size()));
+#if 0
+    {
+      printf("--RESULT--\n");
+      auto const A = obb.matrix();
+      printf("| %.2f %.2f %.2f |\n", A(0, 0), A(0, 1), A(0, 2));
+      printf("| %.2f %.2f %.2f |\n", A(1, 0), A(1, 1), A(1, 2));
+      printf("| %.2f %.2f %.2f |\n", A(2, 0), A(2, 1), A(2, 2));
+      auto const &box = obb._box;
+      printf("box: [%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f]\n",
+             box.minCorner()[0], box.minCorner()[1], box.minCorner()[2],
+             box.maxCorner()[0], box.maxCorner()[1], box.maxCorner()[2]);
+    }
+#endif
   }
 };
 

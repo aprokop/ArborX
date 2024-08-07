@@ -31,6 +31,55 @@ using Point = ArborX::ExperimentalHyperGeometry::Point<3>;
 using Triangle = ArborX::ExperimentalHyperGeometry::Triangle<3>;
 
 template <typename MemorySpace>
+struct CustomSFC
+{
+  ArborX::ExperimentalHyperGeometry::Box<3> _scene_bounding_box;
+  float _angle;
+  ArborX::Experimental::Morton64 _sfc;
+
+  KOKKOS_FUNCTION void transform(Point &p) const
+  {
+    using Vector = ArborX::Details::Vector<3>;
+
+    auto angle = -_angle;
+
+    Point o{0, 0, 0};
+    Vector k{1 / std::sqrt(2.f), -1 / std::sqrt(2.f), 0}; // normalized axis
+    auto cos = Kokkos::cos(Kokkos::numbers::pi_v<float> / 180 * angle);
+    auto sin = Kokkos::sin(Kokkos::numbers::pi_v<float> / 180 * angle);
+
+    Vector v = p - o;
+    auto kxv = k.cross(v);
+    auto kv = k.dot(v);
+
+    // Rodrigues rotation formula
+    for (int d = 0; d < 3; ++d)
+      p[d] = v[d] * cos + kxv[d] * sin + k[d] * kv * (1 - cos);
+  }
+
+  template <
+      typename Box, typename Point,
+      std::enable_if_t<ArborX::GeometryTraits::is_box_v<Box> &&
+                       ArborX::GeometryTraits::is_point_v<Point>> * = nullptr>
+  KOKKOS_FUNCTION auto operator()(Box const &, Point p) const
+  {
+    transform(p);
+    return _sfc(_scene_bounding_box, p);
+  }
+  template <typename Box, typename Geometry,
+            std::enable_if_t<ArborX::GeometryTraits::is_box_v<Box> &&
+                             !ArborX::GeometryTraits::is_point_v<Geometry>> * =
+                nullptr>
+  KOKKOS_FUNCTION auto operator()(Box const &, Geometry const &geometry) const
+  {
+    using ArborX::Details::returnCentroid;
+    auto p = returnCentroid(geometry);
+    transform(p);
+    return _sfc(_scene_bounding_box, p);
+  }
+};
+
+template <typename MemorySpace>
 struct Triangles
 {
   Kokkos::View<Point *, MemorySpace> _points;
@@ -193,6 +242,14 @@ int main(int argc, char *argv[])
       random_points);
   Kokkos::Profiling::popRegion();
 
+// #define USE_OBB
+#define USE_SFC
+
+#ifdef USE_SFC
+  ArborX::ExperimentalHyperGeometry::Box<3> scene_bounding_box_not_rotated;
+  ArborX::Details::TreeConstruction::calculateBoundingBoxOfTheScene(
+      space, vertices, scene_bounding_box_not_rotated);
+#endif
   if (angle != 0)
   {
     rotateVertices(space, vertices, angle);
@@ -209,10 +266,43 @@ int main(int argc, char *argv[])
   Kokkos::Timer timer;
 
   Kokkos::fence();
-  ArborX::BVH<MemorySpace, Triangle> index(
-      space, Triangles<MemorySpace>{vertices, triangles});
+  ArborX::BVH<MemorySpace, Triangle, ArborX::Details::DefaultIndexableGetter,
+#ifdef USE_OBB
+              ArborX::Experimental::OBB<3>>
+#else
+              ArborX::ExperimentalHyperGeometry::Box<3>>
+#endif
+      index(space, Triangles<MemorySpace>{vertices, triangles}
+#ifdef USE_SFC
+            ,
+            ArborX::Details::DefaultIndexableGetter{},
+            CustomSFC<MemorySpace>{scene_bounding_box_not_rotated, angle,
+                                   ArborX::Experimental::Morton64{}}
+#endif
+
+      );
   Kokkos::fence();
   auto construction_time = timer.seconds();
+
+#if 0
+  printf("Internal nodes:\n");
+  int const size = index.size();
+  for (int i = 0; i < size - 1; ++i)
+  {
+    auto const &bv =
+        ArborX::Details::HappyTreeFriends::getInternalBoundingVolume(index,
+                                                                     i + size);
+#ifdef USE_OBB
+    auto const &minc = bv._box.minCorner();
+    auto const &maxc = bv._box.maxCorner();
+#else
+    auto const &minc = bv.minCorner();
+    auto const &maxc = bv.maxCorner();
+#endif
+    printf("[%5d]: [%7.3f, %7.3f, %7.3f] - [%7.3f, %7.3f, %7.3f]\n", i, minc[0],
+           minc[1], minc[2], maxc[0], maxc[1], maxc[2]);
+  }
+#endif
 
   Kokkos::fence();
   timer.reset();
@@ -222,6 +312,12 @@ int main(int argc, char *argv[])
               DistanceCallback{}, distances, offset);
   Kokkos::fence();
   auto query_time = timer.seconds();
+
+#if 0
+  printf("Distances:\n");
+  for (int i = 0; i < (int)distances.size(); ++i)
+    printf("[%d]: %f\n", i, distances(i));
+#endif
 
   printf("-- construction   : %5.3f\n", construction_time);
   printf("-- query          : %5.3f\n", query_time);
