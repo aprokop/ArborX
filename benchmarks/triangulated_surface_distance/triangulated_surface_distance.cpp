@@ -242,7 +242,7 @@ int main(int argc, char *argv[])
       random_points);
   Kokkos::Profiling::popRegion();
 
-// #define USE_OBB
+#define USE_OBB
 #define USE_SFC
 
 #ifdef USE_SFC
@@ -308,8 +308,10 @@ int main(int argc, char *argv[])
   timer.reset();
   Kokkos::View<int *, MemorySpace> offset("Benchmark::offsets", 0);
   Kokkos::View<float *, MemorySpace> distances("Benchmark::distances", 0);
-  index.query(space, ArborX::Experimental::make_nearest(random_points, 1),
-              DistanceCallback{}, distances, offset);
+  index.query(
+      space, ArborX::Experimental::make_nearest(random_points, 1),
+      DistanceCallback{}, distances, offset,
+      ArborX::Experimental::TraversalPolicy().setPredicateSorting(false));
   Kokkos::fence();
   auto query_time = timer.seconds();
 
