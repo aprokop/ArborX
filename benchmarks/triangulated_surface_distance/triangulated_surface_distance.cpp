@@ -243,13 +243,28 @@ int main(int argc, char *argv[])
   Kokkos::Profiling::popRegion();
 
 #define USE_OBB
-#define USE_SFC
+// #define USE_SFC
+#define USE_CUSTOM_SORT
 
-#ifdef USE_SFC
+#if defined(USE_SFC) || defined(USE_CUSTOM_SORT)
   ArborX::ExperimentalHyperGeometry::Box<3> scene_bounding_box_not_rotated;
   ArborX::Details::TreeConstruction::calculateBoundingBoxOfTheScene(
       space, vertices, scene_bounding_box_not_rotated);
 #endif
+#ifdef USE_CUSTOM_SORT
+  {
+    Kokkos::View<unsigned int *, MemorySpace> codes(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                           "Benchmark::codes"),
+        random_points.size());
+    ArborX::Details::TreeConstruction::projectOntoSpaceFillingCurve(
+        space, random_points, ArborX::Experimental::Morton32{},
+        scene_bounding_box_not_rotated, codes);
+    auto permute = ArborX::Details::sortObjects(space, codes);
+    ArborX::Details::applyPermutation(space, permute, random_points);
+  }
+#endif
+
   if (angle != 0)
   {
     rotateVertices(space, vertices, angle);
@@ -284,9 +299,11 @@ int main(int argc, char *argv[])
   Kokkos::fence();
   auto construction_time = timer.seconds();
 
+  int const size = index.size();
+  (void)size;
+
 #if 0
   printf("Internal nodes:\n");
-  int const size = index.size();
   for (int i = 0; i < size - 1; ++i)
   {
     auto const &bv =
@@ -304,14 +321,18 @@ int main(int argc, char *argv[])
   }
 #endif
 
+
   Kokkos::fence();
   timer.reset();
   Kokkos::View<int *, MemorySpace> offset("Benchmark::offsets", 0);
   Kokkos::View<float *, MemorySpace> distances("Benchmark::distances", 0);
-  index.query(
-      space, ArborX::Experimental::make_nearest(random_points, 1),
-      DistanceCallback{}, distances, offset,
-      ArborX::Experimental::TraversalPolicy().setPredicateSorting(false));
+  index.query(space, ArborX::Experimental::make_nearest(random_points, 1),
+              DistanceCallback{}, distances, offset
+#ifdef USE_CUSTOM_SORT
+              ,
+              ArborX::Experimental::TraversalPolicy().setPredicateSorting(false)
+#endif
+  );
   Kokkos::fence();
   auto query_time = timer.seconds();
 
