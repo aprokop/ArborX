@@ -416,15 +416,9 @@ void BoundingVolumeHierarchy<
   {
     Kokkos::Profiling::pushRegion(profiling_prefix + "::compute_permutation");
     using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
-    ExperimentalHyperGeometry::Box<
-        GeometryTraits::dimension_v<bounding_volume_type>,
-        typename GeometryTraits::coordinate_type_t<bounding_volume_type>>
-        scene_bounding_box{};
-    using namespace Details;
-    expand(scene_bounding_box, bounds());
     auto permute = Details::BatchedQueries<DeviceType>::
         sortPredicatesAlongSpaceFillingCurve(space, Experimental::Morton32(),
-                                             scene_bounding_box, predicates);
+                                             bounds(), predicates);
     Kokkos::Profiling::popRegion();
 
     using PermutedPredicates =

@@ -243,8 +243,8 @@ int main(int argc, char *argv[])
   Kokkos::Profiling::popRegion();
 
 #define USE_OBB
-// #define USE_SFC
-#define USE_CUSTOM_SORT
+#define USE_SFC
+  // #define USE_CUSTOM_SORT
 
 #if defined(USE_SFC) || defined(USE_CUSTOM_SORT)
   ArborX::ExperimentalHyperGeometry::Box<3> scene_bounding_box_not_rotated;
@@ -320,7 +320,6 @@ int main(int argc, char *argv[])
            minc[1], minc[2], maxc[0], maxc[1], maxc[2]);
   }
 #endif
-
 
   Kokkos::fence();
   timer.reset();

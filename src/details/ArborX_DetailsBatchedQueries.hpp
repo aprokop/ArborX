@@ -42,12 +42,12 @@ public:
   // indirection when recording results rather than using that function at
   // the end.  We decided to keep reversePermutation around for now.
 
-  template <typename ExecutionSpace, typename Predicates, typename Box,
-            typename SpaceFillingCurve>
+  template <typename ExecutionSpace, typename Predicates,
+            typename BoundingVolume, typename SpaceFillingCurve>
   static Kokkos::View<unsigned int *, DeviceType>
   sortPredicatesAlongSpaceFillingCurve(ExecutionSpace const &space,
                                        SpaceFillingCurve const &curve,
-                                       Box const &scene_bounding_box,
+                                       BoundingVolume const &bounding_volume,
                                        Predicates const &predicates)
   {
     auto const n_queries = predicates.size();
@@ -60,13 +60,36 @@ public:
         Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                            "ArborX::BVH::query::linear_ordering"),
         n_queries);
-    Kokkos::parallel_for(
-        "ArborX::BatchedQueries::project_predicates_onto_space_filling_curve",
-        Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
-        KOKKOS_LAMBDA(int i) {
-          linear_ordering_indices(i) = curve(
-              scene_bounding_box, returnCentroid(getGeometry(predicates(i))));
-        });
+
+    if constexpr (!GeometryTraits::is_obb_v<BoundingVolume>)
+    {
+      ExperimentalHyperGeometry::Box<
+          GeometryTraits::dimension_v<BoundingVolume>,
+          typename GeometryTraits::coordinate_type_t<BoundingVolume>>
+          scene_bounding_box{};
+      using namespace Details;
+      expand(scene_bounding_box, bounding_volume);
+      Kokkos::parallel_for(
+          "ArborX::BatchedQueries::project_predicates_onto_space_filling_curve",
+          Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
+          KOKKOS_LAMBDA(int i) {
+            linear_ordering_indices(i) = curve(
+                scene_bounding_box, returnCentroid(getGeometry(predicates(i))));
+          });
+    }
+    else
+    {
+      auto const &obb = bounding_volume;
+      auto scene_bounding_box = obb._box;
+      Kokkos::parallel_for(
+          "ArborX::BatchedQueries::project_predicates_onto_space_filling_curve",
+          Kokkos::RangePolicy<ExecutionSpace>(space, 0, n_queries),
+          KOKKOS_LAMBDA(int i) {
+            linear_ordering_indices(i) = curve(
+                scene_bounding_box,
+                obb.transform(returnCentroid(getGeometry(predicates(i)))));
+          });
+    }
 
     return sortObjects(space, linear_ordering_indices);
   }
