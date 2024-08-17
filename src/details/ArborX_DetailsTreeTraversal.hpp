@@ -176,36 +176,8 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     _callback(predicate, HappyTreeFriends::getValue(_bvh, 0));
   }
 
-  KOKKOS_FUNCTION void operator()(int queryIndex) const
+  KOKKOS_FUNCTION void knn1(int queryIndex) const
   {
-    auto const &predicate = _predicates(queryIndex);
-    auto const k = getK(predicate);
-    auto const buffer = _buffer(queryIndex);
-
-    // NOTE thinking about making this a precondition
-    if (k < 1)
-      return;
-
-    using PairIndexDistance =
-        typename NearestBufferProvider<MemorySpace>::PairIndexDistance;
-    struct CompareDistance
-    {
-      KOKKOS_INLINE_FUNCTION bool operator()(PairIndexDistance const &lhs,
-                                             PairIndexDistance const &rhs) const
-      {
-        return lhs.second < rhs.second;
-      }
-    };
-    // Use a priority queue for convenience to store the results and
-    // preserve the heap structure internally at all time.  There is no
-    // memory allocation, elements are stored in the buffer passed as an
-    // argument. The farthest leaf node is on top.
-    KOKKOS_ASSERT(k == (int)buffer.size());
-    PriorityQueue<PairIndexDistance, CompareDistance,
-                  UnmanagedStaticVector<PairIndexDistance>>
-        heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
-                                                      buffer.size()));
-
     auto &bvh = _bvh;
     auto const distance = [&predicate, &bvh](int j) {
       return HappyTreeFriends::isLeaf(bvh, j)
@@ -237,6 +209,7 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     // neighbors have been found.
     auto radius = KokkosExt::ArithmeticTraits::infinity<float>::value;
 
+    int best = -1;
     do
     {
       bool traverse_left = false;
@@ -256,13 +229,8 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         {
           if (HappyTreeFriends::isLeaf(_bvh, left_child))
           {
-            auto leaf_pair = Kokkos::make_pair(left_child, distance_left);
-            if ((int)heap.size() < k)
-              heap.push(leaf_pair);
-            else
-              heap.popPush(leaf_pair);
-            if ((int)heap.size() == k)
-              radius = heap.top().second;
+            radius = distance_left;
+            best = left_child;
           }
           else
           {
@@ -275,13 +243,8 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
         {
           if (HappyTreeFriends::isLeaf(_bvh, right_child))
           {
-            auto leaf_pair = Kokkos::make_pair(right_child, distance_right);
-            if ((int)heap.size() < k)
-              heap.push(leaf_pair);
-            else
-              heap.popPush(leaf_pair);
-            if ((int)heap.size() == k)
-              radius = heap.top().second;
+            radius = distance_right;
+            best = right_child;
           }
           else
           {
@@ -323,16 +286,171 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
       }
     } while (node != SENTINEL);
 
-    // Sort the leaf nodes and output the results.
-    // NOTE: Do not try this at home.  Messing with the underlying container
-    // invalidates the state of the PriorityQueue.
-    sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
-    for (decltype(heap.size()) i = 0; i < heap.size(); ++i)
-    {
-      _callback(predicate,
-                HappyTreeFriends::getValue(_bvh, (heap.data() + i)->first));
-    }
+    _callback(predicate, HappyTreeFriends::getValue(_bvh, best));
   }
+}
+
+KOKKOS_FUNCTION void
+operator()(int queryIndex) const
+{
+  auto const &predicate = _predicates(queryIndex);
+  auto const k = getK(predicate);
+  auto const buffer = _buffer(queryIndex);
+
+  // NOTE thinking about making this a precondition
+  if (k < 1)
+    return;
+
+  if (k == 1)
+    knn1(queryIndex);
+
+  using PairIndexDistance =
+      typename NearestBufferProvider<MemorySpace>::PairIndexDistance;
+  struct CompareDistance
+  {
+    KOKKOS_INLINE_FUNCTION bool operator()(PairIndexDistance const &lhs,
+                                           PairIndexDistance const &rhs) const
+    {
+      return lhs.second < rhs.second;
+    }
+  };
+  // Use a priority queue for convenience to store the results and
+  // preserve the heap structure internally at all time.  There is no
+  // memory allocation, elements are stored in the buffer passed as an
+  // argument. The farthest leaf node is on top.
+  KOKKOS_ASSERT(k == (int)buffer.size());
+  PriorityQueue<PairIndexDistance, CompareDistance,
+                UnmanagedStaticVector<PairIndexDistance>>
+      heap(UnmanagedStaticVector<PairIndexDistance>(buffer.data(),
+                                                    buffer.size()));
+
+  auto &bvh = _bvh;
+  auto const distance = [&predicate, &bvh](int j) {
+    return HappyTreeFriends::isLeaf(bvh, j)
+               ? predicate.distance(HappyTreeFriends::getIndexable(bvh, j))
+               : predicate.distance(
+                     HappyTreeFriends::getInternalBoundingVolume(bvh, j));
+  };
+
+  constexpr int SENTINEL = -1;
+  int stack[64];
+  auto *stack_ptr = stack;
+  *stack_ptr++ = SENTINEL;
+#if !defined(__CUDA_ARCH__)
+  float stack_distance[64];
+  auto *stack_distance_ptr = stack_distance;
+  *stack_distance_ptr++ = 0.f;
+#endif
+
+  int node = HappyTreeFriends::getRoot(_bvh);
+  int left_child;
+  int right_child;
+
+  float distance_left = 0.f;
+  float distance_right = 0.f;
+  float distance_node = 0.f;
+
+  // Nodes with a distance that exceed that radius can safely be
+  // discarded. Initialize the radius to infinity and tighten it once k
+  // neighbors have been found.
+  auto radius = KokkosExt::ArithmeticTraits::infinity<float>::value;
+
+  do
+  {
+    bool traverse_left = false;
+    bool traverse_right = false;
+
+    if (distance_node < radius)
+    {
+      // Insert children into the stack and make sure that the
+      // closest one ends on top.
+      left_child = HappyTreeFriends::getLeftChild(_bvh, node);
+      right_child = HappyTreeFriends::getRightChild(_bvh, node);
+
+      distance_left = distance(left_child);
+      distance_right = distance(right_child);
+
+      if (distance_left < radius)
+      {
+        if (HappyTreeFriends::isLeaf(_bvh, left_child))
+        {
+          auto leaf_pair = Kokkos::make_pair(left_child, distance_left);
+          if ((int)heap.size() < k)
+            heap.push(leaf_pair);
+          else
+            heap.popPush(leaf_pair);
+          if ((int)heap.size() == k)
+            radius = heap.top().second;
+        }
+        else
+        {
+          traverse_left = true;
+        }
+      }
+
+      // Note: radius may have been already updated here from the left child
+      if (distance_right < radius)
+      {
+        if (HappyTreeFriends::isLeaf(_bvh, right_child))
+        {
+          auto leaf_pair = Kokkos::make_pair(right_child, distance_right);
+          if ((int)heap.size() < k)
+            heap.push(leaf_pair);
+          else
+            heap.popPush(leaf_pair);
+          if ((int)heap.size() == k)
+            radius = heap.top().second;
+        }
+        else
+        {
+          traverse_right = true;
+        }
+      }
+    }
+
+    if (!traverse_left && !traverse_right)
+    {
+      node = *--stack_ptr;
+#if defined(__CUDA_ARCH__)
+      if (node != SENTINEL)
+      {
+        // This is a theoretically unnecessary duplication of distance
+        // calculation for stack nodes. However, for Cuda it's better than
+        // putting the distances in stack.
+        distance_node = distance(node);
+      }
+#else
+      distance_node = *--stack_distance_ptr;
+#endif
+    }
+    else
+    {
+      node = (traverse_left &&
+              (distance_left <= distance_right || !traverse_right))
+                 ? left_child
+                 : right_child;
+      distance_node = (node == left_child ? distance_left : distance_right);
+      if (traverse_left && traverse_right)
+      {
+        *stack_ptr++ = (node == left_child ? right_child : left_child);
+#if !defined(__CUDA_ARCH__)
+        *stack_distance_ptr++ =
+            (node == left_child ? distance_right : distance_left);
+#endif
+      }
+    }
+  } while (node != SENTINEL);
+
+  // Sort the leaf nodes and output the results.
+  // NOTE: Do not try this at home.  Messing with the underlying container
+  // invalidates the state of the PriorityQueue.
+  sortHeap(heap.data(), heap.data() + heap.size(), heap.valueComp());
+  for (decltype(heap.size()) i = 0; i < heap.size(); ++i)
+  {
+    _callback(predicate,
+              HappyTreeFriends::getValue(_bvh, (heap.data() + i)->first));
+  }
+}
 };
 
 template <class BVH, class Predicates, class Callback>
