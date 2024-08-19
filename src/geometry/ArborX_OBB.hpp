@@ -15,7 +15,6 @@
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsContainers.hpp> // StaticVector
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
-#include <ArborX_DetailsQuaternion.hpp>
 #include <ArborX_DetailsSymmetricSVD.hpp>
 #include <ArborX_DetailsUtils.hpp>
 #include <ArborX_DetailsVector.hpp>
@@ -111,11 +110,10 @@ struct Rotation
   }
 };
 
-// Use quaternions for 3D rotations
 template <typename Coordinate>
 struct Rotation<3, Coordinate>
 {
-  Details::quaternion<Coordinate> _q{1};
+  Coordinate _q[4] = {1};
 
   KOKKOS_DEFAULTED_FUNCTION Rotation() = default;
 
@@ -139,30 +137,55 @@ struct Rotation<3, Coordinate>
     auto q3 = sqrt(1 - r11 - r22 + r33) / 2;
 
     if (q0 >= q1 && q0 >= q2 && q0 >= q3)
-      _q = {q0, (r32 - r23) / (4 * q0), (r13 - r31) / (4 * q0),
-            (r21 - r12) / (4 * q0)};
+    {
+      auto s = 1 / (4 * q0);
+      _q[0] = q0;
+      _q[1] = (r32 - r23) * s;
+      _q[2] = (r13 - r31) * s;
+      _q[3] = (r21 - r12) * s;
+    }
     else if (q1 >= q0 && q1 >= q2 && q1 >= q3)
-      _q = {(r32 - r23) / (4 * q1), q1, (r12 + r21) / (4 * q1),
-            (r13 + r31) / (4 * q1)};
+    {
+      auto s = 1 / (4 * q1);
+      _q[0] = (r32 - r23) * s;
+      _q[1] = q1;
+      _q[2] = (r12 + r21) * s;
+      _q[2] = (r13 + r31) * s;
+    }
     else if (q2 >= q0 && q2 >= q1 && q2 >= q3)
-      _q = {(r13 - r31) / (4 * q2), (r12 + r21) / (4 * q2), q2,
-            (r23 + r32) / (4 * q2)};
+    {
+      auto s = 1 / (4 * q2);
+      _q[0] = (r13 - r31) * s;
+      _q[1] = (r12 + r21) * s;
+      _q[2] = q2;
+      _q[3] = (r23 + r32) * s;
+    }
     else
-      _q = {(r21 - r12) / (4 * q3), (r13 + r31) / (4 * q3),
-            (r23 + r32) / (4 * q3), q3};
+    {
+      auto s = 1 / (4 * q3);
+      _q[0] = (r21 - r12) * s;
+      _q[1] = (r13 + r31) * s;
+      _q[2] = (r23 + r32) * s;
+      _q[3] = q3;
+    }
+
+    _q[1] = -_q[1];
+    _q[2] = -_q[2];
+    _q[3] = -_q[3];
   }
 
   template <typename Point>
   KOKKOS_FUNCTION auto rotate(Point point) const
   {
     static_assert(GeometryTraits::dimension_v<Point> == 3);
+    auto const &v = point;
+
     // w = real part
     // r = imaginary part vector
+    auto const w = _q[0];
+    Coordinate r[3] = {_q[1], _q[2], _q[3]};
     // Then, Rodrigues formula is
     // v = v + 2r x (r x v + wv)
-    Coordinate w = _q.real();
-    auto const &v = point;
-    Coordinate r[3] = {-_q.imag_i(), -_q.imag_j(), -_q.imag_k()};
     Coordinate z[3] = {(r[1] * v[2] - r[2] * v[1]) + w * v[0],
                        (r[2] * v[0] - r[0] * v[2]) + w * v[1],
                        (r[0] * v[1] - r[1] * v[0]) + w * v[2]};
@@ -175,13 +198,11 @@ struct Rotation<3, Coordinate>
   KOKKOS_FUNCTION auto rotate_back(Point const &point) const
   {
     static_assert(GeometryTraits::dimension_v<Point> == 3);
-    // w = real part
-    // r = imaginary part vector
-    // Then, Rodrigues formula is
-    // v = v + 2r x (r x v + wv)
-    Coordinate w = _q.real();
     auto const &v = point;
-    Coordinate r[3] = {_q.imag_i(), _q.imag_j(), _q.imag_k()};
+
+    // The difference with rotate() is conjuction of _q
+    auto const w = _q[0];
+    Coordinate r[3] = {-_q[1], -_q[2], -_q[3]};
     Coordinate z[3] = {(r[1] * v[2] - r[2] * v[1]) + w * v[0],
                        (r[2] * v[0] - r[0] * v[2]) + w * v[1],
                        (r[0] * v[1] - r[1] * v[0]) + w * v[2]};
