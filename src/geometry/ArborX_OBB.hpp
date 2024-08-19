@@ -111,7 +111,6 @@ struct Rotation
   }
 };
 
-#if 0
 // Use quaternions for 3D rotations
 template <typename Coordinate>
 struct Rotation<3, Coordinate>
@@ -154,25 +153,43 @@ struct Rotation<3, Coordinate>
   }
 
   template <typename Point>
-  KOKKOS_FUNCTION auto rotate(Point const &point) const
+  KOKKOS_FUNCTION auto rotate(Point point) const
   {
     static_assert(GeometryTraits::dimension_v<Point> == 3);
-    Details::quaternion<Coordinate> p(0, point[0], point[1], point[2]);
-    // can use conj() instead of inv() because it is a rotation quaternion
-    auto pnew = conj(_q) * p * _q;
-    return Point{pnew.imag_i(), pnew.imag_j(), pnew.imag_k()};
+    // w = real part
+    // r = imaginary part vector
+    // Then, Rodrigues formula is
+    // v = v + 2r x (r x v + wv)
+    Coordinate w = _q.real();
+    auto const &v = point;
+    Coordinate r[3] = {-_q.imag_i(), -_q.imag_j(), -_q.imag_k()};
+    Coordinate z[3] = {(r[1] * v[2] - r[2] * v[1]) + w * v[0],
+                       (r[2] * v[0] - r[0] * v[2]) + w * v[1],
+                       (r[0] * v[1] - r[1] * v[0]) + w * v[2]};
+    return Point{v[0] + 2 * (r[1] * z[2] - r[2] * z[1]),
+                 v[1] + 2 * (r[2] * z[0] - r[0] * z[2]),
+                 v[2] + 2 * (r[0] * z[1] - r[1] * z[0])};
   }
 
   template <typename Point>
   KOKKOS_FUNCTION auto rotate_back(Point const &point) const
   {
     static_assert(GeometryTraits::dimension_v<Point> == 3);
-    Details::quaternion<Coordinate> p(0, point[0], point[1], point[2]);
-    auto pnew = _q * p * conj(_q);
-    return Point{pnew.imag_i(), pnew.imag_j(), pnew.imag_k()};
+    // w = real part
+    // r = imaginary part vector
+    // Then, Rodrigues formula is
+    // v = v + 2r x (r x v + wv)
+    Coordinate w = _q.real();
+    auto const &v = point;
+    Coordinate r[3] = {_q.imag_i(), _q.imag_j(), _q.imag_k()};
+    Coordinate z[3] = {(r[1] * v[2] - r[2] * v[1]) + w * v[0],
+                       (r[2] * v[0] - r[0] * v[2]) + w * v[1],
+                       (r[0] * v[1] - r[1] * v[0]) + w * v[2]};
+    return Point{v[0] + 2 * (r[1] * z[2] - r[2] * z[1]),
+                 v[1] + 2 * (r[2] * z[0] - r[0] * z[2]),
+                 v[2] + 2 * (r[0] * z[1] - r[1] * z[0])};
   }
 };
-#endif
 
 template <int DIM, typename Coordinate>
 KOKKOS_INLINE_FUNCTION bool operator==(Rotation<DIM, Coordinate> const &l,
