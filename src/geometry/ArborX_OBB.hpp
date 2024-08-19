@@ -15,6 +15,7 @@
 #include <ArborX_DetailsAlgorithms.hpp>
 #include <ArborX_DetailsContainers.hpp> // StaticVector
 #include <ArborX_DetailsKokkosExtArithmeticTraits.hpp>
+#include <ArborX_DetailsQuaternion.hpp>
 #include <ArborX_DetailsSymmetricSVD.hpp>
 #include <ArborX_DetailsUtils.hpp>
 #include <ArborX_DetailsVector.hpp>
@@ -34,15 +35,169 @@ template <typename T>
 using UnmanagedViewWrapper =
     Kokkos::View<T, Kokkos::AnonymousSpace,
                  Kokkos::MemoryTraits<Kokkos::Unmanaged>>;
+
+template <int DIM, typename Coordinate>
+struct Rotation
+{
+  // Rotation (i.e., ortho-normal) matrix
+  // Normalized eigenvectors are stores in columns.
+  // The inverse is the transpose.
+  Coordinate _matrix[DIM * DIM];
+
+  KOKKOS_FUNCTION
+  Rotation()
+  {
+    auto U = matrix();
+    // Set matrix to identity
+    for (int i = 0; i < DIM; ++i)
+      for (int j = 0; j < DIM; ++j)
+        U(i, j) = (i == j ? 1 : 0);
+  }
+
+  KOKKOS_FUNCTION
+  Rotation(UnmanagedViewWrapper<Coordinate[DIM][DIM]> const &A)
+  {
+    auto U = matrix();
+    for (int i = 0; i < DIM; ++i)
+      for (int j = 0; j < DIM; ++j)
+        U(i, j) = A(i, j);
+  }
+
+  KOKKOS_FUNCTION auto matrix()
+  {
+    return UnmanagedViewWrapper<Coordinate[DIM][DIM]>(_matrix);
+  }
+
+  KOKKOS_FUNCTION auto matrix() const
+  {
+    return UnmanagedViewWrapper<const Coordinate[DIM][DIM]>(_matrix);
+  }
+
+  template <typename Point>
+  KOKKOS_FUNCTION auto rotate(Point const &point) const
+  {
+    static_assert(GeometryTraits::is_point_v<Point>);
+    static_assert(GeometryTraits::dimension_v<Point> == DIM);
+
+    auto const U = matrix();
+
+    // Use matrix transpose
+    Point p;
+    for (int row = 0; row < DIM; ++row)
+    {
+      p[row] = 0;
+      for (int col = 0; col < DIM; ++col)
+        p[row] += U(col, row) * point[col];
+    }
+    return p;
+  }
+
+  template <typename Point>
+  KOKKOS_FUNCTION auto rotate_back(Point const &point) const
+  {
+    static_assert(GeometryTraits::is_point_v<Point>);
+    static_assert(GeometryTraits::dimension_v<Point> == DIM);
+
+    auto const U = matrix();
+
+    Point p;
+    for (int row = 0; row < DIM; ++row)
+    {
+      p[row] = 0;
+      for (int col = 0; col < DIM; ++col)
+        p[row] += U(row, col) * point[col];
+    }
+    return p;
+  }
+};
+
+#if 0
+// Use quaternions for 3D rotations
+template <typename Coordinate>
+struct Rotation<3, Coordinate>
+{
+  Details::quaternion<Coordinate> _q{1};
+
+  KOKKOS_DEFAULTED_FUNCTION Rotation() = default;
+
+  KOKKOS_FUNCTION
+  Rotation(UnmanagedViewWrapper<Coordinate[3][3]> const &U)
+  {
+    auto r11 = U(0, 0);
+    auto r12 = U(0, 1);
+    auto r13 = U(0, 2);
+    auto r21 = U(1, 0);
+    auto r22 = U(1, 1);
+    auto r23 = U(1, 2);
+    auto r31 = U(2, 0);
+    auto r32 = U(2, 1);
+    auto r33 = U(2, 2);
+
+    using Kokkos::sqrt;
+    auto q0 = sqrt(1 + r11 + r22 + r33) / 2;
+    auto q1 = sqrt(1 + r11 - r22 - r33) / 2;
+    auto q2 = sqrt(1 - r11 + r22 - r33) / 2;
+    auto q3 = sqrt(1 - r11 - r22 + r33) / 2;
+
+    if (q0 >= q1 && q0 >= q2 && q0 >= q3)
+      _q = {q0, (r32 - r23) / (4 * q0), (r13 - r31) / (4 * q0),
+            (r21 - r12) / (4 * q0)};
+    else if (q1 >= q0 && q1 >= q2 && q1 >= q3)
+      _q = {(r32 - r23) / (4 * q1), q1, (r12 + r21) / (4 * q1),
+            (r13 + r31) / (4 * q1)};
+    else if (q2 >= q0 && q2 >= q1 && q2 >= q3)
+      _q = {(r13 - r31) / (4 * q2), (r12 + r21) / (4 * q2), q2,
+            (r23 + r32) / (4 * q2)};
+    else
+      _q = {(r21 - r12) / (4 * q3), (r13 + r31) / (4 * q3),
+            (r23 + r32) / (4 * q3), q3};
+  }
+
+  template <typename Point>
+  KOKKOS_FUNCTION auto rotate(Point const &point) const
+  {
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    Details::quaternion<Coordinate> p(0, point[0], point[1], point[2]);
+    // can use conj() instead of inv() because it is a rotation quaternion
+    auto pnew = conj(_q) * p * _q;
+    return Point{pnew.imag_i(), pnew.imag_j(), pnew.imag_k()};
+  }
+
+  template <typename Point>
+  KOKKOS_FUNCTION auto rotate_back(Point const &point) const
+  {
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    Details::quaternion<Coordinate> p(0, point[0], point[1], point[2]);
+    auto pnew = _q * p * conj(_q);
+    return Point{pnew.imag_i(), pnew.imag_j(), pnew.imag_k()};
+  }
+};
+#endif
+
+template <int DIM, typename Coordinate>
+KOKKOS_INLINE_FUNCTION bool operator==(Rotation<DIM, Coordinate> const &l,
+                                       Rotation<DIM, Coordinate> const &r)
+{
+  if constexpr (DIM != 3)
+  {
+    for (int i = 0; i < DIM; ++i)
+      for (int j = 0; j < DIM; ++j)
+        if (l.matrix()(i, j) != r.matrix()(i, j))
+          return false;
+    return true;
+  }
+  else
+  {
+    return l._q == r._q;
+  }
 }
+
+} // namespace
 
 template <int DIM, typename Coordinate = float>
 struct OBB
 {
-  // Ortho-normal transformation matrix
-  // Normalized eigenvectors are stores in columns.
-  // The inverse is the transpose.
-  Coordinate _matrix[DIM * DIM];
+  Rotation<DIM, Coordinate> _rotation;
 
   // Box in the new coordinate system
   ExperimentalHyperGeometry::Box<DIM, Coordinate> _box;
@@ -63,15 +218,8 @@ struct OBB
     int const n = points.size();
     KOKKOS_ASSERT(n > 0);
 
-    auto mat = matrix();
-
     if (n == 1)
     {
-      // Set matrix to identity
-      for (int i = 0; i < DIM; ++i)
-        for (int j = 0; j < DIM; ++j)
-          mat(i, j) = (i == j ? 1 : 0);
-
       Details::expand(_box, points[0]);
       return;
     }
@@ -107,13 +255,17 @@ struct OBB
 
     // Find the orthonormalized eigenvectors and store them
     Coordinate d_data[DIM];
+    Coordinate u_data[DIM * DIM];
     UnmanagedViewWrapper<Coordinate[DIM]> D(d_data);
+    UnmanagedViewWrapper<Coordinate[DIM][DIM]> U(u_data);
 
-    Interpolation::Details::symmetricSVDKernel(cov, D, mat);
+    Interpolation::Details::symmetricSVDKernel(cov, D, U);
+
+    _rotation = Rotation(U);
 
     // Find extents by projecting points
     for (int i = 0; i < n; ++i)
-      Details::expand(_box, transform(points(i)));
+      Details::expand(_box, rotate(points(i)));
   }
 
   template <int N>
@@ -123,51 +275,16 @@ struct OBB
             const ExperimentalHyperGeometry::Point<DIM, Coordinate>[N]>(points))
   {}
 
-  KOKKOS_FUNCTION auto matrix()
+  template <typename Point>
+  KOKKOS_FUNCTION auto rotate(Point const &point) const
   {
-    return UnmanagedViewWrapper<Coordinate[DIM][DIM]>(_matrix);
-  }
-
-  KOKKOS_FUNCTION auto matrix() const
-  {
-    return UnmanagedViewWrapper<const Coordinate[DIM][DIM]>(_matrix);
+    return _rotation.rotate(point);
   }
 
   template <typename Point>
-  KOKKOS_FUNCTION auto transform(Point const &point) const
+  KOKKOS_FUNCTION auto rotate_back(Point const &point) const
   {
-    static_assert(GeometryTraits::is_point_v<Point>);
-    static_assert(GeometryTraits::dimension_v<Point> == DIM);
-
-    auto const &mat = matrix();
-
-    // Use matrix transpose
-    Point p;
-    for (int row = 0; row < DIM; ++row)
-    {
-      p[row] = 0;
-      for (int col = 0; col < DIM; ++col)
-        p[row] += mat(col, row) * point[col];
-    }
-    return p;
-  }
-
-  template <typename Point>
-  KOKKOS_FUNCTION auto transform_back(Point const &point) const
-  {
-    static_assert(GeometryTraits::is_point_v<Point>);
-    static_assert(GeometryTraits::dimension_v<Point> == DIM);
-
-    auto const &mat = matrix();
-
-    Point p;
-    for (int row = 0; row < DIM; ++row)
-    {
-      p[row] = 0;
-      for (int col = 0; col < DIM; ++col)
-        p[row] += mat(row, col) * point[col];
-    }
-    return p;
+    return _rotation.rotate_back(point);
   }
 
   KOKKOS_FUNCTION auto corners() const
@@ -187,7 +304,7 @@ struct OBB
       Details::StaticVector<Point, 4> points;
       for (int i = 0; i < num_unique_xs; ++i)
         for (int j = 0; j < num_unique_ys; ++j)
-          points.emplaceBack(transform_back(Point{xs[i], ys[j]}));
+          points.emplaceBack(rotate_back(Point{xs[i], ys[j]}));
       return points;
     }
     else
@@ -198,7 +315,7 @@ struct OBB
       for (int i = 0; i < num_unique_xs; ++i)
         for (int j = 0; j < num_unique_ys; ++j)
           for (int k = 0; k < num_unique_zs; ++k)
-            points.emplaceBack(transform_back(Point{xs[i], ys[j], zs[k]}));
+            points.emplaceBack(rotate_back(Point{xs[i], ys[j], zs[k]}));
       return points;
     }
   }
@@ -240,12 +357,7 @@ struct equals<OBBTag, OBB>
 {
   KOKKOS_FUNCTION static constexpr bool apply(OBB const &l, OBB const &r)
   {
-    constexpr int DIM = GeometryTraits::dimension_v<OBB>;
-    for (int i = 0; i < DIM; ++i)
-      for (int j = 0; j < DIM; ++j)
-        if (l.matrix()(i, j) != r.matrix()(i, j))
-          return false;
-    return Details::equals(l._box, r._box);
+    return l._rotation == r._rotation && Details::equals(l._box, r._box);
   }
 };
 
@@ -305,13 +417,7 @@ struct expand<OBBTag, BoxTag, OBB, Box>
 {
   KOKKOS_FUNCTION static void apply(OBB &obb, Box const &box)
   {
-    constexpr int DIM = GeometryTraits::dimension_v<OBB>;
-
     OBB other;
-    // Set matrix to identity
-    for (int i = 0; i < DIM; ++i)
-      for (int j = 0; j < DIM; ++j)
-        other.matrix()(i, j) = (i == j ? 1 : 0);
     // FIXME: doing expand instead of _box = box to accomodate both regular and
     // hyper-dimensional box
     Details::expand(other._box, box);
@@ -466,7 +572,7 @@ struct centroid<OBBTag, OBB>
 {
   KOKKOS_FUNCTION static auto apply(OBB const &obb)
   {
-    return obb.transform_back(Details::returnCentroid(obb._box));
+    return obb.rotate_back(Details::returnCentroid(obb._box));
   }
 };
 
@@ -476,7 +582,7 @@ struct intersects<PointTag, OBBTag, Point, OBB>
   KOKKOS_FUNCTION static constexpr bool apply(Point const &point,
                                               OBB const &obb)
   {
-    return Details::intersects(obb.transform(point), obb._box);
+    return Details::intersects(obb.rotate(point), obb._box);
   }
 };
 
@@ -487,7 +593,7 @@ struct intersects<SphereTag, OBBTag, Sphere, OBB>
                                               OBB const &obb)
   {
     return Details::intersects(
-        Sphere{obb.transform(sphere.centroid()), sphere.radius()}, obb._box);
+        Sphere{obb.rotate(sphere.centroid()), sphere.radius()}, obb._box);
   }
 };
 
@@ -496,7 +602,7 @@ struct distance<PointTag, OBBTag, Point, OBB>
 {
   KOKKOS_FUNCTION static auto apply(Point const &point, OBB const &obb)
   {
-    return Details::distance(obb.transform(point), obb._box);
+    return Details::distance(obb.rotate(point), obb._box);
   }
 };
 
