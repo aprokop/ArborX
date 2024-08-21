@@ -11,6 +11,7 @@
 
 #include <ArborXBenchmark_PointClouds.hpp>
 #include <ArborX_BoostRTreeHelpers.hpp>
+#include <ArborX_KDOP.hpp>
 #include <ArborX_LinearBVH.hpp>
 #include <ArborX_Version.hpp>
 
@@ -35,8 +36,10 @@ struct BenchmarkRegistration
   BenchmarkRegistration(Spec const &, std::string const &) {}
 };
 
-template <typename ExecutionSpace, typename MemorySpace>
-struct BenchmarkRegistration<ExecutionSpace, ArborX::BVH<MemorySpace>>
+template <typename ExecutionSpace, typename MemorySpace,
+          typename BoundingVolume>
+struct BenchmarkRegistration<ExecutionSpace,
+                             ArborX::BVH<MemorySpace, BoundingVolume>>
 {
   using TreeType = ArborX::BVH<MemorySpace>;
   BenchmarkRegistration(Spec const &spec, std::string const &description)
@@ -47,10 +50,10 @@ struct BenchmarkRegistration<ExecutionSpace, ArborX::BVH<MemorySpace>>
         spec, description);
     register_benchmark_spatial_query_callback<ExecutionSpace, TreeType>(
         spec, description);
-    register_benchmark_nearest_query_no_callback<ExecutionSpace, TreeType>(
-        spec, description);
-    register_benchmark_nearest_query_callback<ExecutionSpace, TreeType>(
-        spec, description);
+    // register_benchmark_nearest_query_no_callback<ExecutionSpace, TreeType>(
+    // spec, description);
+    // register_benchmark_nearest_query_callback<ExecutionSpace, TreeType>(
+    // spec, description);
   }
 };
 
@@ -64,15 +67,16 @@ struct BenchmarkRegistration<ExecutionSpace, BoostExt::RTree<ArborX::Point>>
                                                               description);
     register_benchmark_spatial_query_no_callback<ExecutionSpace, TreeType>(
         spec, description);
-    register_benchmark_nearest_query_no_callback<ExecutionSpace, TreeType>(
-        spec, description);
+    // register_benchmark_nearest_query_no_callback<ExecutionSpace, TreeType>(
+    // spec, description);
   }
 };
 
 template <typename ExecutionSpace>
 using BVHBenchmarkRegistration =
     BenchmarkRegistration<ExecutionSpace,
-                          ArborX::BVH<typename ExecutionSpace::memory_space>>;
+                          ArborX::BVH<typename ExecutionSpace::memory_space,
+                                      ArborX::Experimental::KDOP<3, 6>>>;
 void register_bvh_benchmarks(Spec const &spec)
 {
 #ifdef KOKKOS_ENABLE_SERIAL
@@ -134,6 +138,7 @@ void register_bvh_benchmarks(Spec const &spec)
 #endif
 }
 
+#if 0
 void register_boostrtree_benchmarks(Spec const &spec)
 {
 #ifdef KOKKOS_ENABLE_SERIAL
@@ -144,6 +149,7 @@ void register_boostrtree_benchmarks(Spec const &spec)
   std::ignore = spec;
 #endif
 }
+#endif
 
 // NOTE Motivation for this class that stores the argument count and values is
 // I could not figure out how to make the parser consume arguments with
@@ -286,7 +292,7 @@ int main(int argc, char *argv[])
   for (auto const &spec : specs)
   {
     register_bvh_benchmarks(spec);
-    register_boostrtree_benchmarks(spec);
+    // register_boostrtree_benchmarks(spec);
   }
 
   benchmark::RunSpecifiedBenchmarks();

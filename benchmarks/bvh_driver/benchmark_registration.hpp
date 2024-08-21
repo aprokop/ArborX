@@ -120,7 +120,7 @@ constructPoints(int n_values, ArborXBenchmark::PointCloudType point_cloud_type)
 }
 
 template <typename DeviceType>
-Kokkos::View<decltype(ArborX::intersects(ArborX::Sphere{})) *, DeviceType>
+Kokkos::View<decltype(ArborX::intersects(ArborX::Point{})) *, DeviceType>
 makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
                    ArborXBenchmark::PointCloudType target_point_cloud_type)
 {
@@ -135,7 +135,7 @@ makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
   ArborXBenchmark::generatePointCloud(exec, target_point_cloud_type, a,
                                       random_points);
 
-  Kokkos::View<decltype(ArborX::intersects(ArborX::Sphere{})) *, DeviceType>
+  Kokkos::View<decltype(ArborX::intersects(ArborX::Point{})) *, DeviceType>
       queries(
           Kokkos::view_alloc(Kokkos::WithoutInitializing, "Benchmark::queries"),
           n_queries);
@@ -144,11 +144,12 @@ makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
   // Calculation: n_values*(4/3*pi*r^3)/(2a)^3 = n_neighbors
   double const r = std::cbrt(static_cast<double>(n_neighbors) * 6. /
                              Kokkos::numbers::pi_v<double>);
+  std::ignore = r;
   Kokkos::parallel_for(
       "Benchmark::setup_radius_search_queries",
       Kokkos::RangePolicy<ExecutionSpace>(exec, 0, n_queries),
       KOKKOS_LAMBDA(int i) {
-        queries(i) = ArborX::intersects(ArborX::Sphere{random_points(i), r});
+        queries(i) = ArborX::intersects(random_points(i));
       });
   return queries;
 }
@@ -407,6 +408,7 @@ void register_benchmark_spatial_query_callback(Spec const &spec,
       ->Unit(benchmark::kMicrosecond);
 }
 
+#if 0
 template <typename ExecutionSpace, typename TreeType>
 void register_benchmark_nearest_query_no_callback(
     Spec const &spec, std::string const &description)
@@ -432,5 +434,6 @@ void register_benchmark_nearest_query_callback(Spec const &spec,
       ->UseManualTime()
       ->Unit(benchmark::kMicrosecond);
 }
+#endif
 
 #endif
