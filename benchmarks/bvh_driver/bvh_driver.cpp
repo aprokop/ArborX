@@ -11,6 +11,7 @@
 
 #include <ArborXBenchmark_PointClouds.hpp>
 #include <ArborX_BoostRTreeHelpers.hpp>
+#include <ArborX_KDOP.hpp>
 #include <ArborX_LinearBVH.hpp>
 #include <ArborX_Version.hpp>
 
@@ -36,20 +37,23 @@ struct BenchmarkRegistration
     if constexpr (!is_boost_rtree_v<TreeType>)
       register_benchmark_spatial_query_callback<ExecutionSpace, TreeType>(
           spec, description);
+#if 0
     register_benchmark_nearest_query_no_callback<ExecutionSpace, TreeType>(
         spec, description);
     if constexpr (!is_boost_rtree_v<TreeType>)
       register_benchmark_nearest_query_callback<ExecutionSpace, TreeType>(
           spec, description);
+#endif
   }
 };
 
 template <typename ExecutionSpace>
 using BVHBenchmarkRegistration = BenchmarkRegistration<
-    ExecutionSpace, ArborX::BoundingVolumeHierarchy<
-                        typename ExecutionSpace::memory_space, int,
-                        Kokkos::View<ArborX::Point<3> *,
-                                     typename ExecutionSpace::memory_space>>>;
+    ExecutionSpace,
+    ArborX::BoundingVolumeHierarchy<
+        typename ExecutionSpace::memory_space, int,
+        Kokkos::View<ArborX::Point<3> *, typename ExecutionSpace::memory_space>,
+        ArborX::Experimental::KDOP<3, 6>>>;
 
 void register_bvh_benchmarks(Spec const &spec)
 {
@@ -119,9 +123,9 @@ void register_boostrtree_benchmarks(Spec const &spec)
 // Benchmark removes its own arguments from the command line arguments. This
 // means, that by virtue of returning references to internal data members in
 // argc() and argv() function, it will necessarily modify the members. It will
-// decrease _argc, and "reduce" _argv data. Hence, we must keep a copy of _argv
-// that is not modified from the outside to release memory in the destructor
-// correctly.
+// decrease _argc, and "reduce" _argv data. Hence, we must keep a copy of
+// _argv that is not modified from the outside to release memory in the
+// destructor correctly.
 class CmdLineArgs
 {
 private:
@@ -248,7 +252,7 @@ int main(int argc, char *argv[])
   for (auto const &spec : specs)
   {
     register_bvh_benchmarks(spec);
-    register_boostrtree_benchmarks(spec);
+    // register_boostrtree_benchmarks(spec);
   }
 
   benchmark::RunSpecifiedBenchmarks();

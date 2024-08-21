@@ -182,7 +182,8 @@ auto makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
   double const r = std::cbrt(static_cast<double>(n_neighbors) * 6. /
                              std::numbers::pi_v<double>);
 
-  return ArborX::Experimental::make_intersects(random_points, r);
+  // return ArborX::Experimental::make_intersects(random_points, r);
+  return ArborX::Experimental::make_intersects(random_points);
 }
 
 template <typename DeviceType>
