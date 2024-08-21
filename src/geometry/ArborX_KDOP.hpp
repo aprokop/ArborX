@@ -22,130 +22,138 @@
 #include <Kokkos_Array.hpp>
 #include <Kokkos_Macros.hpp>
 
+#include <utility>
+
 namespace ArborX
 {
 namespace Details
 {
-template <int DIM, int k, typename Coordinate>
+template <int DIM, int k>
 struct KDOP_Directions;
 
-template <typename Coordinate>
-struct KDOP_Directions<2, 4, Coordinate>
+template <>
+struct KDOP_Directions<2, 4>
 {
   static constexpr int n_directions = 2;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<2, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0},
-        Direction{0, 1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 2);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0) return p[0]; // (1, 0)
+    else if constexpr (D == 1) return p[1]; // (0, 1)
+    // clang-format on
   }
 };
 
-template <typename Coordinate>
-struct KDOP_Directions<2, 8, Coordinate>
+template <>
+struct KDOP_Directions<2, 8>
 {
   static constexpr int n_directions = 4;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<2, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0},
-        Direction{0, 1},
-        Direction{1, 1},
-        Direction{1, -1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 2);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0) return p[0];        // (1, 0)
+    else if constexpr (D == 1) return p[1];        // (0, 1)
+    else if constexpr (D == 2) return p[0] + p[1]; // (1, 1)
+    else if constexpr (D == 3) return p[0] - p[1]; // (1, -1)
+    //clang-format on
   }
 };
 
-template <typename Coordinate>
-struct KDOP_Directions<3, 6, Coordinate>
+template<>
+struct KDOP_Directions<3, 6>
 {
   static constexpr int n_directions = 3;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<3, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0, 0},
-        Direction{0, 1, 0},
-        Direction{0, 0, 1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0) return p[0]; // (1, 0, 0)
+    else if constexpr (D == 1) return p[1]; // (0, 1, 0)
+    else if constexpr (D == 2) return p[2]; // (0, 0, 1)
+    // clang-format on
   }
 };
 
-template <typename Coordinate>
-struct KDOP_Directions<3, 14, Coordinate>
+template <>
+struct KDOP_Directions<3, 14>
 {
   static constexpr int n_directions = 7;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<3, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0, 0},
-        Direction{0, 1, 0},
-        Direction{0, 0, 1},
-        // corners
-        Direction{1, 1, 1},
-        Direction{1, -1, 1},
-        Direction{1, 1, -1},
-        Direction{1, -1, -1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0) return p[0]; // (1, 0, 0)
+    else if constexpr (D == 1) return p[1]; // (0, 1, 0)
+    else if constexpr (D == 2) return p[2]; // (0, 0, 1)
+                                            // corners
+    else if constexpr (D == 3) return p[0] + p[1] + p[2]; // (1, 1, 1)
+    else if constexpr (D == 4) return p[0] - p[1] + p[2]; // (1, -1, 1)
+    else if constexpr (D == 5) return p[0] + p[1] - p[2]; // (1, 1, -1)
+    else if constexpr (D == 6) return p[0] - p[1] - p[2]; // (1, -1, -1)
+    // clang-format on
   }
 };
 
-template <typename Coordinate>
-struct KDOP_Directions<3, 18, Coordinate>
+template <>
+struct KDOP_Directions<3, 18>
 {
   static constexpr int n_directions = 9;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<3, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0, 0},
-        Direction{0, 1, 0},
-        Direction{0, 0, 1},
-        // edges
-        Direction{1, 1, 0},
-        Direction{1, 0, 1},
-        Direction{0, 1, 1},
-        Direction{1, -1, 0},
-        Direction{1, 0, -1},
-        Direction{0, 1, -1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0) return p[0]; // (1, 0, 0)
+    else if constexpr (D == 1) return p[1]; // (0, 1, 0)
+    else if constexpr (D == 2) return p[2]; // (0, 0, 1)
+                                            // edges
+    else if constexpr (D == 3) return p[0] + p[1]; // (1, 1, 0)
+    else if constexpr (D == 4) return p[0] + p[2]; // (1, 0, 1)
+    else if constexpr (D == 5) return p[1] + p[2]; // (0, 1, 1)
+    else if constexpr (D == 6) return p[0] - p[1]; // (1, -1, 0)
+    else if constexpr (D == 7) return p[0] - p[2]; // (1, 0, -1)
+    else if constexpr (D == 8) return p[1] - p[2]; // (0, 1, -1)
+    // clang-format on
   }
 };
 
-template <typename Coordinate>
-struct KDOP_Directions<3, 26, Coordinate>
+template <>
+struct KDOP_Directions<3, 26>
 {
   static constexpr int n_directions = 13;
-  static KOKKOS_FUNCTION auto const &directions()
+  template <unsigned D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
   {
-    using Direction = Vector<3, Coordinate>;
-    static constexpr Kokkos::Array<Direction, n_directions> directions = {
-        Direction{1, 0, 0},
-        Direction{0, 1, 0},
-        Direction{0, 0, 1},
-        // edges
-        Direction{1, 1, 0},
-        Direction{1, 0, 1},
-        Direction{0, 1, 1},
-        Direction{1, -1, 0},
-        Direction{1, 0, -1},
-        Direction{0, 1, -1},
-        // corners
-        Direction{1, 1, 1},
-        Direction{1, -1, 1},
-        Direction{1, 1, -1},
-        Direction{1, -1, -1},
-    };
-    return directions;
+    static_assert(GeometryTraits::dimension_v<Point> == 3);
+    static_assert(D < n_directions);
+    // clang-format off
+    if      constexpr (D == 0)  return p[0]; // (1, 0, 0)
+    else if constexpr (D == 1)  return p[1]; // (0, 1, 0)
+    else if constexpr (D == 2)  return p[2]; // (0, 0, 1)
+                                             // edges
+    else if constexpr (D == 3)  return p[0] + p[1]; // (1, 1, 0)
+    else if constexpr (D == 4)  return p[0] + p[2]; // (1, 0, 1)
+    else if constexpr (D == 5)  return p[1] + p[2]; // (0, 1, 1)
+    else if constexpr (D == 6)  return p[0] - p[1]; // (1, -1, 0)
+    else if constexpr (D == 7)  return p[0] - p[2]; // (1, 0, -1)
+    else if constexpr (D == 8)  return p[1] - p[2]; // (0, 1, -1)
+                                             // corners
+    else if constexpr (D == 9)  return p[0] + p[1] + p[2]; // (1, 1, 1)
+    else if constexpr (D == 10) return p[0] - p[1] + p[2]; // (1, -1, 1)
+    else if constexpr (D == 11) return p[0] + p[1] - p[2]; // (1, 1, -1)
+    else if constexpr (D == 12) return p[0] - p[1] - p[2]; // (1, -1, -1)
+    // clang-format on
   }
 };
 } // namespace Details
@@ -154,10 +162,10 @@ namespace Experimental
 {
 
 template <int DIM, int k, typename Coordinate = float>
-struct KDOP : public Details::KDOP_Directions<DIM, k, Coordinate>
+struct KDOP : public Details::KDOP_Directions<DIM, k>
 {
   static constexpr int n_directions =
-      Details::KDOP_Directions<DIM, k, Coordinate>::n_directions;
+      Details::KDOP_Directions<DIM, k>::n_directions;
   Kokkos::Array<Coordinate, n_directions> _min_values;
   Kokkos::Array<Coordinate, n_directions> _max_values;
 
@@ -170,6 +178,12 @@ struct KDOP : public Details::KDOP_Directions<DIM, k, Coordinate>
       _max_values[i] =
           Details::KokkosExt::ArithmeticTraits::finite_min<Coordinate>::value;
     }
+  }
+
+  template <int D, typename Point>
+  static KOKKOS_FUNCTION auto project(Point const &p)
+  {
+    return Details::KDOP_Directions<DIM, k>::template project<D>(p);
   }
 
   KOKKOS_FUNCTION explicit operator Box() const
@@ -225,23 +239,28 @@ struct expand<KDOPTag, KDOPTag, KDOP1, KDOP2>
 template <typename KDOP, typename Point>
 struct expand<KDOPTag, PointTag, KDOP, Point>
 {
-  KOKKOS_FUNCTION static void apply(KDOP &kdop, Point const &point)
+  template <size_t D>
+  KOKKOS_FUNCTION static void kernel(KDOP &kdop, Point const &point)
   {
     using Details::KokkosExt::max;
     using Details::KokkosExt::min;
 
-    constexpr int DIM = GeometryTraits::dimension_v<Point>;
-    constexpr int n_directions = KDOP::n_directions;
-    for (int i = 0; i < n_directions; ++i)
-    {
-      auto const &dir = kdop.directions()[i];
-      auto proj_i = point[0] * dir[0];
-      for (int d = 1; d < DIM; ++d)
-        proj_i += point[d] * dir[d];
+    auto proj = KDOP::template project<D, Point>(point);
+    kdop._min_values[D] = min(kdop._min_values[D], proj);
+    kdop._max_values[D] = max(kdop._max_values[D], proj);
+  }
+  template <size_t... I>
+  KOKKOS_FUNCTION static void apply_kernel(KDOP &kdop, Point const &point,
+                                           std::index_sequence<I...>)
+  {
+    auto unfold = {(kernel<I>(kdop, point), 0)...};
+    std::ignore = unfold;
+  }
 
-      kdop._min_values[i] = min(kdop._min_values[i], proj_i);
-      kdop._max_values[i] = max(kdop._max_values[i], proj_i);
-    }
+  KOKKOS_FUNCTION static void apply(KDOP &kdop, Point const &point)
+  {
+    constexpr int n_directions = KDOP::n_directions;
+    apply_kernel(kdop, point, std::make_index_sequence<n_directions>());
   }
 };
 
@@ -256,8 +275,8 @@ struct expand<KDOPTag, BoxTag, KDOP, Box>
     // NOTE if any of the ranges is invalid, the code below would actually
     // expand the KDOP which is not what we want.
     // We may revisit this later and decide passing a valid box becomes a
-    // precondition but this would be a breaking change (going from a wide to a
-    // narrow contract).
+    // precondition but this would be a breaking change (going from a wide
+    // to a narrow contract).
     for (int d = 0; d < DIM; ++d)
       if (box.minCorner()[d] > box.maxCorner()[d])
         return;
@@ -345,22 +364,23 @@ struct intersects<BoxTag, KDOPTag, Box, KDOP>
 template <typename Point, typename KDOP>
 struct intersects<PointTag, KDOPTag, Point, KDOP>
 {
+  template <size_t D>
+  KOKKOS_FUNCTION static bool kernel(KDOP const &kdop, Point const &point)
+  {
+    auto proj = KDOP::template project<D, Point>(point);
+    return (proj >= kdop._min_values[D] && proj <= kdop._max_values[D]);
+  }
+  template <size_t... I>
+  KOKKOS_FUNCTION static bool apply_kernel(KDOP const &kdop, Point const &point,
+                                           std::index_sequence<I...>)
+  {
+    return (kernel<I>(kdop, point) && ...);
+  }
   KOKKOS_FUNCTION static constexpr bool apply(Point const &point,
                                               KDOP const &kdop)
   {
-    constexpr int DIM = GeometryTraits::dimension_v<Point>;
     constexpr int n_directions = KDOP::n_directions;
-    for (int i = 0; i < n_directions; ++i)
-    {
-      auto const &dir = kdop.directions()[i];
-      auto proj_i = point[0] * dir[0];
-      for (int d = 1; d < DIM; ++d)
-        proj_i += point[d] * dir[d];
-
-      if (proj_i < kdop._min_values[i] || proj_i > kdop._max_values[i])
-        return false;
-    }
-    return true;
+    return apply_kernel(kdop, point, std::make_index_sequence<n_directions>());
   }
 };
 
