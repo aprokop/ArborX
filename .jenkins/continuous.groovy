@@ -430,6 +430,7 @@ pipeline {
                                     -D MPIEXEC_PREFLAGS="--allow-run-as-root" \
                                     -D MPIEXEC_MAX_NUMPROCS=4 \
                                     -D ARBORX_ENABLE_TESTS=ON \
+                                    -D ARBORX_ENABLE_HEADER_SELF_CONTAINMENT_TESTS=OFF \
                                     -D ARBORX_ENABLE_EXAMPLES=ON \
                                     -D ARBORX_ENABLE_BENCHMARKS=ON \
                                     -D ARBORX_ENABLE_ONEDPL=ON \
