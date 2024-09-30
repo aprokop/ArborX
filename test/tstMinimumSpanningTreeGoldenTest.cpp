@@ -21,6 +21,7 @@
 #include <fstream>
 #include <map>
 #include <numeric> // accumulate
+#include <string_view>
 
 namespace Test
 {
@@ -40,7 +41,7 @@ private:
   }
 };
 
-auto parsePointsFromCSVFile(std::string const &filename)
+auto parsePointsFromCSVFile(std::string_view filename)
 {
   std::fstream fin(filename, std::ios::in);
   using Tokenizer = boost::tokenizer<boost::escaped_list_separator<char>>;
@@ -59,7 +60,7 @@ auto parsePointsFromCSVFile(std::string const &filename)
   return points;
 }
 
-auto parseEdgesFromCSVFile(std::string const &filename)
+auto parseEdgesFromCSVFile(std::string_view filename)
 {
   std::fstream fin(filename, std::ios::in);
   using Tokenizer = boost::tokenizer<boost::escaped_list_separator<char>>;

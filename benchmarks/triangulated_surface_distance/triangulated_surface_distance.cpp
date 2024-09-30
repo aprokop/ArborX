@@ -21,6 +21,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include "generator.hpp"
 
@@ -67,7 +68,7 @@ struct DistanceCallback
 };
 
 template <typename Points, typename Triangles>
-void writeVtk(std::string const &filename, Points const &vertices,
+void writeVtk(std::string_view filename, Points const &vertices,
               Triangles const &triangles)
 {
   int const num_vertices = vertices.size();

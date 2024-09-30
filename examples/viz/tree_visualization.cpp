@@ -21,11 +21,12 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <string_view>
 
 // FIXME: this is a temporary place for loadPointCloud and writePointCloud
 // Right now, only loadPointCloud is being used, and only in this example
 template <typename Points>
-void loadPointCloud(std::string const &filename, Points &random_points)
+void loadPointCloud(std::string_view filename, Points &random_points)
 {
   static_assert(Kokkos::is_view_v<Points>);
   static_assert(Points::rank == 1);
@@ -52,7 +53,7 @@ void loadPointCloud(std::string const &filename, Points &random_points)
 }
 
 template <typename Points>
-void writePointCloud(Points random_points, std::string const &filename)
+void writePointCloud(Points random_points, std::string_view filename)
 {
   static_assert(Kokkos::is_view_v<Points>);
   static_assert(Points::rank == 1);
@@ -84,7 +85,7 @@ void printPointCloud(View points, std::ostream &os)
        << ") {\\textbullet};\n";
 }
 
-void viz(std::string const &prefix, std::string const &infile, int n_neighbors)
+void viz(std::string const &prefix, std::string_view infile, int n_neighbors)
 {
   using ExecutionSpace = Kokkos::DefaultHostExecutionSpace;
   using DeviceType = ExecutionSpace::device_type;

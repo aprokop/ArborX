@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <random>
+#include <string_view>
 #include <vector>
 
 using ArborX::Point;
@@ -52,9 +53,8 @@ std::vector<Point<DIM>> sampleData(std::vector<Point<DIM>> const &data,
 }
 
 template <int DIM>
-std::vector<Point<DIM>> loadData(std::string const &filename,
-                                 bool binary = true, int max_num_points = -1,
-                                 int num_samples = -1)
+auto loadData(std::string_view filename, bool binary = true,
+              int max_num_points = -1, int num_samples = -1)
 {
   std::cout << "Reading in \"" << filename << "\" in "
             << (binary ? "binary" : "text") << " mode...";

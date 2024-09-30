@@ -20,6 +20,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <string_view>
 
 #include "data.hpp"
 #include "dbscan.hpp"
@@ -28,7 +29,7 @@
 using ArborX::Point;
 
 template <typename MemorySpace>
-void writeLabelsData(std::string const &filename,
+void writeLabelsData(std::string_view filename,
                      Kokkos::View<int *, MemorySpace> labels)
 {
   std::ofstream out(filename, std::ofstream::binary);

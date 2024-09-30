@@ -26,8 +26,8 @@ using CommonValueType =
                                 typename V::non_const_value_type>::type;
 
 template <typename U, typename V>
-void arborxViewCheck(U const &u, V const &v, std::string const &u_name,
-                     std::string const &v_name, CommonValueType<U, V> tol = 0)
+void arborxViewCheck(U const &u, V const &v, std::string_view u_name,
+                     std::string_view v_name, CommonValueType<U, V> tol = 0)
 {
   static constexpr int rank = U::rank;
 
