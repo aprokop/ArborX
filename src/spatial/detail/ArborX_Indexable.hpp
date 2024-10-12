@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
-#ifndef ARBORX_INDEXABLE_GETTER_HPP
-#define ARBORX_INDEXABLE_GETTER_HPP
+#ifndef ARBORX_INDEXABLE_HPP
+#define ARBORX_INDEXABLE_HPP
 
 #include <ArborX_GeometryTraits.hpp>
 #include <detail/ArborX_AccessTraits.hpp>
@@ -19,33 +19,32 @@
 namespace ArborX::Details
 {
 
-struct DefaultIndexableGetter
+template <typename Value>
+struct Indexable
 {
   KOKKOS_DEFAULTED_FUNCTION
-  DefaultIndexableGetter() = default;
+  Indexable() = default;
 
-  template <typename Geometry, typename Enable = std::enable_if_t<
-                                   GeometryTraits::is_valid_geometry<Geometry>>>
-  KOKKOS_FUNCTION auto const &operator()(Geometry const &geometry) const
+  KOKKOS_FUNCTION Value const &operator()(Value const &value) const
   {
-    return geometry;
+    return value;
   }
 
-  template <typename Geometry, typename Enable = std::enable_if_t<
-                                   GeometryTraits::is_valid_geometry<Geometry>>>
-  KOKKOS_FUNCTION auto operator()(Geometry &&geometry) const
-  {
-    return geometry;
-  }
+  KOKKOS_FUNCTION Value operator()(Value &&value) const { return value; }
+};
 
-  template <typename Value, typename Index>
+template <typename Value, typename Index>
+struct Indexable<PairValueIndex<Value, Index>>
+{
+  KOKKOS_DEFAULTED_FUNCTION
+  Indexable() = default;
+
   KOKKOS_FUNCTION Value const &
   operator()(PairValueIndex<Value, Index> const &pair) const
   {
     return pair.value;
   }
 
-  template <typename Value, typename Index>
   KOKKOS_FUNCTION Value operator()(PairValueIndex<Value, Index> &&pair) const
   {
     return pair.value;
