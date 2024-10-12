@@ -129,15 +129,6 @@ auto constructPoints(int n_values,
   return random_points;
 }
 
-template <typename TreeType, typename ExecutionSpace, typename Primitives>
-auto makeTree(ExecutionSpace const &space, Primitives const &primitives)
-{
-  if constexpr (is_boost_rtree_v<TreeType>)
-    return TreeType(space, primitives);
-  else
-    return TreeType(space, ArborX::Experimental::attach_indices(primitives));
-}
-
 template <typename DeviceType>
 auto makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
                         ArborXBenchmark::PointCloudType target_point_cloud_type)
@@ -211,7 +202,7 @@ void BM_construction(benchmark::State &state, Spec const &spec)
     exec_space.fence();
     auto const start = std::chrono::high_resolution_clock::now();
 
-    auto index = makeTree<TreeType>(exec_space, points);
+    auto index = TreeType(exec_space, points);
 
     exec_space.fence();
     auto const end = std::chrono::high_resolution_clock::now();
@@ -230,22 +221,26 @@ void BM_radius_search(benchmark::State &state, Spec const &spec)
 
   ExecutionSpace exec_space;
 
-  auto index = makeTree<TreeType>(
-      exec_space,
-      constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type));
+  auto points =
+      constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type);
+
+  auto index = TreeType(exec_space, points);
   auto const queries = makeSpatialQueries<DeviceType>(
       spec.n_values, spec.n_queries, spec.n_neighbors,
       spec.target_point_cloud_type);
 
+  using Value = std::conditional_t<!is_boost_rtree_v<TreeType>,
+                                   typename decltype(points)::value_type, int>;
+
   for (auto _ : state)
   {
     Kokkos::View<int *, DeviceType> offset("offset", 0);
-    Kokkos::View<int *, DeviceType> indices("indices", 0);
+    Kokkos::View<Value *, DeviceType> values("values", 0);
 
     exec_space.fence();
     auto const start = std::chrono::high_resolution_clock::now();
 
-    ArborX::query(index, exec_space, queries, indices, offset,
+    ArborX::query(index, exec_space, queries, values, offset,
                   ArborX::Experimental::TraversalPolicy()
                       .setPredicateSorting(spec.sort_predicates)
                       .setBufferSize(spec.buffer_size));
@@ -267,7 +262,7 @@ void BM_radius_callback_search(benchmark::State &state, Spec const &spec)
 
   ExecutionSpace exec_space;
 
-  auto index = makeTree<TreeType>(
+  auto index = TreeType(
       ExecutionSpace{},
       constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type));
   auto const queries = makeSpatialQueries<DeviceType>(
@@ -305,22 +300,26 @@ void BM_knn_search(benchmark::State &state, Spec const &spec)
 
   ExecutionSpace exec_space;
 
-  auto index = makeTree<TreeType>(
-      exec_space,
-      constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type));
+  auto points =
+      constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type);
+
+  auto index = TreeType(exec_space, points);
   auto const queries = makeNearestQueries<DeviceType>(
       spec.n_values, spec.n_queries, spec.n_neighbors,
       spec.target_point_cloud_type);
 
+  using Value = std::conditional_t<!is_boost_rtree_v<TreeType>,
+                                   typename decltype(points)::value_type, int>;
+
   for (auto _ : state)
   {
     Kokkos::View<int *, DeviceType> offset("Benchmark::offset", 0);
-    Kokkos::View<int *, DeviceType> indices("Benchmark::indices", 0);
+    Kokkos::View<Value *, DeviceType> values("Benchmark::values", 0);
 
     exec_space.fence();
     auto const start = std::chrono::high_resolution_clock::now();
 
-    ArborX::query(index, exec_space, queries, indices, offset,
+    ArborX::query(index, exec_space, queries, values, offset,
                   ArborX::Experimental::TraversalPolicy().setPredicateSorting(
                       spec.sort_predicates));
 
@@ -341,7 +340,7 @@ void BM_knn_callback_search(benchmark::State &state, Spec const &spec)
 
   ExecutionSpace exec_space;
 
-  auto index = makeTree<TreeType>(
+  auto index = TreeType(
       exec_space,
       constructPoints<DeviceType>(spec.n_values, spec.source_point_cloud_type));
   auto const queries = makeNearestQueries<DeviceType>(

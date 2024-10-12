@@ -53,7 +53,7 @@ template <typename ExecutionSpace>
 using BVHBenchmarkRegistration = BenchmarkRegistration<
     ExecutionSpace,
     ArborX::BoundingVolumeHierarchy<typename ExecutionSpace::memory_space,
-                                    ArborX::PairValueIndex<ArborX::Point<3>>>>;
+                                    ArborX::Point<3>>>;
 
 void register_bvh_benchmarks(Spec const &spec)
 {
