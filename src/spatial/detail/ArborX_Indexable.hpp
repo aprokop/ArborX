@@ -16,7 +16,10 @@
 #include <detail/ArborX_AccessTraits.hpp>
 #include <detail/ArborX_PairValueIndex.hpp>
 
-namespace ArborX::Details
+namespace ArborX
+{
+
+namespace Experimental
 {
 
 template <typename Value>
@@ -51,6 +54,11 @@ struct Indexable<PairValueIndex<Value, Index>>
   }
 };
 
+} // namespace Experimental
+
+namespace Details
+{
+
 template <typename Values, typename IndexableGetter>
 struct Indexables
 {
@@ -67,6 +75,8 @@ struct Indexables
   KOKKOS_FUNCTION auto size() const { return _values.size(); }
 };
 
-} // namespace ArborX::Details
+} // namespace Details
+
+} // namespace ArborX
 
 #endif

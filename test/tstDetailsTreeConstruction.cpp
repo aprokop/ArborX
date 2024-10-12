@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(assign_morton_codes, DeviceType,
   using Values = LegacyValues<decltype(boxes), ArborX::Box<3>>;
   Values values{boxes};
   ArborX::Details::Indexables<
-      Values, ArborX::Details::Indexable<typename Values::value_type>>
+      Values, ArborX::Experimental::Indexable<typename Values::value_type>>
       indexables{values, {}};
 
   // Test for a bug where missing move ref operator() in default Indexable
@@ -174,7 +174,7 @@ void generateHierarchy(Primitives primitives, MortonCodes sorted_morton_codes,
   BoundingVolume bounds;
   ArborX::Details::TreeConstruction::generateHierarchy(
       space, Values{primitives},
-      ArborX::Details::Indexable<typename Values::value_type>{},
+      ArborX::Experimental::Indexable<typename Values::value_type>{},
       permutation_indices, sorted_morton_codes, leaf_nodes, internal_nodes,
       bounds);
 }

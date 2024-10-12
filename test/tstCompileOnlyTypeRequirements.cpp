@@ -65,7 +65,7 @@ void check_bounding_volume_and_predicate_geometry_type_requirements()
   using MemorySpace = ExecutionSpace::memory_space;
   using Tree = ArborX::BoundingVolumeHierarchy<
       MemorySpace, Test::PrimitivePointOrBox,
-      ArborX::Details::Indexable<Test::PrimitivePointOrBox>,
+      ArborX::Experimental::Indexable<Test::PrimitivePointOrBox>,
       Test::FakeBoundingVolume>;
 
   Kokkos::View<Test::PrimitivePointOrBox *, MemorySpace> primitives(

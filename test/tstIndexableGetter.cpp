@@ -108,7 +108,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables, DeviceType, ARBORX_DEVICE_TYPES)
     using Primitives = ArborX::Details::AccessValues<decltype(points_cloud),
                                                      ArborX::PrimitivesTag>;
     using IndexableGetter =
-        ArborX::Details::Indexable<typename Primitives::value_type>;
+        ArborX::Experimental::Indexable<typename Primitives::value_type>;
 
     Primitives primitives(points_cloud);
 
@@ -127,7 +127,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables, DeviceType, ARBORX_DEVICE_TYPES)
     using Primitives = ArborX::Details::AccessValues<decltype(points_cloud),
                                                      ArborX::PrimitivesTag>;
     using IndexableGetter =
-        ArborX::Details::Indexable<typename Primitives::value_type>;
+        ArborX::Experimental::Indexable<typename Primitives::value_type>;
     Primitives primitives(points_cloud);
 
     ArborX::Details::Indexables<Primitives, IndexableGetter> indexables{
