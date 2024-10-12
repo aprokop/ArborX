@@ -75,6 +75,14 @@ struct Indexables
   KOKKOS_FUNCTION auto size() const { return _values.size(); }
 };
 
+template <typename Values, typename IndexableGetter>
+#if KOKKOS_VERSION >= 40400
+KOKKOS_DEDUCTION_GUIDE
+#else
+KOKKOS_FUNCTION
+#endif
+    Indexables(Values, IndexableGetter) -> Indexables<Values, IndexableGetter>;
+
 } // namespace Details
 
 } // namespace ArborX

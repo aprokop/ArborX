@@ -112,8 +112,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables, DeviceType, ARBORX_DEVICE_TYPES)
 
     Primitives primitives(points_cloud);
 
-    ArborX::Details::Indexables<Primitives, IndexableGetter> indexables{
-        primitives, IndexableGetter{}};
+    ArborX::Details::Indexables indexables{primitives, IndexableGetter{}};
 
     ArborX::Box<3> box;
     calculateBoundingBoxOfTheScene(ExecutionSpace{}, indexables, box);
@@ -130,8 +129,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables, DeviceType, ARBORX_DEVICE_TYPES)
         ArborX::Experimental::Indexable<typename Primitives::value_type>;
     Primitives primitives(points_cloud);
 
-    ArborX::Details::Indexables<Primitives, IndexableGetter> indexables{
-        primitives, IndexableGetter{}};
+    ArborX::Details::Indexables indexables{primitives, IndexableGetter{}};
 
     ArborX::Box<3> box;
     calculateBoundingBoxOfTheScene(ExecutionSpace{}, indexables, box);
