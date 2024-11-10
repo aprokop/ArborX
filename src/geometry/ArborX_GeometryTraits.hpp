@@ -37,7 +37,7 @@ struct tag
   using type = not_specialized;
 };
 template <typename Geometry>
-using tag_t = typename tag<std::remove_cv_t<Geometry>>::type;
+using tag_t = tag<std::remove_cv_t<Geometry>>::type;
 
 template <typename Geometry>
 struct coordinate_type
@@ -79,7 +79,7 @@ using DimensionNotSpecializedArchetypeAlias =
     typename dimension<Geometry>::not_specialized;
 
 template <typename Geometry>
-using TagNotSpecializedArchetypeAlias = typename tag<Geometry>::not_specialized;
+using TagNotSpecializedArchetypeAlias = tag<Geometry>::not_specialized;
 
 template <typename Geometry>
 using CoordinateNotSpecializedArchetypeAlias =

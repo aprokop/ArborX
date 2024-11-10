@@ -35,7 +35,7 @@ struct IntersectionCallback
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_intersects, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   using Point = ArborX::Point<3>;
 
@@ -81,7 +81,7 @@ struct OrderedIntersectionCallback
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_ordered_intersects, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   using Point = ArborX::Point<3>;
 

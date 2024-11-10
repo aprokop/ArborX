@@ -29,7 +29,7 @@ namespace tt = boost::test_tools;
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(minmax_reduce, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace space{};
 
   namespace KokkosExt = ArborX::Details::KokkosExt;
@@ -78,7 +78,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(min_and_max, DeviceType, ARBORX_DEVICE_TYPES)
 {
   namespace KokkosExt = ArborX::Details::KokkosExt;
 
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace space{};
 
   Kokkos::View<int[4], DeviceType> v("v");

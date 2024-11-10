@@ -21,7 +21,7 @@ void makeCase(ES const &es, V const (&src_arr)[M][N][N],
               V const (&ref_arr)[M][N][N])
 {
   using DeviceView = Kokkos::View<V[M][N][N], MS>;
-  using HostView = typename DeviceView::HostMirror;
+  using HostView = DeviceView::HostMirror;
 
   HostView src("Testing::src");
   HostView ref("Testing::ref");
@@ -45,8 +45,8 @@ void makeCase(ES const &es, V const (&src_arr)[M][N][N],
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm2, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   double mat[5][2][2] = {{{1, 2}, {2, 3}},
@@ -64,8 +64,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm2, DeviceType, ARBORX_DEVICE_TYPES)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm3, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   double mat[3][3][3] = {{{2, 2, 3}, {2, 0, 1}, {3, 1, -2}},
@@ -86,8 +86,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm3, DeviceType, ARBORX_DEVICE_TYPES)
 BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm128, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   // 128x128 matrix full of -2
@@ -107,8 +107,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_symm128, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_scalar_like, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   double mat[2][1][1] = {{{2}}, {{0}}};
@@ -118,8 +118,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_scalar_like, DeviceType,
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(pseudo_inv_empty, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   Kokkos::View<double ***, MemorySpace> mat("mat", 0, 0, 0);

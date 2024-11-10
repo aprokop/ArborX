@@ -62,7 +62,7 @@ struct LegacyDefaultCallback
 
 // archetypal alias for a 'tag' type member in user callbacks
 template <typename Callback>
-using CallbackTagArchetypeAlias = typename Callback::tag;
+using CallbackTagArchetypeAlias = Callback::tag;
 
 template <typename Callback>
 struct is_tagged_post_callback
@@ -100,7 +100,7 @@ void check_valid_callback(Callback const &callback, Predicates const &,
 
   using Predicate =
       typename AccessValues<Predicates, PredicatesTag>::value_type;
-  using PredicateTag = typename Predicate::Tag;
+  using PredicateTag = Predicate::Tag;
 
   static_assert(!(std::is_same_v<PredicateTag, NearestPredicateTag> &&
                   std::is_invocable_v<Callback const &, Predicate, int, float,
@@ -151,7 +151,7 @@ void check_valid_callback(Callback const &callback, Predicates const &)
 
   using Predicate =
       typename AccessValues<Predicates, PredicatesTag>::value_type;
-  using PredicateTag = typename Predicate::Tag;
+  using PredicateTag = Predicate::Tag;
 
   static_assert(is_valid_predicate_tag<PredicateTag>::value,
                 "The predicate tag is not valid");

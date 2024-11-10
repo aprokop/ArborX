@@ -28,7 +28,7 @@ namespace tt = boost::test_tools;
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(iota, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   namespace KokkosExt = ArborX::Details::KokkosExt;
 
   ExecutionSpace space{};

@@ -41,7 +41,7 @@ template <typename ExecutionSpace>
 Kokkos::View<UnweightedEdge *, typename ExecutionSpace::memory_space>
 buildEdges(AllowLoops, ExecutionSpace const &exec_space, int num_edges)
 {
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   Kokkos::View<UnweightedEdge *, MemorySpace> edges(
       Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
                          "Benchmark::edges"),
@@ -66,7 +66,7 @@ template <typename ExecutionSpace>
 Kokkos::View<UnweightedEdge *, typename ExecutionSpace::memory_space>
 buildEdges(DisallowLoops, ExecutionSpace const &exec_space, int num_edges)
 {
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
 
   Kokkos::Random_XorShift1024_Pool<ExecutionSpace> rand_pool(1984);
   // Construct random permutation by sorting a vector of random values
@@ -101,7 +101,7 @@ buildEdges(DisallowLoops, ExecutionSpace const &exec_space, int num_edges)
 template <typename ExecutionSpace>
 auto buildUnionFind(ExecutionSpace const &exec_space, int n)
 {
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
 
   Kokkos::View<int *, MemorySpace> labels(
       Kokkos::view_alloc(Kokkos::WithoutInitializing, "Benchmark::labels"), n);

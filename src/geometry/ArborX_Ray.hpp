@@ -237,7 +237,7 @@ bool intersection(Ray const &ray, Triangle<3> const &triangle, float &tmin,
 {
   namespace KokkosExt = Details::KokkosExt;
 
-  using Vector = typename Ray::Vector;
+  using Vector = Ray::Vector;
 
   auto dir = ray.direction();
   // normalize the direction vector by its largest component.

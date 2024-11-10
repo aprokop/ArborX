@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(construct_destroy_at, DeviceType,
   using ArborX::Details::KokkosExt::construct_at;
   using ArborX::Details::KokkosExt::destroy_at;
 
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec;
 
   int const n = 2;

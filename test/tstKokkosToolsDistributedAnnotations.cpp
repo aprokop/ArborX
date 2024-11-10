@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(
     distributed_search_tree_distributed_search_tree_allocations_prefixed,
     DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   auto tree = makeDistributedTree<DeviceType, ArborX::Box<3>>(
       MPI_COMM_WORLD, ExecutionSpace{},
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(
     distributed_search_tree_query_allocations_prefixed, DeviceType,
     ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   auto tree = makeDistributedTree<DeviceType, ArborX::Box<3>>(
       MPI_COMM_WORLD, ExecutionSpace{},
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(kernels_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   auto const callback = [](char const *label, uint32_t, uint64_t *) {
     std::regex re("^(ArborX::|Kokkos::).*");
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(kernels_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(regions_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   Kokkos::Tools::Experimental::set_push_region_callback([](char const *label) {
     std::regex re("^(ArborX::|Kokkos::).*");

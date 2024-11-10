@@ -33,7 +33,7 @@ using UnmanagedHostView = Kokkos::View<T *, Kokkos::HostSpace,
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(nth_element, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace space;
 
   using ArborX::Details::KokkosExt::nth_element;

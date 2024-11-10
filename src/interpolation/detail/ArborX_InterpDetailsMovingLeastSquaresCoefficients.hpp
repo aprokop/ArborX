@@ -32,12 +32,12 @@ template <typename SourcePoints, typename TargetAccess, typename Coefficients,
 class MovingLeastSquaresCoefficientsKernel
 {
 private:
-  using ScratchMemorySpace = typename ExecutionSpace::scratch_memory_space;
+  using ScratchMemorySpace = ExecutionSpace::scratch_memory_space;
 
-  using SourcePoint = typename SourcePoints::non_const_value_type;
-  using TargetPoint = typename TargetAccess::value_type;
+  using SourcePoint = SourcePoints::non_const_value_type;
+  using TargetPoint = TargetAccess::value_type;
 
-  using CoefficientsType = typename Coefficients::non_const_value_type;
+  using CoefficientsType = Coefficients::non_const_value_type;
 
   static constexpr int dimension = GeometryTraits::dimension_v<SourcePoint>;
   static constexpr int degree = PolynomialDegree::value;
@@ -235,7 +235,7 @@ auto movingLeastSquaresCoefficients(ExecutionSpace const &space,
 
   namespace KokkosExt = ::ArborX::Details::KokkosExt;
 
-  using MemorySpace = typename SourcePoints::memory_space;
+  using MemorySpace = SourcePoints::memory_space;
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
       "Memory space must be accessible from the execution space");
@@ -247,7 +247,7 @@ auto movingLeastSquaresCoefficients(ExecutionSpace const &space,
       KokkosExt::is_accessible_from<typename SourcePoints::memory_space,
                                     ExecutionSpace>::value,
       "source points must be accessible from the execution space");
-  using SourcePoint = typename SourcePoints::non_const_value_type;
+  using SourcePoint = SourcePoints::non_const_value_type;
   GeometryTraits::check_valid_geometry_traits(SourcePoint{});
   static_assert(GeometryTraits::is_point<SourcePoint>::value,
                 "source points elements must be points");
@@ -260,7 +260,7 @@ auto movingLeastSquaresCoefficients(ExecutionSpace const &space,
       KokkosExt::is_accessible_from<typename TargetAccess::memory_space,
                                     ExecutionSpace>::value,
       "target access must be accessible from the execution space");
-  using TargetPoint = typename TargetAccess::value_type;
+  using TargetPoint = TargetAccess::value_type;
   GeometryTraits::check_valid_geometry_traits(TargetPoint{});
   static_assert(GeometryTraits::is_point<TargetPoint>::value,
                 "target access elements must be points");

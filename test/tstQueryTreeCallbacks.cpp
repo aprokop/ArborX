@@ -53,7 +53,7 @@ struct CustomPostCallback
   void operator()(Predicates const &, InOutView &offset, InView in,
                   OutView &out) const
   {
-    using ExecutionSpace = typename DeviceType::execution_space;
+    using ExecutionSpace = DeviceType::execution_space;
     using ArborX::Details::distance;
     auto const n = offset.extent(0) - 1;
     Kokkos::realloc(out, in.extent(0));
@@ -71,8 +71,8 @@ template <typename View>
 std::vector<Kokkos::pair<int, float>> initialize_values(View const &points,
                                                         float const delta)
 {
-  using MemorySpace = typename View::memory_space;
-  using ExecutionSpace = typename View::execution_space;
+  using MemorySpace = View::memory_space;
+  using ExecutionSpace = View::execution_space;
   int const n = points.size();
   Kokkos::View<Kokkos::pair<int, float> *, MemorySpace> values_device(
       "values_device", n);
@@ -92,9 +92,9 @@ std::vector<Kokkos::pair<int, float>> initialize_values(View const &points,
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_spatial_predicate, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   int const n = 10;
   Kokkos::View<ArborX::Point<3> *, DeviceType> points(
@@ -130,9 +130,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_spatial_predicate, TreeTypeTraits,
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_nearest_predicate, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
   using Point = ArborX::Point<3>;
 
   int const n = 10;
@@ -188,9 +188,9 @@ struct Experimental_CustomCallbackEarlyExit
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_early_exit, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   auto const tree =
       make<Tree>(ExecutionSpace{}, {
@@ -254,7 +254,7 @@ struct CustomPostCallbackWithAttachment
   void operator()(Predicates const &queries, InOutView &offset, InView in,
                   OutView &out) const
   {
-    using ExecutionSpace = typename DeviceType::execution_space;
+    using ExecutionSpace = DeviceType::execution_space;
     using ArborX::Details::distance;
     auto const n = offset.extent(0) - 1;
     Kokkos::realloc(out, in.extent(0));
@@ -273,9 +273,9 @@ struct CustomPostCallbackWithAttachment
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment_spatial_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
   using Point = ArborX::Point<3>;
 
   int const n = 10;
@@ -314,9 +314,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment_spatial_predicate,
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment_nearest_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   using Point = ArborX::Point<3>;
 

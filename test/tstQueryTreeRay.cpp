@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_SUITE(RayTraversals)
 BOOST_AUTO_TEST_CASE_TEMPLATE(test_ray_box_nearest, DeviceType,
                               ARBORX_TEST_DEVICE_TYPES)
 {
-  using MemorySpace = typename DeviceType::memory_space;
+  using MemorySpace = DeviceType::memory_space;
   typename DeviceType::execution_space exec_space;
 
   using Point = ArborX::Point<3>;
@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(test_ray_box_nearest, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(test_ray_box_intersection, DeviceType,
                               ARBORX_TEST_DEVICE_TYPES)
 {
-  using MemorySpace = typename DeviceType::memory_space;
+  using MemorySpace = DeviceType::memory_space;
   typename DeviceType::execution_space exec_space;
 
   using Point = ArborX::Point<3>;
@@ -116,7 +116,7 @@ BOOST_AUTO_TEST_SUITE(RayTraversals)
 BOOST_AUTO_TEST_CASE_TEMPLATE(test_ray_box_intersection_new, DeviceType,
                               ARBORX_TEST_DEVICE_TYPES)
 {
-  using MemorySpace = typename DeviceType::memory_space;
+  using MemorySpace = DeviceType::memory_space;
   typename DeviceType::execution_space exec_space;
 
   using Point = ArborX::Point<3>;
@@ -188,8 +188,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_ordered_spatial_predicate, DeviceType,
                               ARBORX_TEST_DEVICE_TYPES)
 {
 
-  using MemorySpace = typename DeviceType::memory_space;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
   Tree tree;
@@ -213,8 +213,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_ordered_spatial_predicate,
                               DeviceType, ARBORX_TEST_DEVICE_TYPES)
 {
 
-  using MemorySpace = typename DeviceType::memory_space;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
 

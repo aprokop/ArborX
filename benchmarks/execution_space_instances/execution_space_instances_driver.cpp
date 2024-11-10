@@ -91,7 +91,7 @@ struct CountCallback
 int main(int argc, char *argv[])
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
 
   Kokkos::ScopeGuard guard(argc, argv);
 

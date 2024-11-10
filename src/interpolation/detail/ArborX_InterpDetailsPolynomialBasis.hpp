@@ -106,7 +106,7 @@ KOKKOS_FUNCTION auto evaluatePolynomialBasis(Point const &p)
 {
   static_assert(GeometryTraits::is_point_v<Point>, "Point must be a point");
   static constexpr std::size_t DIM = GeometryTraits::dimension_v<Point>;
-  using Value = typename GeometryTraits::coordinate_type_t<Point>;
+  using Value = GeometryTraits::coordinate_type_t<Point>;
   static_assert(DIM > 0, "Polynomial basis with no dimension is invalid");
 
   Kokkos::Array<Value, polynomialBasisSize<DIM, Degree>()> arr{};

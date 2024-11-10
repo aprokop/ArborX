@@ -62,7 +62,7 @@ void boost_rtree_nearest_predicate()
   // random objects for kNN queries
   // compare our solution against Boost R-tree
   int const n_queries = 100;
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
   auto geometry_objects = ArborXTest::make_random_cloud<PrimitiveGeometry>(
       ExecutionSpace{}, n_queries, Lx, Ly, Lz);
 
@@ -100,14 +100,14 @@ void boost_rtree_nearest_predicate()
 BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_spatial_predicate, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // FIXME_NVCC we see inexplainable test failures with NVCC and KDOP<18> and
   // KDOP<26> here.
 #ifdef __NVCC__
-  using BoundingVolume = typename Tree::bounding_volume_type;
+  using BoundingVolume = Tree::bounding_volume_type;
   if constexpr (ArborX::GeometryTraits::is_kdop_v<BoundingVolume>)
   {
     if constexpr (BoundingVolume::n_directions == 9 ||
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_spatial_predicate, TreeTypeTraits,
   // random points for radius search
   // compare our solution against Boost R-tree
   int const n_points = 100;
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
   auto points = ArborXTest::make_random_cloud<ArborX::Point<3>>(
       ExecutionSpace{}, n_points, Lx, Ly, Lz);
 
@@ -186,9 +186,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_spatial_predicate, TreeTypeTraits,
 BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_nearest_predicate_point,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   boost_rtree_nearest_predicate<Tree, ExecutionSpace, DeviceType,
                                 ArborX::Point<3>>();
@@ -197,9 +197,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_nearest_predicate_point,
 BOOST_AUTO_TEST_CASE_TEMPLATE(boost_rtree_nearest_predicate_box, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   boost_rtree_nearest_predicate<Tree, ExecutionSpace, DeviceType,
                                 ArborX::Box<3>>();

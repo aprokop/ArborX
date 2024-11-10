@@ -34,8 +34,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(buffer_optimization, DeviceType,
 {
   namespace KokkosExt = ArborX::Details::KokkosExt;
 
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
@@ -125,8 +125,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(buffer_optimization, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(unsorted_predicates, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;

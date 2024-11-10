@@ -285,7 +285,7 @@ bool verifyDBSCAN(ExecutionSpace exec_space, Primitives const &primitives,
   static_assert(Kokkos::is_view<LabelsView>{});
 
   using Points = Details::AccessValues<Primitives, PrimitivesTag>;
-  using MemorySpace = typename Points::memory_space;
+  using MemorySpace = Points::memory_space;
 
   static_assert(std::is_same<typename LabelsView::value_type, int>{});
   static_assert(std::is_same<typename LabelsView::memory_space, MemorySpace>{});
@@ -295,7 +295,7 @@ bool verifyDBSCAN(ExecutionSpace exec_space, Primitives const &primitives,
 
   Points points{primitives}; // NOLINT
 
-  using Point = typename Points::value_type;
+  using Point = Points::value_type;
   static_assert(GeometryTraits::is_point_v<Point>);
 
   ArborX::BoundingVolumeHierarchy bvh(

@@ -49,7 +49,7 @@ struct Helper
 BOOST_AUTO_TEST_CASE_TEMPLATE(do_posts_and_waits, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;

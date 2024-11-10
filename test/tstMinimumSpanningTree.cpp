@@ -57,7 +57,7 @@ auto build_minimum_spanning_tree(ExecutionSpace const &exec_space,
 {
   auto points = toView<ExecutionSpace>(points_host, "Test::points");
 
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   ArborX::Details::MinimumSpanningTree<MemorySpace> mst{exec_space, points, k};
 
   auto edges_host =
@@ -83,7 +83,7 @@ std::vector<T> sorted(std::vector<T> v)
 BOOST_AUTO_TEST_CASE_TEMPLATE(minimum_spanning_tree, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   using Point = ArborX::Point<3>;

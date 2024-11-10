@@ -122,7 +122,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
 template <typename BVH, typename Predicates, typename Callback>
 struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
 {
-  using MemorySpace = typename BVH::memory_space;
+  using MemorySpace = BVH::memory_space;
 
   BVH _bvh;
   Predicates _predicates;
@@ -491,7 +491,7 @@ template <typename ExecutionSpace, typename BVH, typename Predicates,
 void traverse(ExecutionSpace const &space, BVH const &bvh,
               Predicates const &predicates, Callback const &callback)
 {
-  using Tag = typename Predicates::value_type::Tag;
+  using Tag = Predicates::value_type::Tag;
   TreeTraversal<BVH, Predicates, Callback, Tag>(space, bvh, predicates,
                                                 callback);
 }

@@ -58,7 +58,7 @@ struct InsertGenerator
   CountView _counts;
   PermutedOffset _permuted_offset;
 
-  using ValueType = typename OutputView::value_type;
+  using ValueType = OutputView::value_type;
 
   template <typename Predicate, typename Value>
   KOKKOS_FUNCTION auto operator()(Predicate const &predicate,
@@ -342,7 +342,7 @@ queryDispatch(Tag, Tree const &tree, ExecutionSpace const &space,
               Experimental::TraversalPolicy const &policy =
                   Experimental::TraversalPolicy())
 {
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
   using DeviceType = Kokkos::Device<ExecutionSpace, MemorySpace>;
 
   check_valid_callback<typename Tree::value_type>(callback, predicates, out);
@@ -427,7 +427,7 @@ queryDispatch(Tag, Tree const &tree, ExecutionSpace const &space,
               Experimental::TraversalPolicy const &policy =
                   Experimental::TraversalPolicy())
 {
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
 
   Kokkos::View<typename Tree::value_type *, MemorySpace> indices(
       "ArborX::CrsGraphWrapper::query::indices", 0);

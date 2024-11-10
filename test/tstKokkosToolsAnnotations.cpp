@@ -34,8 +34,8 @@ BOOST_AUTO_TEST_CASE(is_prefixed_with)
 BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_bvh_allocations_prefixed, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
 
@@ -79,8 +79,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_bvh_allocations_prefixed, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_query_allocations_prefixed, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
 
@@ -124,8 +124,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_query_allocations_prefixed, DeviceType,
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(kernels_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
 
@@ -189,8 +189,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(kernels_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(regions_prefixed, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
 

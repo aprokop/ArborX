@@ -59,8 +59,8 @@ struct PredicateGetter
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(half_traversal, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using MemorySpace = typename DeviceType::memory_space;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
   int const n = 24;
   auto points = Test::make_points(exec_space, n);

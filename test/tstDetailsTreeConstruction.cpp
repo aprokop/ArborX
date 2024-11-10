@@ -123,7 +123,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indirect_sort, DeviceType, ARBORX_DEVICE_TYPES)
   // dummy unsorted Morton codes and corresponding sorted indices as reference
   // solution
   //
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   unsigned int const n = 4;
   Kokkos::View<unsigned int *, DeviceType> k("k", n);
   // Fill K with 4, 3, 2, 1
@@ -153,7 +153,7 @@ void generateHierarchy(Primitives primitives, MortonCodes sorted_morton_codes,
                        LeafNodes &leaf_nodes, InternalNodes &internal_nodes)
 {
   using ArborX::Details::makeLeafNode;
-  using DeviceType = typename MortonCodes::device_type;
+  using DeviceType = MortonCodes::device_type;
 
   int const n = sorted_morton_codes.extent(0);
 

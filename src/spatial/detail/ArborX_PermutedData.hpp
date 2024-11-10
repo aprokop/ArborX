@@ -23,8 +23,8 @@ namespace Details
 template <typename Data, typename Permute, bool AttachIndices = false>
 struct PermutedData
 {
-  using memory_space = typename Data::memory_space;
-  using value_type = typename Data::value_type;
+  using memory_space = Data::memory_space;
+  using value_type = Data::value_type;
 
   Data _data;
   Permute _permute;
@@ -39,7 +39,7 @@ struct PermutedData
 template <typename Data, typename Permute>
 struct PermutedData<Data, Permute, /*AttachIndices=*/true>
 {
-  using memory_space = typename Data::memory_space;
+  using memory_space = Data::memory_space;
   using value_type =
       std::decay_t<decltype(attach(std::declval<Data const &>()(0), 0))>;
 
@@ -70,7 +70,7 @@ struct AccessTraits<Details::PermutedData<Predicates, Permute, AttachIndices>,
   using PermutedPredicates =
       Details::PermutedData<Predicates, Permute, AttachIndices>;
 
-  using memory_space = typename Predicates::memory_space;
+  using memory_space = Predicates::memory_space;
 
   KOKKOS_FUNCTION static std::size_t
   size(PermutedPredicates const &permuted_predicates)

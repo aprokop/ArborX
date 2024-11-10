@@ -28,7 +28,7 @@ class LegacyValues
   using Access = ArborX::AccessTraits<Primitives, ArborX::PrimitivesTag>;
 
 public:
-  using memory_space = typename Access::memory_space;
+  using memory_space = Access::memory_space;
   using index_type = unsigned;
   using value_type = ArborX::PairValueIndex<BoundingVolume, index_type>;
   using size_type =
@@ -72,7 +72,7 @@ struct ArborX::AccessTraits<LegacyValues<Primitives, BoundingVolume>,
   using self_type = LegacyValues<Primitives, BoundingVolume>;
 
 public:
-  using memory_space = typename self_type::memory_space;
+  using memory_space = self_type::memory_space;
 
   KOKKOS_FUNCTION static decltype(auto) get(self_type const &w, int i)
   {

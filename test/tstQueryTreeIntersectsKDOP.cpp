@@ -24,8 +24,8 @@
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(intersects_kdop, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Point = ArborX::Point<3>;
   using Tree = ArborX::BoundingVolumeHierarchy<MemorySpace,

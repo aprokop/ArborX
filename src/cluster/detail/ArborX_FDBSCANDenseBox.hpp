@@ -188,7 +188,7 @@ computeCellIndices(ExecutionSpace const &exec_space,
                    CartesianGrid<GeometryTraits::dimension_v<
                        typename Primitives::value_type>> const &grid)
 {
-  using MemorySpace = typename Primitives::memory_space;
+  using MemorySpace = Primitives::memory_space;
 
   auto const n = primitives.size();
 
@@ -212,7 +212,7 @@ int reorderDenseAndSparseCells(ExecutionSpace const &exec_space,
                                CellIndices &sorted_cell_indices,
                                Permutation &permute)
 {
-  using MemorySpace = typename CellIndices::memory_space;
+  using MemorySpace = CellIndices::memory_space;
 
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value);

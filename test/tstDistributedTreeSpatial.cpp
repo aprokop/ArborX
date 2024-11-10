@@ -31,7 +31,7 @@ using ArborXTest::PairIndexRank;
 BOOST_AUTO_TEST_CASE_TEMPLATE(hello_world_spatial, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Point = ArborX::Point<3>;
   using Sphere = ArborX::Sphere<3>;
 
@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_spatial, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
   using Tree = ArborX::DistributedTree<typename DeviceType::memory_space>;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -166,7 +166,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_spatial, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(unique_leaf_on_rank_0_spatial, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -202,7 +202,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(unique_leaf_on_rank_0_spatial, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(one_leaf_per_rank_spatial, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -273,7 +273,7 @@ struct CustomPostCallbackWithAttachment
   void operator()(Predicates const &queries, InOutView &offset, InView in,
                   OutView &out) const
   {
-    using ExecutionSpace = typename DeviceType::execution_space;
+    using ExecutionSpace = DeviceType::execution_space;
     using ArborX::Details::distance;
     auto const n = offset.extent(0) - 1;
     Kokkos::realloc(out, in.extent(0));
@@ -289,7 +289,7 @@ struct CustomPostCallbackWithAttachment
 BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Point = ArborX::Point<3>;
 
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -322,7 +322,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(callback_with_attachment, DeviceType,
   //                0          1         2
 
   int const n_queries = 1;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   Kokkos::View<Point *, DeviceType> points("Testing::points", n_queries);
   Kokkos::parallel_for(
       Kokkos::RangePolicy<ExecutionSpace>(0, n_queries), KOKKOS_LAMBDA(int i) {
@@ -403,7 +403,7 @@ struct CustomPureInlineCallback
 BOOST_AUTO_TEST_CASE_TEMPLATE(pure_spatial_callback, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Point = ArborX::Point<3>;
 
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -454,7 +454,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(pure_spatial_callback, DeviceType,
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(boost_comparison, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Point = ArborX::Point<3>;
   using Box = ArborX::Box<3>;
   using Sphere = ArborX::Sphere<3>;

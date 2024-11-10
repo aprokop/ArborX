@@ -37,8 +37,8 @@ struct TreeExecutionAndMemorySpaces
 {
   static_assert(Kokkos::is_device<DeviceType>{});
   using device_type = DeviceType;
-  using execution_space = typename DeviceType::execution_space;
-  using memory_space = typename DeviceType::memory_space;
+  using execution_space = DeviceType::execution_space;
+  using memory_space = DeviceType::memory_space;
   using type = Tree<memory_space>;
 };
 
@@ -63,7 +63,7 @@ struct CartesianProduct<Tuple<>, std::tuple<Us...>>
 template <template <class> class T, template <class> class... Ts, class... Us>
 struct CartesianProduct<Tuple<T, Ts...>, std::tuple<Us...>>
 {
-  using type = typename Concatenate<
+  using type = Concatenate<
       std::tuple<TreeExecutionAndMemorySpaces<T, Us>...>,
       typename CartesianProduct<Tuple<Ts...>, std::tuple<Us...>>::type>::type;
 };

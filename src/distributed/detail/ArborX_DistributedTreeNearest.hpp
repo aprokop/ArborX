@@ -45,7 +45,7 @@ void DistributedTreeImpl::phaseI(ExecutionSpace const &space, Tree const &tree,
   Kokkos::Profiling::ScopedRegion guard(prefix);
 
   using namespace DistributedTree;
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
 
   auto comm = tree.getComm();
 
@@ -133,7 +133,7 @@ void DistributedTreeImpl::phaseII(ExecutionSpace const &space, Tree const &tree,
   std::string prefix = "ArborX::DistributedTree::query::nearest::phaseII";
   Kokkos::Profiling::ScopedRegion guard(prefix);
 
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
 
   Kokkos::View<int *, MemorySpace> nearest_ranks(prefix + "::nearest_ranks", 0);
   tree._top_tree.query(space,

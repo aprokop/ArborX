@@ -22,7 +22,7 @@ template <typename ExecutionSpace, typename UnionFind>
 Kokkos::View<int *, Kokkos::HostSpace>
 build_representatives(ExecutionSpace const &space, UnionFind union_find)
 {
-  using MemorySpace = typename UnionFind::memory_space;
+  using MemorySpace = UnionFind::memory_space;
 
   auto const n = union_find.size();
   Kokkos::View<int *, MemorySpace> representatives(
@@ -67,8 +67,8 @@ void merge(ExecutionSpace const &space, UnionFind &union_find, int i, int j)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(union_find, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
 #ifdef KOKKOS_ENABLE_SERIAL
   using UnionFind = ArborX::Details::UnionFind<

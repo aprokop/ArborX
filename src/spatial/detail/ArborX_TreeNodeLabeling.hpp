@@ -48,7 +48,7 @@ void reduceLabels(ExecutionSpace const &exec_space, Parents const &parents,
   ARBORX_ASSERT(n >= 2);
   ARBORX_ASSERT(labels.size() == parents.size());
 
-  using ValueType = typename Labels::value_type;
+  using ValueType = Labels::value_type;
   constexpr ValueType indeterminate = -1;
   constexpr ValueType untouched = -2;
 

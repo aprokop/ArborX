@@ -554,7 +554,7 @@ void computeParents(ExecutionSpace const &space, Edges const &edges,
 {
   Kokkos::Profiling::ScopedRegion guard("ArborX::MST::compute_edge_parents");
 
-  using MemorySpace = typename SidedParents::memory_space;
+  using MemorySpace = SidedParents::memory_space;
 
   int num_edges = edges.size();
 

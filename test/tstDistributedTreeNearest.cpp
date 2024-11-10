@@ -64,7 +64,7 @@ struct DistributedNearestCallback
 BOOST_AUTO_TEST_CASE_TEMPLATE(hello_world_nearest, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   using Point = ArborX::Point<3>;
 
@@ -160,7 +160,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_nearest, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
   using Tree = ArborX::DistributedTree<typename DeviceType::memory_space>;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -210,7 +210,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_nearest, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(unique_leaf_on_rank_0_nearest, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -250,7 +250,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(unique_leaf_on_rank_0_nearest, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(one_leaf_per_rank_nearest, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -304,7 +304,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(one_leaf_per_rank_nearest, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(do_not_exceed_capacity, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   // This unit tests exposes bug that essentially assumed the number of
   // neighbors queried for would not exceed the maximum size of the default
@@ -315,7 +315,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(do_not_exceed_capacity, DeviceType,
   using ArborX::Box;
   using ArborX::nearest;
   using Point = ArborX::Point<3>;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   MPI_Comm comm = MPI_COMM_WORLD;
   std::vector<Point> points(512);
   for (int i = 0; i < (int)points.size(); ++i)
@@ -334,7 +334,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(do_not_exceed_capacity, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_nearest_neighbors, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -382,7 +382,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_nearest_neighbors, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_box_nearest_neighbors, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -432,7 +432,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_box_nearest_neighbors, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_sphere_nearest_neighbors,
                               DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;
@@ -479,8 +479,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(non_approximate_sphere_nearest_neighbors,
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(distributed_ray, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   MPI_Comm comm = MPI_COMM_WORLD;
   int comm_rank;

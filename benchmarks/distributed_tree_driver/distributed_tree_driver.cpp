@@ -35,8 +35,8 @@ int main_(std::vector<std::string> const &args, MPI_Comm const comm)
 {
   ArborXBenchmark::TimeMonitor time_monitor;
 
-  using DeviceType = typename NO::device_type;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using DeviceType = NO::device_type;
+  using ExecutionSpace = DeviceType::execution_space;
 
   int n_values;
   int n_queries;

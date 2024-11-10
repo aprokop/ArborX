@@ -107,8 +107,8 @@ void viz(std::string const &prefix, std::string const &infile, int n_neighbors)
       ExecutionSpace{}, ArborX::Experimental::attach_indices(boxes)};
 
   using TreeVisualization = ArborX::Details::TreeVisualization;
-  using TikZVisitor = typename TreeVisualization::TikZVisitor;
-  using GraphvizVisitor = typename TreeVisualization::GraphvizVisitor;
+  using TikZVisitor = TreeVisualization::TikZVisitor;
+  using GraphvizVisitor = TreeVisualization::GraphvizVisitor;
 
   int const n_queries = bvh.size();
   if (n_neighbors < 0)

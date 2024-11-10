@@ -38,7 +38,7 @@ struct MLSSearchNeighborsCallback
   IndicesView indices;
   CounterView counter;
 
-  using SourcePoint = typename SourceView::non_const_value_type;
+  using SourcePoint = SourceView::non_const_value_type;
 
   template <typename Predicate>
   KOKKOS_FUNCTION void
@@ -87,7 +87,7 @@ public:
         KokkosExt::is_accessible_from<typename SourceAccess::memory_space,
                                       ExecutionSpace>::value,
         "Source points must be accessible from the execution space");
-    using SourcePoint = typename SourceAccess::value_type;
+    using SourcePoint = SourceAccess::value_type;
     GeometryTraits::check_valid_geometry_traits(SourcePoint{});
     static_assert(GeometryTraits::is_point_v<SourcePoint>,
                   "Source points elements must be points");
@@ -101,7 +101,7 @@ public:
         KokkosExt::is_accessible_from<typename TargetAccess::memory_space,
                                       ExecutionSpace>::value,
         "Target points must be accessible from the execution space");
-    using TargetPoint = typename TargetAccess::value_type;
+    using TargetPoint = TargetAccess::value_type;
     GeometryTraits::check_valid_geometry_traits(TargetPoint{});
     static_assert(GeometryTraits::is_point_v<TargetPoint>,
                   "Target points elements must be points");
@@ -170,7 +170,7 @@ public:
     // Approx values must have the correct size
     KOKKOS_ASSERT(approx_values.extent_int(0) == _num_targets);
 
-    using Value = typename ApproxValues::non_const_value_type;
+    using Value = ApproxValues::non_const_value_type;
 
     Kokkos::parallel_for(
         "ArborX::MovingLeastSquares::target_interpolation",
@@ -194,7 +194,7 @@ private:
         "ArborX::MovingLeastSquares::searchNeighbors");
 
     // Organize the source points as a tree
-    using SourcePoint = typename SourceAccess::value_type;
+    using SourcePoint = SourceAccess::value_type;
     BoundingVolumeHierarchy source_tree(
         space, ArborX::Experimental::attach_indices(source_access));
 

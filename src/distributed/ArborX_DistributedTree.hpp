@@ -33,8 +33,8 @@ template <typename BottomTree>
 class DistributedTreeBase
 {
 private:
-  using MemorySpace = typename BottomTree::memory_space;
-  using BoundingVolume = typename BottomTree::bounding_volume_type;
+  using MemorySpace = BottomTree::memory_space;
+  using BoundingVolume = BottomTree::bounding_volume_type;
   using TopTree =
       BoundingVolumeHierarchy<MemorySpace, PairValueIndex<BoundingVolume, int>,
                               Experimental::DefaultIndexableGetter,
@@ -46,9 +46,9 @@ private:
 public:
   using memory_space = MemorySpace;
   static_assert(Kokkos::is_memory_space<MemorySpace>::value);
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
   using bounding_volume_type = BoundingVolume;
-  using value_type = typename BottomTree::value_type;
+  using value_type = BottomTree::value_type;
 
   DistributedTreeBase() = default; // build an empty tree
 
@@ -96,7 +96,7 @@ public:
 
     Predicates predicates{user_predicates}; // NOLINT
 
-    using Tag = typename Predicates::value_type::Tag;
+    using Tag = Predicates::value_type::Tag;
     Details::DistributedTreeImpl::queryDispatch(Tag{}, *this, space, predicates,
                                                 std::forward<Args>(args)...);
   }

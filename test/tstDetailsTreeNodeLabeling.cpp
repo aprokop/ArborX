@@ -67,7 +67,7 @@ auto findParents(ExecutionSpace const &exec_space,
       2 * n - 1);
   Kokkos::deep_copy(parents, -1);
 
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   ArborX::Details::findParents(exec_space, MockBVH<MemorySpace>{children},
                                parents);
   return Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, parents);
@@ -103,7 +103,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(find_parents, DeviceType, ARBORX_DEVICE_TYPES)
   // Mapping of internal nodes [x] in a diagram to the actual indices depends
   // on the tree implementation. Currently, [x] -> x + n, where n = #leaves.
 
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
   /*
      [0]--*--
@@ -164,7 +164,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(reduce_labels, DeviceType, ARBORX_DEVICE_TYPES)
   //                   0  1   2   3   4   5   6   7   8   9  10 11 12  13  14
   //                   0  1   2   3   4   5   6   7, [0] [1] [2][3][4] [5] [6]
 
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   ARBORX_TEST_REDUCE_LABELS(

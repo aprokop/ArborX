@@ -58,7 +58,7 @@ void sortAndFilterClusters(ExecutionSpace const &exec_space,
   static_assert(Kokkos::is_view<ClusterIndicesView>{});
   static_assert(Kokkos::is_view<ClusterOffsetView>{});
 
-  using MemorySpace = typename LabelsView::memory_space;
+  using MemorySpace = LabelsView::memory_space;
 
   static_assert(std::is_same<typename LabelsView::value_type, int>{});
   static_assert(std::is_same<typename ClusterIndicesView::value_type, int>{});
@@ -159,7 +159,7 @@ template <int DIM>
 bool ArborXBenchmark::run(ArborXBenchmark::Parameters const &params)
 {
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
 
   if (params.verbose)
   {

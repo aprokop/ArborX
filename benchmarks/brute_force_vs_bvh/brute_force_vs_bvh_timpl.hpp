@@ -38,7 +38,7 @@ struct ArborX::AccessTraits<ArborXBenchmark::Placeholder<DIM, FloatingPoint>,
 {
   using Primitives = ArborXBenchmark::Placeholder<DIM, FloatingPoint>;
   using memory_space = MemorySpace;
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
   static KOKKOS_FUNCTION size_type size(Primitives d) { return d.count; }
   static KOKKOS_FUNCTION auto get(Primitives, size_type i)
   {
@@ -57,7 +57,7 @@ struct ArborX::AccessTraits<ArborXBenchmark::Placeholder<DIM, FloatingPoint>,
 {
   using Predicates = ArborXBenchmark::Placeholder<DIM, FloatingPoint>;
   using memory_space = MemorySpace;
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
   static KOKKOS_FUNCTION size_type size(Predicates d) { return d.count; }
   static KOKKOS_FUNCTION auto get(Predicates, size_type i)
   {

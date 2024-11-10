@@ -38,7 +38,7 @@ auto buildDendrogram(ExecutionSpace const &exec_space,
   using ArborXTest::toView;
   auto edges = toView<ExecutionSpace>(edges_host, "Test::edges");
 
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   ArborX::Experimental::Dendrogram<MemorySpace> dendrogram{exec_space, edges};
 
   auto parents_host = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{},
@@ -53,7 +53,7 @@ auto buildDendrogram(ExecutionSpace const &exec_space,
 BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_union_find, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using ArborX::Details::WeightedEdge;
 
   ExecutionSpace space;
@@ -107,8 +107,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_union_find, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_boruvka, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using namespace ArborX::Details;
 
@@ -189,8 +189,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_boruvka, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(dendrogram_boruvka_same_weights, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using namespace ArborX::Details;
   using Point = ArborX::Point<2, float>;

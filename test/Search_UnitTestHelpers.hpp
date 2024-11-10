@@ -60,7 +60,7 @@ template <typename ExecutionSpace, typename Tree, typename Queries>
 auto query(ExecutionSpace const &exec_space, Tree const &tree,
            Queries const &queries)
 {
-  using memory_space = typename Tree::memory_space;
+  using memory_space = Tree::memory_space;
 #ifdef ARBORX_ENABLE_MPI
   using value_type = std::conditional_t<is_distributed<Tree>{},
                                         ArborXTest::PairIndexRank, int>;
@@ -84,7 +84,7 @@ template <typename ValueType, typename ExecutionSpace, typename Tree,
 auto query(ExecutionSpace const &exec_space, Tree const &tree,
            Queries const &queries, Callback const &callback)
 {
-  using memory_space = typename Tree::memory_space;
+  using memory_space = Tree::memory_space;
   Kokkos::View<ValueType *, memory_space> values("Testing::values", 0);
   Kokkos::View<int *, memory_space> offsets("Testing::offsets", 0);
   tree.query(exec_space, queries, callback, values, offsets);
@@ -95,7 +95,7 @@ auto query(ExecutionSpace const &exec_space, Tree const &tree,
 
 #define ARBORX_TEST_QUERY_TREE_CALLBACK(exec_space, tree, queries, callback,   \
                                         reference)                             \
-  using value_type = typename decltype(reference)::value_type;                 \
+  using value_type = decltype(reference)::value_type;                          \
   BOOST_TEST(query<value_type>(exec_space, tree, queries, callback) ==         \
                  (reference),                                                  \
              boost::test_tools::per_element());
@@ -133,8 +133,8 @@ template <typename DeviceType, typename Geometry>
 auto makeDistributedTree(MPI_Comm comm, typename DeviceType::execution_space,
                          std::vector<Geometry> const &g)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using PairIndexRank = ArborXTest::PairIndexRank;
 

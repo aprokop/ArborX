@@ -99,7 +99,7 @@ struct AccessTraits<Details::PrimitivesWithRadiusReorderedAndFiltered<
                         Primitives, PermuteFilter>,
                     PredicatesTag>
 {
-  using memory_space = typename Primitives::memory_space;
+  using memory_space = Primitives::memory_space;
   using Predicates =
       Details::PrimitivesWithRadiusReorderedAndFiltered<Primitives,
                                                         PermuteFilter>;
@@ -167,7 +167,7 @@ struct AccessTraits<
     auto const &hyper_point = reinterpret_cast<Point<dim> const &>(point);
     return Box<dim>{hyper_point, hyper_point};
   }
-  using memory_space = typename MixedOffsets::memory_space;
+  using memory_space = MixedOffsets::memory_space;
 };
 
 namespace DBSCAN
@@ -211,7 +211,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   namespace KokkosExt = ArborX::Details::KokkosExt;
 
   using Points = Details::AccessValues<Primitives, PrimitivesTag>;
-  using MemorySpace = typename Points::memory_space;
+  using MemorySpace = Points::memory_space;
 
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
@@ -228,7 +228,7 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   using UnionFind = Details::UnionFind<MemorySpace>;
 #endif
 
-  using Point = typename Points::value_type;
+  using Point = Points::value_type;
   static_assert(GeometryTraits::is_point_v<Point>);
   constexpr int dim = GeometryTraits::dimension_v<Point>;
   using Box = Box<dim>;

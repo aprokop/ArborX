@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
 
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   ExecutionSpace space{};
 
   // Source space is a 3x3 grid

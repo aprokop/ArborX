@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
   Kokkos::ScopeGuard guard(argc, argv);
 
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
 
   std::cout << "ArborX version    : " << ArborX::version() << '\n';
   std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << '\n';

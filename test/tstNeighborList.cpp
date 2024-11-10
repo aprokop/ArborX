@@ -107,7 +107,7 @@ auto buildHalfNeighborListAndExpandToFull(ExecutionSpace const &exec_space,
 BOOST_AUTO_TEST_CASE_TEMPLATE(find_neighbor_list_degenerate, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   auto no_point = ArborXTest::toView<ExecutionSpace>(
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(find_neighbor_list_degenerate, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(find_neighbor_list, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   auto points = ArborXTest::toView<ExecutionSpace>(
@@ -162,8 +162,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(
     find_neighbor_list_compare_filtered_tree_traversal, DeviceType,
     ARBORX_DEVICE_TYPES)
 {
-  using MemorySpace = typename DeviceType::memory_space;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   auto points =

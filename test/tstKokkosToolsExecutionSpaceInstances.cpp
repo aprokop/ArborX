@@ -75,8 +75,8 @@ void arborx_test_unset_tools_callbacks()
 BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_bvh_execution_space_instance, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;
@@ -111,8 +111,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_bvh_execution_space_instance, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(bvh_query_execution_space_instance, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Tree = LegacyTree<ArborX::BoundingVolumeHierarchy<
       MemorySpace, ArborX::PairValueIndex<ArborX::Box<3>>>>;

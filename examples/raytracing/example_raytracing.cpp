@@ -256,8 +256,8 @@ int main(int argc, char *argv[])
           using Kokkos::sin;
           using Kokkos::acos;
 
-          using Point = typename ArborX::Experimental::Ray::Point;
-          using Vector = typename ArborX::Experimental::Ray::Vector;
+          using Point = ArborX::Experimental::Ray::Point;
+          using Vector = ArborX::Experimental::Ray::Vector;
 
           auto const &b = boxes(i);
           Point origin{b.minCorner()[0] +

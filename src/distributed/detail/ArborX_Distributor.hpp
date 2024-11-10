@@ -60,7 +60,7 @@ determineBufferLayout(ExecutionSpace const &space, InputView batched_ranks,
       KokkosExt::lastElement(space, batched_offsets) == 0)
     return;
 
-  using DeviceType = typename InputView::traits::device_type;
+  using DeviceType = InputView::traits::device_type;
 
   // Find the indices in batched_ranks for which the rank changes and store
   // these ranks and the corresponding offsets in a new container that we can be
@@ -153,7 +153,7 @@ static void sortAndDetermineBufferLayout(ExecutionSpace const &space,
   // this implements a "sort" which is O(N * R) where (R) is the total number of
   // unique destination ranks. it performs better than other algorithms in the
   // case when (R) is small, but results may vary
-  using DeviceType = typename InputView::traits::device_type;
+  using DeviceType = InputView::traits::device_type;
 
   Kokkos::View<int *, DeviceType> device_ranks_duplicate(
       Kokkos::view_alloc(space, Kokkos::WithoutInitializing, ranks.label()),
@@ -299,7 +299,7 @@ public:
                    std::is_same_v<typename ImportView::array_layout,
                                   Kokkos::LayoutRight>));
 
-    using ValueType = typename ImportView::value_type;
+    using ValueType = ImportView::value_type;
     static_assert(
         std::is_same<ValueType,
                      std::remove_cv_t<typename ExportView::value_type>>::value);
@@ -348,7 +348,7 @@ public:
     }
 
 #ifndef ARBORX_ENABLE_GPU_AWARE_MPI
-    using MirrorSpace = typename ExportView::host_mirror_space;
+    using MirrorSpace = ExportView::host_mirror_space;
 
     auto exports_comm = Kokkos::create_mirror_view(
         Kokkos::WithoutInitializing, MirrorSpace{}, permuted_exports);

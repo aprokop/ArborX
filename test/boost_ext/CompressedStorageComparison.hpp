@@ -23,8 +23,8 @@ struct CompressedStorage
 {
   Offsets offsets;
   Values values;
-  using value_type = typename Values::value_type;
-  using index_type = typename Offsets::value_type;
+  using value_type = Values::value_type;
+  using index_type = Offsets::value_type;
   struct ConstForwardIterator
   {
     index_type i;
@@ -79,8 +79,8 @@ template <typename Offsets, typename Values>
 struct bt_iterator_traits<CompressedStorage<Offsets, Values>, true>
 {
   using this_type = CompressedStorage<Offsets, Values>;
-  using const_iterator = typename this_type::ConstForwardIterator;
-  using value_type = typename const_iterator::value_type;
+  using const_iterator = this_type::ConstForwardIterator;
+  using value_type = const_iterator::value_type;
   static const_iterator begin(this_type const &x) { return x.cbegin(); }
   static const_iterator end(this_type const &x) { return x.cend(); }
   static std::size_t size(this_type const &x) { return x.size(); }

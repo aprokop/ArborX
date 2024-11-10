@@ -55,8 +55,8 @@ void forwardQueries(MPI_Comm comm, ExecutionSpace const &space,
 
   Kokkos::Profiling::ScopedRegion guard(prefix);
 
-  using MemorySpace = typename Predicates::memory_space;
-  using Query = typename Predicates::value_type;
+  using MemorySpace = Predicates::memory_space;
+  using Query = Predicates::value_type;
 
   int comm_rank;
   MPI_Comm_rank(comm, &comm_rank);
@@ -122,8 +122,8 @@ void forwardQueries(MPI_Comm comm, ExecutionSpace const &space,
 
   Kokkos::Profiling::ScopedRegion guard(prefix);
 
-  using MemorySpace = typename Predicates::memory_space;
-  using Query = typename Predicates::value_type;
+  using MemorySpace = Predicates::memory_space;
+  using Query = Predicates::value_type;
 
   Distributor<MemorySpace> distributor(comm);
 
@@ -154,7 +154,7 @@ void communicateResultsBack(MPI_Comm comm, ExecutionSpace const &space,
   Kokkos::Profiling::ScopedRegion guard(
       "ArborX::DistributedTree::communicateResultsBack");
 
-  using MemorySpace = typename OutputView::memory_space;
+  using MemorySpace = OutputView::memory_space;
 
   int comm_rank;
   MPI_Comm_rank(comm, &comm_rank);
@@ -231,8 +231,8 @@ void forwardQueriesAndCommunicateResults(
       "ArborX::DistributedTree::query::forwardQueriesAndCommunicateResults";
   Kokkos::Profiling::ScopedRegion guard(prefix);
 
-  using Query = typename Predicates::value_type;
-  using MemorySpace = typename BottomTree::memory_space;
+  using Query = Predicates::value_type;
+  using MemorySpace = BottomTree::memory_space;
 
   // Forward predicates
   Kokkos::View<int *, MemorySpace> ids(prefix + "::query_ids", 0);
@@ -267,7 +267,7 @@ void filterResults(ExecutionSpace const &space, Predicates const &queries,
   Kokkos::Profiling::ScopedRegion guard(
       "ArborX::DistributedTree::filterResults");
 
-  using Value = typename Values::value_type;
+  using Value = Values::value_type;
 
   int const n_queries = queries.size();
   // truncated views are prefixed with an underscore

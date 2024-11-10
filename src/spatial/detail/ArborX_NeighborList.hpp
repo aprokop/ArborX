@@ -35,7 +35,7 @@ struct NeighborListPredicateGetter
     static_assert(GeometryTraits::is_point_v<Point>);
 
     constexpr int dim = GeometryTraits::dimension_v<Point>;
-    using Coordinate = typename GeometryTraits::coordinate_type_t<Point>;
+    using Coordinate = GeometryTraits::coordinate_type_t<Point>;
     return intersects(
         Sphere{Details::convert<::ArborX::Point<dim, Coordinate>>(pair.value),
                _radius});
@@ -54,12 +54,12 @@ void findHalfNeighborList(ExecutionSpace const &space,
 
   using Points = Details::AccessValues<Primitives, PrimitivesTag>;
 
-  using MemorySpace = typename Points::memory_space;
+  using MemorySpace = Points::memory_space;
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
       "Primitives must be accessible from the execution space");
 
-  using Point = typename Points::value_type;
+  using Point = Points::value_type;
   static_assert(GeometryTraits::is_point_v<Point>);
 
   Points points{primitives}; // NOLINT
@@ -113,12 +113,12 @@ void findFullNeighborList(ExecutionSpace const &space,
 
   using Points = Details::AccessValues<Primitives, PrimitivesTag>;
 
-  using MemorySpace = typename Points::memory_space;
+  using MemorySpace = Points::memory_space;
   static_assert(
       KokkosExt::is_accessible_from<MemorySpace, ExecutionSpace>::value,
       "Primitives must be accessible from the execution space");
 
-  using Point = typename Points::value_type;
+  using Point = Points::value_type;
   static_assert(GeometryTraits::is_point_v<Point>);
 
   Points points{primitives}; // NOLINT

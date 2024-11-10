@@ -25,8 +25,8 @@
 template <typename DeviceType, typename Geometry>
 Geometry reduce(std::vector<Geometry> const &g)
 {
-  using MemorySpace = typename DeviceType::memory_space;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   auto const n = g.size();
   Kokkos::View<Geometry *, MemorySpace> geometries("Testing::geometries", n);

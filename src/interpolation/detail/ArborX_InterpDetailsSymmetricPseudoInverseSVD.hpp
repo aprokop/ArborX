@@ -52,7 +52,7 @@ template <typename Matrix>
 KOKKOS_FUNCTION auto argmaxUpperTriangle(Matrix const &mat)
 {
   ensureIsSquareMatrix(mat);
-  using Value = typename Matrix::non_const_value_type;
+  using Value = Matrix::non_const_value_type;
 
   struct
   {
@@ -108,7 +108,7 @@ KOKKOS_FUNCTION void symmetricPseudoInverseSVDKernel(Matrix &mat, Diag &diag,
       "All input matrices must have the same value type");
   KOKKOS_ASSERT(mat.extent(0) == diag.extent(0) &&
                 diag.extent(0) == unit.extent(0));
-  using Value = typename Matrix::non_const_value_type;
+  using Value = Matrix::non_const_value_type;
   int const size = mat.extent(0);
 
   // We first initialize 'unit' as the identity matrix
@@ -246,8 +246,8 @@ void symmetricPseudoInverseSVD(ExecutionSpace const &space,
 
   KOKKOS_ASSERT(matrices.extent(1) == matrices.extent(2)); // Must be square
 
-  using Value = typename InOutMatrices::non_const_value_type;
-  using MemorySpace = typename InOutMatrices::memory_space;
+  using Value = InOutMatrices::non_const_value_type;
+  using MemorySpace = InOutMatrices::memory_space;
 
   Kokkos::View<Value **, MemorySpace> diags(
       Kokkos::view_alloc(space, Kokkos::WithoutInitializing,

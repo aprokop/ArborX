@@ -25,7 +25,7 @@ namespace tt = boost::test_tools;
 BOOST_AUTO_TEST_CASE_TEMPLATE(last_element, DeviceType, ARBORX_DEVICE_TYPES)
 {
   using ArborX::Details::KokkosExt::lastElement;
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace execution_space;
   Kokkos::View<int *, DeviceType> v("v", 2);
   auto v_host = Kokkos::create_mirror_view(v);

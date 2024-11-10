@@ -186,7 +186,7 @@ void generatePointCloud(ExecutionSpace const &exec,
 {
   static_assert(Kokkos::is_view_v<Points>);
 
-  using Point = typename Points::value_type;
+  using Point = Points::value_type;
 
   using namespace ArborX::GeometryTraits;
   check_valid_geometry_traits(Point{});

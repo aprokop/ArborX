@@ -27,7 +27,7 @@ template <>
 struct ArborX::AccessTraits<Dummy, ArborX::PrimitivesTag>
 {
   using memory_space = MemorySpace;
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
   static KOKKOS_FUNCTION size_type size(Dummy const &d) { return d.count; }
   static KOKKOS_FUNCTION auto get(Dummy const &, size_type i)
   {
@@ -39,7 +39,7 @@ template <>
 struct ArborX::AccessTraits<Dummy, ArborX::PredicatesTag>
 {
   using memory_space = MemorySpace;
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
 
   static KOKKOS_FUNCTION size_type size(Dummy const &d) { return d.count; }
   static KOKKOS_FUNCTION auto get(Dummy const &, size_type i)

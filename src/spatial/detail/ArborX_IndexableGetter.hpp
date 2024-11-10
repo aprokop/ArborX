@@ -66,7 +66,7 @@ struct Indexables
   Values _values;
   IndexableGetter _indexable_getter;
 
-  using memory_space = typename Values::memory_space;
+  using memory_space = Values::memory_space;
 
   KOKKOS_FUNCTION decltype(auto) operator()(int i) const
   {

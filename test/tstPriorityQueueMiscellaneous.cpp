@@ -72,7 +72,7 @@ BOOST_AUTO_TEST_CASE(pop_push)
 template <typename PriorityQueue>
 void check_heap(PriorityQueue const &queue)
 {
-  using ValueType = typename PriorityQueue::value_type;
+  using ValueType = PriorityQueue::value_type;
   int const size = queue.size();
   auto const compare = queue.valueComp();
   auto heap = reinterpret_cast<ValueType const *>(&queue);

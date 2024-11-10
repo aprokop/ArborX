@@ -28,10 +28,10 @@ class Stack
 {
 public:
   using container_type = Container;
-  using value_type = typename Container::value_type;
-  using size_type = typename Container::size_type;
-  using reference = typename Container::reference;
-  using const_reference = typename Container::const_reference;
+  using value_type = Container::value_type;
+  using size_type = Container::size_type;
+  using reference = Container::reference;
+  using const_reference = Container::const_reference;
   static_assert(std::is_same_v<value_type, T>,
                 "Template parameter T in Stack is not the same as "
                 "the type of the elements stored by the underlying "

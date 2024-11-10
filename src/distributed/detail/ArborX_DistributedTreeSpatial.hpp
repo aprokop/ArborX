@@ -44,7 +44,7 @@ DistributedTreeImpl::queryDispatch(SpatialPredicateTag, Tree const &tree,
     return;
   }
 
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
 
   auto const &top_tree = tree._top_tree;
 
@@ -71,7 +71,7 @@ void DistributedTreeImpl::queryDispatch(SpatialPredicateTag, Tree const &tree,
   if (tree.empty())
     return;
 
-  using MemorySpace = typename Tree::memory_space;
+  using MemorySpace = Tree::memory_space;
   using namespace DistributedTree;
 
   auto const &top_tree = tree._top_tree;
@@ -83,7 +83,7 @@ void DistributedTreeImpl::queryDispatch(SpatialPredicateTag, Tree const &tree,
   Kokkos::View<int *, MemorySpace> offset(prefix + "::offset", 0);
   top_tree.query(space, predicates, intersected_ranks, offset);
 
-  using Query = typename Predicates::value_type;
+  using Query = Predicates::value_type;
   Kokkos::View<Query *, MemorySpace> fwd_predicates(prefix + "::fwd_predicates",
                                                     0);
   forwardQueries(comm, space, predicates, intersected_ranks, offset,

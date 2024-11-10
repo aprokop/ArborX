@@ -24,7 +24,7 @@
 namespace boost
 {
 #define ARBORX_ASSERT_VIEW_COMPATIBLE(View)                                    \
-  using Traits = typename View::traits;                                        \
+  using Traits = View::traits;                                                 \
   static_assert(Traits::rank == 1,                                             \
                 "Adaptor to Boost.Range only available for Views of rank 1");  \
   static_assert(                                                               \
@@ -56,7 +56,7 @@ struct range_value<Kokkos::View<T, P...>>
 {
   using View = Kokkos::View<T, P...>;
   ARBORX_ASSERT_VIEW_COMPATIBLE(View)
-  using type = typename Kokkos::ViewTraits<T, P...>::value_type;
+  using type = Kokkos::ViewTraits<T, P...>::value_type;
 };
 
 template <typename T, typename... P>
@@ -64,7 +64,7 @@ struct range_reference<Kokkos::View<T, P...>>
 {
   using View = Kokkos::View<T, P...>;
   ARBORX_ASSERT_VIEW_COMPATIBLE(View)
-  using type = typename Kokkos::ViewTraits<T, P...>::reference_type;
+  using type = Kokkos::ViewTraits<T, P...>::reference_type;
 };
 
 template <typename T, typename... P>
@@ -72,7 +72,7 @@ struct range_size<Kokkos::View<T, P...>>
 {
   using View = Kokkos::View<T, P...>;
   ARBORX_ASSERT_VIEW_COMPATIBLE(View)
-  using type = typename Kokkos::ViewTraits<T, P...>::size_type;
+  using type = Kokkos::ViewTraits<T, P...>::size_type;
 };
 
 } // namespace boost

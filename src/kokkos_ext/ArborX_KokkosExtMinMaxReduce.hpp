@@ -36,7 +36,7 @@ minmax_reduce(ExecutionSpace const &space, ViewType const &v)
   auto const n = v.extent(0);
   ARBORX_ASSERT(n > 0);
 
-  using ValueType = typename ViewType::non_const_value_type;
+  using ValueType = ViewType::non_const_value_type;
 
   ValueType min_val;
   ValueType max_val;
@@ -71,7 +71,7 @@ typename ViewType::non_const_value_type min_reduce(ExecutionSpace const &space,
   auto const n = v.extent(0);
   ARBORX_ASSERT(n > 0);
 
-  using ValueType = typename ViewType::non_const_value_type;
+  using ValueType = ViewType::non_const_value_type;
 
   ValueType result;
   Kokkos::parallel_reduce(
@@ -98,7 +98,7 @@ typename ViewType::non_const_value_type max_reduce(ExecutionSpace const &space,
   auto const n = v.extent(0);
   ARBORX_ASSERT(n > 0);
 
-  using ValueType = typename ViewType::non_const_value_type;
+  using ValueType = ViewType::non_const_value_type;
 
   ValueType result;
   Kokkos::parallel_reduce(

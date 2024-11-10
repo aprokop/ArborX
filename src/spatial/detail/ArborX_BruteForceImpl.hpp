@@ -57,7 +57,7 @@ struct BruteForceImpl
     Kokkos::Profiling::ScopedRegion guard("ArborX::BruteForce::query::spatial");
 
     using TeamPolicy = Kokkos::TeamPolicy<ExecutionSpace>;
-    using PredicateType = typename Predicates::value_type;
+    using PredicateType = Predicates::value_type;
     using IndexableType = std::decay_t<decltype(indexables(0))>;
 
     int const n_indexables = values.size();
@@ -149,7 +149,7 @@ struct BruteForceImpl
   {
     Kokkos::Profiling::ScopedRegion guard("ArborX::BruteForce::query::nearest");
 
-    using MemorySpace = typename Values::memory_space;
+    using MemorySpace = Values::memory_space;
 
     int const n_indexables = values.size();
     int const n_predicates = predicates.size();

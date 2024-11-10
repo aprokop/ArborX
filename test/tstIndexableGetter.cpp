@@ -87,8 +87,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables, DeviceType, ARBORX_DEVICE_TYPES)
   // Test that the two-level wrapping Data -> AccessValues -> Indexables by
   // using DefaultIndexableGetter works correctly.
 
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using ArborX::Details::equals;
 
@@ -150,8 +150,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(indexables_by_value, DeviceType,
   // Test that the there is no reference to temporary when indexable getter
   // returns by value. Would produce a warning.
 
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
 
   using Point = ArborX::Point<3>;
 

@@ -59,7 +59,7 @@ KOKKOS_INLINE_FUNCTION void pushHeap(RandomIterator first, RandomIterator last,
 {
   using DistanceType =
       typename std::iterator_traits<RandomIterator>::difference_type;
-  using ValueType = typename std::iterator_traits<RandomIterator>::value_type;
+  using ValueType = std::iterator_traits<RandomIterator>::value_type;
   auto const n = last - first;
   if (n > 1)
   {
@@ -97,7 +97,7 @@ KOKKOS_INLINE_FUNCTION void popHeap(RandomIterator first, RandomIterator last,
 {
   using DistanceType =
       typename std::iterator_traits<RandomIterator>::difference_type;
-  using ValueType = typename std::iterator_traits<RandomIterator>::value_type;
+  using ValueType = std::iterator_traits<RandomIterator>::value_type;
   auto const n = last - first;
   if (n > 1)
   {

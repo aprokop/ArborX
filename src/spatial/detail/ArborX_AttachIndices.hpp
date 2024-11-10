@@ -27,7 +27,7 @@ struct AttachIndices
 };
 
 // Make sure the default Index matches the default in PairValueIndex
-template <typename Index = typename PairValueIndex<int>::index_type,
+template <typename Index = PairValueIndex<int>::index_type,
           typename Values = void>
 auto attach_indices(Values const &values)
 {
@@ -50,7 +50,7 @@ private:
       Index>;
 
 public:
-  using memory_space = typename Access::memory_space;
+  using memory_space = Access::memory_space;
 
   KOKKOS_FUNCTION static auto size(Self const &self)
   {
@@ -70,7 +70,7 @@ private:
   using Access = AccessTraits<Values, ArborX::PredicatesTag>;
 
 public:
-  using memory_space = typename Access::memory_space;
+  using memory_space = Access::memory_space;
 
   KOKKOS_FUNCTION static auto size(Self const &self)
   {

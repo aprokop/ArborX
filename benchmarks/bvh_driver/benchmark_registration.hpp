@@ -111,7 +111,7 @@ template <typename DeviceType>
 auto constructPoints(int n_values,
                      ArborXBenchmark::PointCloudType point_cloud_type)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec;
 
   using Point = ArborX::Point<3>;
@@ -142,7 +142,7 @@ template <typename DeviceType>
 auto makeSpatialQueries(int n_values, int n_queries, int n_neighbors,
                         ArborXBenchmark::PointCloudType target_point_cloud_type)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec;
 
   using Point = ArborX::Point<3>;
@@ -167,7 +167,7 @@ template <typename DeviceType>
 auto makeNearestQueries(int n_values, int n_queries, int n_neighbors,
                         ArborXBenchmark::PointCloudType target_point_cloud_type)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec;
 
   using Point = ArborX::Point<3>;

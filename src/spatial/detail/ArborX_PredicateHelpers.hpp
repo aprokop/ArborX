@@ -27,7 +27,7 @@ class PrimitivesIntersect
 {
   using Primitives = Details::AccessValues<UserPrimitives, PrimitivesTag>;
   // FIXME:
-  // using Geometry = typename Primitives::value_type;
+  // using Geometry = Primitives::value_type;
   // static_assert(GeometryTraits::is_valid_geometry<Geometry>{});
 
 public:
@@ -47,9 +47,9 @@ template <typename UserPrimitives>
 class PrimitivesWithRadius
 {
   using Primitives = Details::AccessValues<UserPrimitives, PrimitivesTag>;
-  using Point = typename Primitives::value_type;
+  using Point = Primitives::value_type;
   static_assert(GeometryTraits::is_point<Point>::value);
-  using Coordinate = typename GeometryTraits::coordinate_type<Point>::type;
+  using Coordinate = GeometryTraits::coordinate_type<Point>::type;
 
 public:
   Primitives _primitives;
@@ -66,7 +66,7 @@ class PrimitivesNearestK
 {
   using Primitives = Details::AccessValues<UserPrimitives, PrimitivesTag>;
   // FIXME:
-  // using Geometry = typename Primitives::value_type;
+  // using Geometry = Primitives::value_type;
   // static_assert(GeometryTraits::is_valid_geometry<Geometry>{});
 
 public:
@@ -115,8 +115,8 @@ private:
   using Self = Experimental::PrimitivesIntersect<Primitives>;
 
 public:
-  using memory_space = typename Primitives::memory_space;
-  using size_type = typename memory_space::size_type;
+  using memory_space = Primitives::memory_space;
+  using size_type = memory_space::size_type;
 
   static KOKKOS_FUNCTION size_type size(Self const &x)
   {
@@ -136,8 +136,8 @@ private:
   using Self = Experimental::PrimitivesOrderedIntersect<Primitives>;
 
 public:
-  using memory_space = typename Primitives::memory_space;
-  using size_type = typename memory_space::size_type;
+  using memory_space = Primitives::memory_space;
+  using size_type = memory_space::size_type;
 
   static KOKKOS_FUNCTION size_type size(Self const &x)
   {
@@ -157,8 +157,8 @@ private:
   using Self = Experimental::PrimitivesWithRadius<Primitives>;
 
 public:
-  using memory_space = typename Primitives::memory_space;
-  using size_type = typename memory_space::size_type;
+  using memory_space = Primitives::memory_space;
+  using size_type = memory_space::size_type;
 
   static KOKKOS_FUNCTION size_type size(Self const &x)
   {
@@ -169,7 +169,7 @@ public:
     auto const &point = x._primitives(i);
     using Point = std::decay_t<decltype(point)>;
     constexpr int dim = GeometryTraits::dimension_v<Point>;
-    using Coordinate = typename GeometryTraits::coordinate_type<Point>::type;
+    using Coordinate = GeometryTraits::coordinate_type<Point>::type;
     return intersects(Sphere(
         Details::convert<::ArborX::Point<dim, Coordinate>>(point), x._r));
   }
@@ -182,8 +182,8 @@ private:
   using Self = Experimental::PrimitivesNearestK<Primitives>;
 
 public:
-  using memory_space = typename Primitives::memory_space;
-  using size_type = typename memory_space::size_type;
+  using memory_space = Primitives::memory_space;
+  using size_type = memory_space::size_type;
 
   static KOKKOS_FUNCTION size_type size(Self const &x)
   {

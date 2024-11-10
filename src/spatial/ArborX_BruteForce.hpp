@@ -42,7 +42,7 @@ class BruteForce
 public:
   using memory_space = MemorySpace;
   static_assert(Kokkos::is_memory_space<MemorySpace>::value);
-  using size_type = typename MemorySpace::size_type;
+  using size_type = MemorySpace::size_type;
   using bounding_volume_type = BoundingVolume;
   using value_type = Value;
 
@@ -79,7 +79,7 @@ public:
             callback_or_view, user_predicates, view);
 
     using Predicates = Details::AccessValues<UserPredicates, PredicatesTag>;
-    using Tag = typename Predicates::value_type::Tag;
+    using Tag = Predicates::value_type::Tag;
 
     // Automatically add LegacyDefaultCallback if
     //   1. A user does not provide a callback
@@ -194,7 +194,7 @@ void BruteForce<MemorySpace, Value, IndexableGetter, BoundingVolume>::query(
 
   Predicates predicates{user_predicates}; // NOLINT
 
-  using Tag = typename Predicates::value_type::Tag;
+  using Tag = Predicates::value_type::Tag;
 
   Details::BruteForceImpl::query(
       Tag{}, space, predicates, _values,

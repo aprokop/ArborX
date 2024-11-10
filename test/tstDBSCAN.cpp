@@ -34,7 +34,7 @@ struct ArborX::AccessTraits<HiddenView<View>, ArborX::PrimitivesTag>
   {
     return data._view(i);
   }
-  using memory_space = typename View::memory_space;
+  using memory_space = View::memory_space;
 };
 
 using ArborXTest::toView;
@@ -43,7 +43,7 @@ BOOST_AUTO_TEST_SUITE(DBSCAN)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_verifier, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using Point = ArborX::Point<3>;
   using ArborX::Details::verifyDBSCAN;
 
@@ -153,7 +153,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_verifier, DeviceType, ARBORX_DEVICE_TYPES)
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   using ArborX::dbscan;
   using ArborX::Details::verifyDBSCAN;
   using Point = ArborX::Point<3>;

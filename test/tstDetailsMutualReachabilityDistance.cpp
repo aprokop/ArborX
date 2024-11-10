@@ -30,7 +30,7 @@ auto compute_core_distances(ExecutionSpace exec_space,
   auto points = toView<ExecutionSpace>(points_host, "Test::points");
 
   ARBORX_ASSERT(points.extent_int(0) >= k);
-  using MemorySpace = typename ExecutionSpace::memory_space;
+  using MemorySpace = ExecutionSpace::memory_space;
   ArborX::BoundingVolumeHierarchy bvh{
       exec_space, ArborX::Experimental::attach_indices(points)};
   Kokkos::View<float *, MemorySpace> distances(
@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_SUITE(MutualReachabilityDistance)
 BOOST_AUTO_TEST_CASE_TEMPLATE(compute_core_distances, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   using Point = ArborX::Point<3>;
@@ -131,7 +131,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(compute_core_distances, DeviceType,
 BOOST_AUTO_TEST_CASE_TEMPLATE(compute_mutual_reachability_distances, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   { // equidistant points

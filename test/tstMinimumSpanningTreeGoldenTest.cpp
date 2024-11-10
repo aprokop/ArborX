@@ -82,8 +82,8 @@ auto parseEdgesFromCSVFile(std::string const &filename)
 BOOST_AUTO_TEST_CASE_TEMPLATE(minimum_spanning_tree_golden_test, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace exec_space;
 
   auto points = ArborXTest::toView<ExecutionSpace>(

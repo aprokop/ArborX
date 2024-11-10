@@ -48,7 +48,7 @@ struct Test1
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(query_impl, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
 
   namespace KokkosExt = ArborX::Details::KokkosExt;
 

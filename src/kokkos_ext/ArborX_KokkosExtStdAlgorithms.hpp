@@ -36,7 +36,7 @@ void iota(ExecutionSpace const &space, ViewType const &v,
   static_assert(unsigned(ViewType::rank()) == unsigned(1),
                 "iota requires a View of rank 1");
 
-  using ValueType = typename ViewType::value_type;
+  using ValueType = ViewType::value_type;
   static_assert(std::is_arithmetic_v<ValueType>,
                 "iota requires a View with an arithmetic value type");
   static_assert(

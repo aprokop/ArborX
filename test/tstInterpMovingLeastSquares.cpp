@@ -33,8 +33,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(moving_least_squares, DeviceType,
   }
 #endif
 
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   // Case 1: f(x) = 3, 2 neighbors, linear
@@ -121,8 +121,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(moving_least_squares_edge_cases, DeviceType,
   }
 #endif
 
-  using ExecutionSpace = typename DeviceType::execution_space;
-  using MemorySpace = typename DeviceType::memory_space;
+  using ExecutionSpace = DeviceType::execution_space;
+  using MemorySpace = DeviceType::memory_space;
   ExecutionSpace space{};
 
   // Case 1: Same as previous case 1, but points are 2D and locked on y=0

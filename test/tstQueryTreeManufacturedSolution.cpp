@@ -29,14 +29,14 @@ namespace tt = boost::test_tools;
 BOOST_AUTO_TEST_CASE_TEMPLATE(structured_grid, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // FIXME_NVCC we see inexplainable test failures with NVCC and KDOP<18> and
   // KDOP<26> here.
 #ifdef __NVCC__
-  using BoundingVolume = typename Tree::bounding_volume_type;
+  using BoundingVolume = Tree::bounding_volume_type;
   if constexpr (ArborX::GeometryTraits::is_kdop_v<BoundingVolume>)
   {
     if constexpr (BoundingVolume::n_directions == 9 ||

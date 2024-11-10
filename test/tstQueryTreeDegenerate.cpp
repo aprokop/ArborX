@@ -25,9 +25,9 @@ namespace tt = boost::test_tools;
 BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_spatial_predicate, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // tree is empty, it has no leaves.
   Tree default_initialized;
@@ -84,9 +84,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_spatial_predicate, TreeTypeTraits,
 BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_nearest_predicate, TreeTypeTraits,
                               TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // tree is empty, it has no leaves.
   for (auto const &tree : {
@@ -124,9 +124,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(empty_tree_nearest_predicate, TreeTypeTraits,
 BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_spatial_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // tree has a single leaf (unit box)
   auto const tree =
@@ -170,9 +170,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_spatial_predicate,
 BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_nearest_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // tree has a single leaf (unit box)
   auto const tree =
@@ -208,9 +208,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(single_leaf_tree_nearest_predicate,
 BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_spatial_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   auto const tree =
       make<Tree>(ExecutionSpace{}, {
@@ -271,9 +271,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_spatial_predicate,
 BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_nearest_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   auto const tree =
       make<Tree>(ExecutionSpace{}, {
@@ -305,9 +305,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(couple_leaves_tree_nearest_predicate,
 BOOST_AUTO_TEST_CASE_TEMPLATE(duplicated_leaves_spatial_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   // The tree contains multiple (more than two) leaves that will be assigned
   // the same Morton code.  This was able to trigger a bug that we discovered
@@ -341,9 +341,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(not_exceeding_stack_capacity_spatial_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
   // FIXME This unit test might make little sense for other trees than BVH
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   std::vector<ArborX::Box<3>> boxes;
   int const n = 4096; // exceeds stack capacity which is 64
@@ -374,9 +374,9 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(not_exceeding_stack_capacity_nearest_predicate,
                               TreeTypeTraits, TreeTypeTraitsList)
 {
   // FIXME This unit test might make little sense for other trees than BVH
-  using Tree = typename TreeTypeTraits::type;
-  using ExecutionSpace = typename TreeTypeTraits::execution_space;
-  using DeviceType = typename TreeTypeTraits::device_type;
+  using Tree = TreeTypeTraits::type;
+  using ExecutionSpace = TreeTypeTraits::execution_space;
+  using DeviceType = TreeTypeTraits::device_type;
 
   std::vector<ArborX::Box<3>> boxes;
   int const n = 4096; // exceed stack capacity which is 64

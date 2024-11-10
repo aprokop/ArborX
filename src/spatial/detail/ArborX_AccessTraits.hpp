@@ -51,7 +51,7 @@ struct AccessTraits<
   KOKKOS_FUNCTION
   static typename View::size_type size(View const &v) { return v.extent(0); }
 
-  using memory_space = typename View::memory_space;
+  using memory_space = View::memory_space;
 };
 
 template <typename View, typename Tag>
@@ -78,7 +78,7 @@ struct AccessTraits<
   KOKKOS_FUNCTION
   static typename View::size_type size(View const &v) { return v.extent(0); }
 
-  using memory_space = typename View::memory_space;
+  using memory_space = View::memory_space;
 };
 
 namespace Details
@@ -86,7 +86,7 @@ namespace Details
 
 // archetypal alias for a 'memory_space' type member in access traits
 template <typename Traits>
-using AccessTraitsMemorySpaceArchetypeAlias = typename Traits::memory_space;
+using AccessTraitsMemorySpaceArchetypeAlias = Traits::memory_space;
 
 // archetypal expression for 'size()' static member function in access traits
 template <typename Traits, typename X>
@@ -99,7 +99,7 @@ using AccessTraitsGetArchetypeExpression =
     decltype(Traits::get(std::declval<X const &>(), 0));
 
 template <typename P>
-using PredicateTagArchetypeAlias = typename P::Tag;
+using PredicateTagArchetypeAlias = P::Tag;
 
 template <typename Predicates>
 void check_valid_access_traits(PredicatesTag, Predicates const &)
@@ -199,7 +199,7 @@ public:
   explicit AccessValuesI(Values values)
       : _values(std::move(values))
   {}
-  using memory_space = typename Access::memory_space;
+  using memory_space = Access::memory_space;
   using value_type = std::decay_t<
       Kokkos::detected_t<AccessTraitsGetArchetypeExpression, Access, Values>>;
 
@@ -227,7 +227,7 @@ class AccessValuesI<AccessValuesI<Values, Tag1>, Tag2>
 };
 
 template <typename Values, typename Tag>
-using AccessValues = typename AccessValuesI<Values, Tag>::self_type;
+using AccessValues = AccessValuesI<Values, Tag>::self_type;
 
 } // namespace Details
 
@@ -236,7 +236,7 @@ struct AccessTraits<Details::AccessValuesI<Values, Tag>, Tag>
 {
   using AccessValues = Details::AccessValuesI<Values, Tag>;
 
-  using memory_space = typename AccessValues::memory_space;
+  using memory_space = AccessValues::memory_space;
 
   KOKKOS_FUNCTION static decltype(auto) get(AccessValues const &w, int i)
   {

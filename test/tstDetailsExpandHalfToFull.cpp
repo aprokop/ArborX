@@ -49,7 +49,7 @@ auto expand(ExecutionSpace space, std::vector<int> const &offsets_host,
 BOOST_AUTO_TEST_CASE_TEMPLATE(expand_half_to_full, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace exec_space;
 
   ARBORX_TEST_EXPAND_HALF_TO_FULL(exec_space, (std::vector<int>{0}),

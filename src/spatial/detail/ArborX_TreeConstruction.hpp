@@ -97,8 +97,8 @@ class GenerateHierarchy
 {
   static constexpr int UNTOUCHED_NODE = -1;
 
-  using MemorySpace = typename LeafNodes::memory_space;
-  using LinearOrderingValueType = typename LinearOrdering::non_const_value_type;
+  using MemorySpace = LeafNodes::memory_space;
+  using LinearOrderingValueType = LinearOrdering::non_const_value_type;
   using BoundingVolume =
       typename InternalNodes::value_type::bounding_volume_type;
 

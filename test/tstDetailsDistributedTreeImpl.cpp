@@ -39,7 +39,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(count_results, DeviceType, ARBORX_DEVICE_TYPES)
 
   Kokkos::View<int *, DeviceType> offset("Testing::offset", m);
 
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ArborX::Details::DistributedTree::countResults(ExecutionSpace{}, m, ids,
                                                  offset);
 

@@ -30,8 +30,8 @@ struct MaxDistance
   Primitives _primitives;
   Distances _distances;
 
-  using memory_space = typename Primitives::memory_space;
-  using size_type = typename memory_space::size_type;
+  using memory_space = Primitives::memory_space;
+  using size_type = memory_space::size_type;
 
   template <class Predicate, typename Value>
   KOKKOS_FUNCTION void operator()(Predicate const &predicate,
@@ -52,8 +52,8 @@ template <class CoreDistances>
 struct MutualReachability
 {
   CoreDistances _core_distances;
-  using value_type = typename CoreDistances::non_const_value_type;
-  using size_type = typename CoreDistances::memory_space::size_type;
+  using value_type = CoreDistances::non_const_value_type;
+  using size_type = CoreDistances::memory_space::size_type;
 
   KOKKOS_FUNCTION value_type operator()(size_type i, size_type j,
                                         value_type distance_ij) const

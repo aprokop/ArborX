@@ -63,7 +63,7 @@ using RTree =
 template <typename View>
 static RTree<typename View::value_type> makeRTree(View const &objects)
 {
-  using Indexable = typename View::value_type;
+  using Indexable = View::value_type;
   return RTree<Indexable>(
       objects | boost::adaptors::indexed() |
       boost::adaptors::transformed(PairMaker<Indexable, int>()));
@@ -98,7 +98,7 @@ template <typename View>
 static ParallelRTree<typename View::value_type> makeRTree(MPI_Comm comm,
                                                           View const &objects)
 {
-  using Indexable = typename View::value_type;
+  using Indexable = View::value_type;
 
   // Fill buffer with pair (object, index)
   std::vector<std::pair<Indexable, int>> buffer;
@@ -199,7 +199,7 @@ performQueries(RTree<Indexable> const &rtree, UserPredicates const &predicates)
 
   Predicates queries{predicates}; // NOLINT
 
-  using Value = typename RTree<Indexable>::value_type;
+  using Value = RTree<Indexable>::value_type;
   int const n_queries = queries.size();
   OutputView offset("offset", n_queries + 1);
   std::vector<Value> returned_values;
@@ -229,14 +229,14 @@ performQueries(ParallelRTree<Indexable> const &rtree, InputView const &queries)
   namespace KokkosExt = ArborX::Details::KokkosExt;
 
   static_assert(KokkosExt::is_accessible_from_host<InputView>::value);
-  using Value = typename ParallelRTree<Indexable>::value_type;
+  using Value = ParallelRTree<Indexable>::value_type;
   auto const n_queries = queries.extent_int(0);
   OutputView2 offset("offset", n_queries + 1);
   std::vector<Value> returned_values;
   for (int i = 0; i < n_queries; ++i)
     offset(i) = rtree.query(translate<Value>(queries(i)),
                             std::back_inserter(returned_values));
-  using ExecutionSpace = typename InputView::execution_space;
+  using ExecutionSpace = InputView::execution_space;
   ExecutionSpace space;
   KokkosExt::exclusive_scan(space, offset, offset, 0);
   auto const n_results = KokkosExt::lastElement(space, offset);
@@ -263,7 +263,7 @@ class RTree
 {
 public:
   using DeviceType = Kokkos::DefaultHostExecutionSpace::device_type;
-  using memory_space = typename DeviceType::memory_space;
+  using memory_space = DeviceType::memory_space;
 
   template <typename ExecutionSpace>
   RTree(ExecutionSpace, Kokkos::View<Indexable *, DeviceType> const &values)
@@ -306,7 +306,7 @@ class ParallelRTree
 {
 public:
   using DeviceType = Kokkos::DefaultHostExecutionSpace::device_type;
-  using memory_space = typename DeviceType::memory_space;
+  using memory_space = DeviceType::memory_space;
 
   template <typename ExecutionSpace>
   ParallelRTree(MPI_Comm comm, ExecutionSpace const &,

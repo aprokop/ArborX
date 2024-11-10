@@ -30,7 +30,7 @@ namespace tt = boost::test_tools;
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(sort_objects, DeviceType, ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace space{};
 
   for (auto const &values : {std::vector<int>{36, 19, 25, 17, 3, 7, 1, 2, 9},
@@ -83,7 +83,7 @@ auto build_offsets(ExecutionSpace const &exec_space,
 BOOST_AUTO_TEST_CASE_TEMPLATE(compute_offsets_in_sorted_view, DeviceType,
                               ARBORX_DEVICE_TYPES)
 {
-  using ExecutionSpace = typename DeviceType::execution_space;
+  using ExecutionSpace = DeviceType::execution_space;
   ExecutionSpace space{};
 
   ARBORX_TEST_OFFSETS_IN_SORTED_VIEW(space, (std::vector<int>{}),

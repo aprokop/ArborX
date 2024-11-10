@@ -150,12 +150,12 @@ template <class Predicates, class Distances>
 struct AccessTraits<
     Details::WithinDistanceFromPredicates<Predicates, Distances>, PredicatesTag>
 {
-  using Predicate = typename Predicates::value_type;
+  using Predicate = Predicates::value_type;
   using Geometry =
       std::decay_t<decltype(getGeometry(std::declval<Predicate const &>()))>;
   using Self = Details::WithinDistanceFromPredicates<Predicates, Distances>;
 
-  using memory_space = typename Predicates::memory_space;
+  using memory_space = Predicates::memory_space;
   using size_type = decltype(std::declval<Predicates const &>().size());
 
   static KOKKOS_FUNCTION size_type size(Self const &x)
