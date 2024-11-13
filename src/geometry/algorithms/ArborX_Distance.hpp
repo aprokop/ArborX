@@ -73,14 +73,8 @@ struct distance<PointTag, BoxTag, Point, Box>
     constexpr int DIM = dimension_v<Point>;
     Point projected_point;
     for (int d = 0; d < DIM; ++d)
-    {
-      if (point[d] < box.minCorner()[d])
-        projected_point[d] = box.minCorner()[d];
-      else if (point[d] > box.maxCorner()[d])
-        projected_point[d] = box.maxCorner()[d];
-      else
-        projected_point[d] = point[d];
-    }
+      projected_point[d] =
+          Kokkos::clamp(point[d], box.minCorner()[d], box.maxCorner()[d]);
     return Details::distance(point, projected_point);
   }
 };
