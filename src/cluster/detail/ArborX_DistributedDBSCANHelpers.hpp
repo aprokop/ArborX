@@ -28,6 +28,17 @@
 namespace ArborX::Details
 {
 
+template <typename View>
+void print_view(View const &view)
+{
+  auto view_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, view);
+  std::cout << view.label();
+  for (int i = 0; i < (int)view_host.size(); ++i)
+    std::cout << " " << view_host(i);
+  std::cout << std::endl;
+}
+
 template <typename Points, typename GhostPoints>
 struct UnifiedPoints
 {

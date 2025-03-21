@@ -61,6 +61,8 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   int comm_rank;
   MPI_Comm_rank(comm, &comm_rank);
 
+  // #define VERBOSE
+
   // Step 1: receive ghost neighbors
   Kokkos::View<int *, MemorySpace> ghost_ids(prefix + "ghost_ids", 0);
   Kokkos::View<Point *, MemorySpace> ghost_points(prefix + "ghost_points", 0);
@@ -68,6 +70,11 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   Details::forwardNeighbors(comm, space, points, eps, ghost_points, ghost_ids,
                             ghost_ranks);
   int const n_ghost = ghost_points.size();
+#ifdef VERBOSE
+  std::cout << "+++ Step 1 +++" << std::endl;
+  Details::print_view(ghost_ids);
+  Details::print_view(ghost_ranks);
+#endif
 
   // Step 2: do local DBSCAN
   auto local_labels =
@@ -75,6 +82,10 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
              Details::UnifiedPoints<Points, decltype(ghost_points)>{
                  points, ghost_points},
              eps, core_min_size, params);
+#ifdef VERBOSE
+  std::cout << "+++ Step 2 +++" << std::endl;
+  Details::print_view(local_labels);
+#endif
 
   // Step 3: convert local labels to global
   Kokkos::View<long long *, MemorySpace> rank_offsets(prefix + "rank_offsets",
@@ -110,6 +121,11 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
                       ghost_ids(label - n_local);
       });
   Kokkos::resize(local_labels, 0); // free space
+#ifdef VERBOSE
+  std::cout << "+++ Step 3 +++" << std::endl;
+  Details::print_view(rank_offsets);
+  Details::print_view(labels);
+#endif
 
   // Step 4: pack and communicate results back to owning ranks
   Kokkos::View<long long *, MemorySpace> ghost_labels(
@@ -140,8 +156,19 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   Kokkos::resize(space, ghost_ranks, num_compressed);
   Kokkos::resize(space, ghost_ids, num_compressed);
   Kokkos::resize(space, ghost_labels, num_compressed);
+#ifdef VERBOSE
+  std::cout << "+++ Step 4 (pre) +++" << std::endl;
+  Details::print_view(ghost_ids);
+  Details::print_view(ghost_ranks);
+  Details::print_view(ghost_labels);
+#endif
   Details::communicateNeighborDataBack(comm, space, ghost_ranks, ghost_ids,
                                        ghost_labels);
+#ifdef VERBOSE
+  std::cout << "+++ Step 4 (post) +++" << std::endl;
+  Details::print_view(ghost_ids);
+  Details::print_view(ghost_labels);
+#endif
 
   // Step 5: process multi-labeled indices
   Kokkos::View<Details::MergePair *, MemorySpace> local_merge_pairs(
@@ -149,15 +176,31 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   Details::computeMergePairs(space, labels, ghost_ids, ghost_labels,
                              local_merge_pairs);
   sortAndFilterMergePairs(space, local_merge_pairs);
+#ifdef VERBOSE
+  std::cout << "+++ Step 5 +++" << std::endl;
+  Details::print_view(local_merge_pairs);
+  Details::print_view(labels);
+#endif
 
   // Step 6: communicate merge pairs (all-to-all)
   Kokkos::View<Details::MergePair *, MemorySpace> global_merge_pairs(
       prefix + "global_merge_pairs", 0);
   communicateMergePairs(comm, space, local_merge_pairs, global_merge_pairs);
   Details::sortAndFilterMergePairs(space, global_merge_pairs);
+#ifdef VERBOSE
+  std::cout << "+++ Step 6 +++" << std::endl;
+  Details::print_view(global_merge_pairs);
+#endif
+  if (verbose && comm_rank == 0)
+    std::cout << "#global merge pairs: " << global_merge_pairs.size()
+              << std::endl;
 
   // Step 7: flatten the labels
   Details::relabel(space, global_merge_pairs, labels);
+#ifdef VERBOSE
+  std::cout << "+++ Step 7 +++" << std::endl;
+  Details::print_view(labels);
+#endif
 }
 
 } // namespace ArborX::Experimental
