@@ -403,7 +403,8 @@ void sortAndFilterMergePairs(ExecutionSpace const &space,
 
   int const n = merge_pairs.size();
 
-  auto old_merge_pairs = KokkosExt::clone(space, merge_pairs);
+  auto new_merge_pairs =
+      KokkosExt::cloneWithoutInitializingNorCopying(space, merge_pairs);
 
   int num_unique;
   Kokkos::parallel_scan(
@@ -412,19 +413,19 @@ void sortAndFilterMergePairs(ExecutionSpace const &space,
         // For the same "from" value we are only intested in the lowest "to".
         // As the merge pairs are sorted, we just need to grab the first one
         // from the sequence with the same "from".
-        if (i > 0 && old_merge_pairs(i).from == old_merge_pairs(i - 1).from)
+        if (i > 0 && merge_pairs(i).from == merge_pairs(i - 1).from)
           return;
 
         if (is_final)
-          merge_pairs(update) = old_merge_pairs(i);
+          new_merge_pairs(update) = merge_pairs(i);
         ++update;
 
         // Insert other connections that may be required on other ranks
         // FIXME: I need to convince myself that this is truly necessary, or
         // if it's a fix for something that should be addressed in a different
         // place
-        auto from_i = old_merge_pairs(i).from;
-        auto to = old_merge_pairs(i).to;
+        auto from_i = merge_pairs(i).from;
+        auto to = merge_pairs(i).to;
         int j = i + 1;
         while (j < n && merge_pairs(j).from == from_i)
         {
@@ -432,8 +433,8 @@ void sortAndFilterMergePairs(ExecutionSpace const &space,
           {
             if (is_final)
             {
-              KOKKOS_ASSERT(old_merge_pairs(j).to != to);
-              merge_pairs(update) = {old_merge_pairs(j).to, to};
+              KOKKOS_ASSERT(merge_pairs(j).to != to);
+              new_merge_pairs(update) = {merge_pairs(j).to, to};
             }
             ++update;
           }
@@ -441,7 +442,8 @@ void sortAndFilterMergePairs(ExecutionSpace const &space,
         }
       },
       num_unique);
-  Kokkos::resize(space, merge_pairs, num_unique);
+  Kokkos::resize(space, new_merge_pairs, num_unique);
+  merge_pairs = new_merge_pairs;
 
   // Re-sort after reinsertion
   // FIXME: I don't know whether we have duplicates here or not. If we do, I
