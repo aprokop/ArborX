@@ -55,6 +55,8 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
       std::is_same_v<typename GeometryTraits::coordinate_type<Point>::type,
                      Coordinate>);
 
+  bool const is_special_case = (core_min_size == 2);
+
   Points points{primitives}; // NOLINT
   int const n_local = points.size();
 
@@ -65,11 +67,16 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   Kokkos::View<int *, MemorySpace> ghost_ids(prefix + "ghost_ids", 0);
   Kokkos::View<Point *, MemorySpace> ghost_points(prefix + "ghost_points", 0);
   Kokkos::View<int *, MemorySpace> ghost_ranks(prefix + "ghost_ranks", 0);
-  Details::forwardNeighbors(comm, space, points, eps, ghost_points, ghost_ids,
-                            ghost_ranks);
+  // For minPts=2 case, we only need to fetch the ponts within eps distance.
+  // For minPts>2, we need points within 2*eps distance to allow to use the
+  // local DBSCAN algorithm to determine core points.
+  Details::forwardNeighbors(comm, space, points,
+                            (is_special_case ? eps : 2 * eps), ghost_points,
+                            ghost_ids, ghost_ranks);
   int const n_ghost = ghost_points.size();
 
   // Step 2: do local DBSCAN
+  // FIXME: get the core-points results back?
   auto local_labels =
       dbscan(space,
              Details::UnifiedPoints<Points, decltype(ghost_points)>{
@@ -146,9 +153,11 @@ void dbscan(MPI_Comm comm, ExecutionSpace const &space,
   // Step 5: process multi-labeled indices
   Kokkos::View<Details::MergePair *, MemorySpace> local_merge_pairs(
       prefix + "local_merge_pairs", 0);
-  Details::computeMergePairs(space, labels, ghost_ids, ghost_labels,
+  Details::computeMergePairs(space, labels, is_core, ghost_ids, ghost_labels,
                              local_merge_pairs);
   sortAndFilterMergePairs(space, local_merge_pairs);
+  Kokkos::resize(ghost_ids, 0);    // free space
+  Kokkos::resize(ghost_labels, 0); // free space
 
   // Step 6: communicate merge pairs (all-to-all)
   Kokkos::View<Details::MergePair *, MemorySpace> global_merge_pairs(

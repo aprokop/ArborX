@@ -291,10 +291,11 @@ private:
 };
 
 template <typename ExecutionSpace, typename Labels, typename ImportedIds,
-          typename ImportedLabels, typename MergePairs>
+          typename ImportedLabels, typename CorePoints, typename MergePairs>
 void computeMergePairs(ExecutionSpace const &space, Labels &local_labels,
-                       ImportedIds &imported_ids,
-                       ImportedLabels &imported_labels, MergePairs &merge_pairs)
+                       ImportedIds const &imported_ids,
+                       ImportedLabels const &imported_labels,
+                       CorePoints const &is_core, MergePairs &merge_pairs)
 {
   std::string prefix = "ArborX::DistributedDBSCAN::computeMergePairs";
   Kokkos::Profiling::ScopedRegion guard(prefix);
@@ -343,14 +344,38 @@ void computeMergePairs(ExecutionSpace const &space, Labels &local_labels,
 
         int num_valid = (end - begin) + (is_local_valid);
         if (num_valid < 2)
+        {
+          // This will return for all noise points (as they won't get any remote
+          // data, as well as situations where there is only one correct result.
           return;
+        }
 
+        if (is_core(i))
+        {
+          auto min_label = (is_local_valid ? local_label : LLONG_MAX);
+          // For border points, we
+          for (int j = begin; j < end; ++j)
+          {
+            auto const label_j = imported_labels(j);
+            KOKKOS_ASSERT(label_j != -1);
+            min_label = Kokkos::min(label_j, min_label);
+          }
+        }
+        else
+        {
+          // We try to attach border points to local cluster first
+          if (
         auto min_label = (is_local_valid ? local_label : LLONG_MAX);
+        if (is_core(i) || !is_local_valid)
+        {
+        // For border points, we
         for (int j = begin; j < end; ++j)
         {
           auto const label_j = imported_labels(j);
           KOKKOS_ASSERT(label_j != -1);
           min_label = Kokkos::min(label_j, min_label);
+        }
+        }
         }
 
         if (is_local_valid && local_label != min_label)
