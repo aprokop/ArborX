@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "data.hpp"
+#include "data_incite.hpp"
 #include "distributed_data.hpp"
 #include "parameters.hpp"
 #include "print_timers.hpp"
@@ -139,8 +140,11 @@ int main(int argc, char *argv[])
   params.binary = true;
   params.num_samples = -1;
 
+  std::string var, rawdatadir, rawdatasnap, delimiter;
+  int nx, ny, nz;
+  double drhobar;
+
   std::vector<std::string> allowed_impls = {"fdbscan", "fdbscan-densebox"};
-  std::vector<std::string> allowed_precisions = {"float", "double"};
 
   bpo::options_description desc("Allowed options");
   std::string precision;
@@ -148,16 +152,16 @@ int main(int argc, char *argv[])
   desc.add_options()
       ( "help", "help message" )
       ( "core-min-size", bpo::value<int>(&params.core_min_size)->default_value(2), "DBSCAN min_pts")
-      ( "dimension", bpo::value<int>(&params.dim)->default_value(-1), "dimension of points to generate" )
       ( "eps", bpo::value<float>(&params.eps), "DBSCAN eps" )
-      ( "filename", bpo::value<std::string>(&params.filename), "filename containing data" )
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), ("implementation " + vec2string(allowed_impls, " | ")).c_str() )
-      ( "max-num-points", bpo::value<int>(&params.max_num_points)->default_value(-1), "max number of points to read in")
-      ( "n", bpo::value<int>(&params.n)->default_value(10), "number of points to generate per rank" )
-      ( "num-seq", bpo::value<int>(&params.n_seq)->default_value(3), "number of points in sequence" )
-      ( "precision", bpo::value<std::string>(&precision)->default_value("float"), "data precision" )
-      ( "spacing", bpo::value<int>(&params.spacing)->default_value(2), "spacing size" )
       ( "verbose", bpo::bool_switch(&params.verbose), "verbose")
+      ( "var", bpo::value<std::string>(&var), "var" )
+      ( "rawdatadir", bpo::value<std::string>(&rawdatadir), "rawdatadir" )
+      ( "rawdatasnap", bpo::value<std::string>(&rawdatasnap), "rawdatasnap")
+      ( "delimiter", bpo::value<std::string>(&delimiter), "delimiter" )
+      ( "nx", bpo::value<int>(&nx), "nx" )
+      ( "ny", bpo::value<int>(&ny), "ny" )
+      ( "nz", bpo::value<int>(&nz), "nz" )
       ( "verify", bpo::bool_switch(&params.verify), "verify connected components")
       ;
   // clang-format on
@@ -196,35 +200,6 @@ int main(int argc, char *argv[])
     MPI_Finalize();
     return 2;
   }
-  if (!found(allowed_precisions, precision))
-  {
-    if (comm_rank == 0)
-      std::cerr << "Precision must be one of " << vec2string(allowed_precisions)
-                << "\n";
-    Kokkos::finalize();
-    MPI_Finalize();
-    return 2;
-  }
-  if (!params.filename.empty() && precision != "float")
-  {
-    if (comm_rank == 0)
-      std::cerr << "Data loading only supports \"float\"\n";
-    Kokkos::finalize();
-    MPI_Finalize();
-    return 3;
-  }
-
-  int dim = (params.filename.empty()
-                 ? params.dim
-                 : getDataDimension(params.filename, params.binary));
-  if (dim != 2 && dim != 3)
-  {
-    if (comm_rank == 0)
-      std::cerr << "Error: dimension " << dim << " not allowed\n" << std::endl;
-    Kokkos::finalize();
-    MPI_Finalize();
-    return 4;
-  }
 
   if (comm_rank == 0)
   {
@@ -234,63 +209,18 @@ int main(int argc, char *argv[])
     printf("eps               : %f\n", params.eps);
     printf("minpts            : %d\n", params.core_min_size);
     printf("implementation    : %s\n", ss.str().c_str());
-    if (params.filename.empty())
-    {
-      printf("n                 : %d\n", params.n);
-      printf("n_seq             : %d\n", params.n_seq);
-      printf("precision         : %s\n", precision.c_str());
-      printf("spacing           : %d\n", params.spacing);
-    }
     printf("verify            : %s\n", (params.verify ? "true" : "false"));
     printf("verbose           : %s\n", (params.verbose ? "true" : "false"));
   }
 
   MPI_Barrier(comm);
 
-  bool success = true;
-  if (!params.filename.empty())
+  bool success;
   {
-#define SWITCH_DIM(DIM)                                                        \
-  case DIM:                                                                    \
-    success = run_dist_dbscan(                                                 \
-        comm, exec_space, loadData<DIM, MemorySpace>(comm, params), params);   \
-    break;
-
-    switch (dim)
-    {
-      SWITCH_DIM(2)
-      SWITCH_DIM(3)
-    }
-#undef SWITCH_DIM
-  }
-  else
-  {
-    int dim = params.dim;
-#define SWITCH_DIM(DIM, TYPE)                                                  \
-  case DIM:                                                                    \
-    success = run_dist_dbscan(                                                 \
-        comm, exec_space,                                                      \
-        generateDistributedData<DIM, TYPE, MemorySpace>(comm, params),         \
-        params);                                                               \
-    break;
-
-    if (precision == "float")
-    {
-      switch (dim)
-      {
-        SWITCH_DIM(2, float)
-        SWITCH_DIM(3, float)
-      }
-    }
-    else if (precision == "double")
-    {
-      switch (dim)
-      {
-        SWITCH_DIM(2, double)
-        SWITCH_DIM(3, double)
-      }
-    }
-#undef SWITCH_DIM
+    auto data = get_data_mmap<MemorySpace>(
+        comm, DataFiles{rawdatadir, var, delimiter, rawdatasnap}, nx, ny, nz);
+    std::cout << "Loaded data size: " << data.size() << std::endl;
+    success = run_dist_dbscan(comm, exec_space, data, params);
   }
 
   Kokkos::finalize();
