@@ -25,6 +25,9 @@
 
 #include "data.hpp"
 #include "distributed_data.hpp"
+#ifdef ARBORX_ENABLE_GENERICIO
+#include "genericio_data.hpp"
+#endif
 #include "parameters.hpp"
 #include "print_timers.hpp"
 #include <mpi.h>
@@ -138,6 +141,7 @@ int main(int argc, char *argv[])
 
   std::vector<std::string> allowed_impls = {"fdbscan", "fdbscan-densebox"};
   std::vector<std::string> allowed_precisions = {"float", "double"};
+  std::vector<std::string> allowed_filetypes = {"arborx", "genericio"};
 
   bpo::options_description desc("Allowed options");
   std::string precision;
@@ -148,6 +152,7 @@ int main(int argc, char *argv[])
       ( "dimension", bpo::value<int>(&params.dim)->default_value(-1), "dimension of points to generate" )
       ( "eps", bpo::value<float>(&params.eps), "DBSCAN eps" )
       ( "filename", bpo::value<std::string>(&params.filename), "filename containing data" )
+      ( "filetype", bpo::value<std::string>(&params.filetype)->default_value("arborx"), ("filetype " + vec2string(allowed_filetypes, " | ")).c_str() )
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), ("implementation " + vec2string(allowed_impls, " | ")).c_str() )
       ( "max-num-points", bpo::value<int>(&params.max_num_points)->default_value(-1), "max number of points to read in")
       ( "n", bpo::value<int>(&params.n)->default_value(10), "number of points to generate per rank" )
@@ -197,17 +202,27 @@ int main(int argc, char *argv[])
     MPI_Finalize();
     return 2;
   }
+  if (!found(allowed_filetypes, params.filetype))
+  {
+    std::cerr << "Filetype must be one of " << vec2string(allowed_filetypes)
+              << "\n";
+    return 3;
+  }
   if (!params.filename.empty() && precision != "float")
   {
     if (comm_rank == 0)
       std::cerr << "Data loading only supports \"float\"\n";
     MPI_Finalize();
-    return 3;
+    return 4;
   }
 
-  int dim = (params.filename.empty()
-                 ? params.dim
-                 : getDataDimension(params.filename, params.binary));
+  int dim;
+  if (params.filename.empty())
+    dim = params.dim;
+  else if (params.filetype == "arborx")
+    dim = getDataDimension(params.filename, params.binary);
+  else
+    dim = 3;
   if (dim != 2 && dim != 3)
   {
     if (comm_rank == 0)
@@ -245,18 +260,60 @@ int main(int argc, char *argv[])
 
   if (!params.filename.empty())
   {
+    if (params.filetype == "arborx")
+    {
 #define SWITCH_DIM(DIM)                                                        \
   case DIM:                                                                    \
     success = run_dist_dbscan(                                                 \
         comm, exec_space, loadData<DIM, MemorySpace>(comm, params), params);   \
     break;
 
-    switch (dim)
-    {
-      SWITCH_DIM(2)
-      SWITCH_DIM(3)
-    }
+      switch (dim)
+      {
+        SWITCH_DIM(2)
+        SWITCH_DIM(3)
+      }
 #undef SWITCH_DIM
+    }
+    if (params.filetype == "genericio")
+    {
+#ifdef ARBORX_ENABLE_GENERICIO
+      GenericIO gio(params.filename);
+      gio.inspect();
+
+      auto x =
+          ArborXBenchmark::vec2View<MemorySpace>(gio.read("x"), "Benchmark::x");
+      auto y =
+          ArborXBenchmark::vec2View<MemorySpace>(gio.read("y"), "Benchmark::y");
+      auto z =
+          ArborXBenchmark::vec2View<MemorySpace>(gio.read("z"), "Benchmark::z");
+
+      auto const n = x.size();
+
+      static_assert(std::is_same_v<typename decltype(x)::value_type, float>);
+      static_assert(std::is_same_v<typename decltype(y)::value_type, float>);
+      static_assert(std::is_same_v<typename decltype(z)::value_type, float>);
+      ArborX::Point<ArborX::Point<3>> points(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "Benchmark::primitives"),
+          n);
+      Kokkos::parallel_for(
+          "Benchmark::copy_genericio_data",
+          Kokkos::RangePolicy(exec_space, 0, n), KOKKOS_LAMBDA(int i) {
+            points(i)[0] = x(i);
+            points(i)[0] = y(i);
+            points(i)[0] = z(i);
+          });
+      exec_space.fence();
+      Kokkos::resize(x, 0);
+      Kokkos::resize(y, 0);
+      Kokkos::resize(z, 0);
+
+      success = run_dist_dbscan(comm, exec_space, points);
+#else
+      throw std::runtime_error("genericio support is not enabled");
+#endif
+    }
   }
   else
   {

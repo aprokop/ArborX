@@ -74,6 +74,8 @@ cmake_dependent_option(ARBORX_ENABLE_GPU_AWARE_MPI
                        "Allow using device data in MPI communication"
                        OFF "ARBORX_ENABLE_MPI" OFF)
 
+option(ARBORX_ENABLE_GENERICIO "Enable GenericIO support" OFF)
+
 target_include_directories(ArborX INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/geometry>
