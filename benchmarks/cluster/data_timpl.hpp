@@ -26,6 +26,9 @@
 
 #include "data.hpp"
 #include "parameters.hpp"
+#ifdef ARBORX_ENABLE_GENERICIO
+#include "genericio_data.hpp"
+#endif
 
 namespace ArborXBenchmark
 {
@@ -370,19 +373,50 @@ loadData(MPI_Comm comm, ArborXBenchmark::Parameters const &params)
   if (!params.filename.empty())
   {
     // Read in data
-    auto max_num_points = params.max_num_points;
     auto filename = params.filename;
-    if (comm_rank == 0)
-    {
-      printf("filename          : %s [%s, max_pts = %d]\n", filename.c_str(),
-             (params.binary ? "binary" : "text"), max_num_points);
-    }
 
-    int comm_size;
-    MPI_Comm_size(comm, &comm_size);
-    auto v = loadData<DIM>(filename, params.binary, max_num_points, comm_rank,
-                           comm_size);
-    return vec2view<MemorySpace>(v, "Benchmark::primitives");
+    if (params.filetype == "arborx")
+    {
+      auto max_num_points = params.max_num_points;
+      if (comm_rank == 0)
+      {
+        printf("filename          : %s [%s, max_pts = %d]\n", filename.c_str(),
+               (params.binary ? "binary" : "text"), max_num_points);
+      }
+
+      int comm_size;
+      MPI_Comm_size(comm, &comm_size);
+      auto v = loadData<DIM>(filename, params.binary, max_num_points, comm_rank,
+                             comm_size);
+      return vec2view<MemorySpace>(v, "Benchmark::primitives");
+    }
+    else if (params.filetype == "genericio")
+    {
+#ifdef ARBORX_ENABLE_GENERICIO
+      GenericIO gio(filename);
+      gio.inspect();
+
+      auto v = gio.read("points");
+      Kokkos::View<Point<DIM> *, MemorySpace> points(
+          Kokkos::view_alloc("Benchmark::primitives",
+                             Kokkos::WithoutInitializing),
+          v.size());
+      Kokkos::parallel_for(
+          "Benchmark::copy_genericio_data",
+          Kokkos::RangePolicy<>(typename MemorySpace::execution_space{}, 0,
+                                v.size()),
+          KOKKOS_LAMBDA(int i) {
+            for (int d = 0; d < DIM; ++d)
+              points(i)[d] = static_cast<float>(v[i][d]);
+          });
+#else
+      throw std::runtime_error("genericio support is not enabled");
+#endif
+    }
+    else
+    {
+      throw std::runtime_error("unknown filetype: " + params.filetype);
+    }
   }
 
   // Generate data

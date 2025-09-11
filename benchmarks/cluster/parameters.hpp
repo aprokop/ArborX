@@ -26,6 +26,7 @@ struct Parameters
   int dim;
   float eps;
   std::string filename;
+  std::string filetype;
   std::string filename_labels;
   std::string implementation;
   int max_num_points;

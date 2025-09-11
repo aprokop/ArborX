@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
 
   std::vector<std::string> allowed_impls = {"fdbscan", "fdbscan-densebox"};
   std::vector<std::string> allowed_precisions = {"float", "double"};
+  std::vector<std::string> allowed_filetypes = {"arborx", "genericio"};
 
   bpo::options_description desc("Allowed options");
   std::string precision;
@@ -151,6 +152,7 @@ int main(int argc, char *argv[])
       ( "dimension", bpo::value<int>(&params.dim)->default_value(-1), "dimension of points to generate" )
       ( "eps", bpo::value<float>(&params.eps), "DBSCAN eps" )
       ( "filename", bpo::value<std::string>(&params.filename), "filename containing data" )
+      ( "filetype", bpo::value<std::string>(&params.filetype)->default_value("arborx"), ("filetype " + vec2string(allowed_filetypes, " | ")).c_str() )
       ( "impl", bpo::value<std::string>(&params.implementation)->default_value("fdbscan"), ("implementation " + vec2string(allowed_impls, " | ")).c_str() )
       ( "max-num-points", bpo::value<int>(&params.max_num_points)->default_value(-1), "max number of points to read in")
       ( "n", bpo::value<int>(&params.n)->default_value(10), "number of points to generate per rank" )
@@ -205,13 +207,19 @@ int main(int argc, char *argv[])
     MPI_Finalize();
     return 2;
   }
+  if (!found(allowed_types, params.filetype))
+  {
+    std::cerr << "Filetype must be one of " << vec2string(allowed_filetypes)
+              << "\n";
+    return 3;
+  }
   if (!params.filename.empty() && precision != "float")
   {
     if (comm_rank == 0)
       std::cerr << "Data loading only supports \"float\"\n";
     Kokkos::finalize();
     MPI_Finalize();
-    return 3;
+    return 4;
   }
 
   int dim = (params.filename.empty()
@@ -250,18 +258,26 @@ int main(int argc, char *argv[])
   bool success = true;
   if (!params.filename.empty())
   {
+    if (params.filetype == "arborx")
+    {
 #define SWITCH_DIM(DIM)                                                        \
   case DIM:                                                                    \
     success = run_dist_dbscan(                                                 \
         comm, exec_space, loadData<DIM, MemorySpace>(comm, params), params);   \
     break;
 
-    switch (dim)
-    {
-      SWITCH_DIM(2)
-      SWITCH_DIM(3)
-    }
+      switch (dim)
+      {
+        SWITCH_DIM(2)
+        SWITCH_DIM(3)
+      }
 #undef SWITCH_DIM
+    }
+    if (params.filetype == "genericio")
+    {
+      GenericIOData gio(params.filename);
+      gio.inspect();
+    }
   }
   else
   {
