@@ -25,6 +25,104 @@
 namespace ArborX::Details::KokkosExt
 {
 
+template <typename Scalar>
+MPI_Datatype mpi_type()
+{
+  using T = std::decay_t<Scalar>;
+
+  if constexpr (std::is_same_v<T, std::byte>)
+    return MPI_BYTE;
+
+  else if constexpr (std::is_same_v<T, char>)
+    return MPI_CHAR;
+  else if constexpr (std::is_same_v<T, unsigned char>)
+    return MPI_UNSIGNED_CHAR;
+
+  else if constexpr (std::is_same_v<T, short>)
+    return MPI_SHORT;
+  else if constexpr (std::is_same_v<T, unsigned short>)
+    return MPI_UNSIGNED_SHORT;
+
+  else if constexpr (std::is_same_v<T, int>)
+    return MPI_INT;
+  else if constexpr (std::is_same_v<T, unsigned>)
+    return MPI_UNSIGNED;
+
+  else if constexpr (std::is_same_v<T, long>)
+    return MPI_LONG;
+  else if constexpr (std::is_same_v<T, unsigned long>)
+    return MPI_UNSIGNED_LONG;
+
+  else if constexpr (std::is_same_v<T, long long>)
+    return MPI_LONG_LONG;
+  else if constexpr (std::is_same_v<T, unsigned long long>)
+    return MPI_UNSIGNED_LONG_LONG;
+
+  else if constexpr (std::is_same_v<T, std::int8_t>)
+    return MPI_INT8_T;
+  else if constexpr (std::is_same_v<T, std::uint8_t>)
+    return MPI_UINT8_T;
+
+  else if constexpr (std::is_same_v<T, std::int16_t>)
+    return MPI_INT16_T;
+  else if constexpr (std::is_same_v<T, std::uint16_t>)
+    return MPI_UINT16_T;
+
+  else if constexpr (std::is_same_v<T, std::int32_t>)
+    return MPI_INT32_T;
+  else if constexpr (std::is_same_v<T, std::uint32_t>)
+    return MPI_UINT32_T;
+
+  else if constexpr (std::is_same_v<T, std::int64_t>)
+    return MPI_INT64_T;
+  else if constexpr (std::is_same_v<T, std::uint64_t>)
+    return MPI_UINT64_T;
+
+  else if constexpr (std::is_same_v<T, std::size_t>)
+  {
+    if constexpr (sizeof(std::size_t) == 1)
+      return MPI_UINT8_T;
+    if constexpr (sizeof(std::size_t) == 2)
+      return MPI_UINT16_T;
+    if constexpr (sizeof(std::size_t) == 4)
+      return MPI_UINT32_T;
+    if constexpr (sizeof(std::size_t) == 8)
+      return MPI_UINT64_T;
+  }
+
+  else if constexpr (std::is_same_v<T, std::ptrdiff_t>)
+  {
+    if constexpr (sizeof(std::ptrdiff_t) == 1)
+      return MPI_INT8_T;
+    if constexpr (sizeof(std::ptrdiff_t) == 2)
+      return MPI_INT16_T;
+    if constexpr (sizeof(std::ptrdiff_t) == 4)
+      return MPI_INT32_T;
+    if constexpr (sizeof(std::ptrdiff_t) == 8)
+      return MPI_INT64_T;
+  }
+
+  else if constexpr (std::is_same_v<T, float>)
+    return MPI_FLOAT;
+  else if constexpr (std::is_same_v<T, double>)
+    return MPI_DOUBLE;
+  else if constexpr (std::is_same_v<T, long double>)
+    return MPI_LONG_DOUBLE;
+
+  else if constexpr (std::is_same_v<T, Kokkos::complex<float>>)
+    return MPI_COMPLEX;
+  else if constexpr (std::is_same_v<T, Kokkos::complex<double>>)
+    return MPI_DOUBLE_COMPLEX;
+
+  return nullptr;
+}
+
+template <typename Scalar>
+inline MPI_Datatype mpi_type_v = mpi_type<Scalar>();
+
+template <typename Scalar>
+inline bool is_known_mpi_type = (mpi_type_v<Scalar> != nullptr);
+
 template <typename View>
 inline constexpr bool is_valid_mpi_view_v =
     (View::rank == 1 &&
@@ -52,7 +150,13 @@ void mpi_isend(MPI_Comm comm, ExecutionSpace const &space, View const &view,
   space.fence("ArborX::KokkosExt::mpi_isend");
 
   using ValueType = typename View::value_type;
-  MPI_Isend(view.data(), n * sizeof(ValueType), MPI_BYTE, destination, tag,
+  if (is_known_mpi_type<ValueType>)
+  {
+    auto mpi_t = mpi_type_v<ValueType>;
+    MPI_Isend(send_view.data(), n, mpi_t, destination, tag, comm, &request);
+    return;
+  }
+  MPI_Isend(send_view.data(), n * sizeof(ValueType), MPI_BYTE, destination, tag,
             comm, &request);
 }
 
@@ -76,8 +180,16 @@ void mpi_irecv(MPI_Comm comm, ExecutionSpace const &space, View const &view,
 #endif
 
   using ValueType = typename View::value_type;
-  MPI_Irecv(view.data(), n * sizeof(ValueType), MPI_BYTE, source, tag, comm,
-            &request);
+  if (is_known_mpi_type<ValueType>)
+  {
+    auto mpi_t = mpi_type_v<ValueType>;
+    MPI_Irecv(recv_view.data(), n, mpi_t, source, tag, comm, &request);
+  }
+  else
+  {
+    MPI_Irecv(recv_view.data(), n * sizeof(ValueType), MPI_BYTE, source, tag,
+              comm, &request);
+  }
 
 #ifndef ARBORX_ENABLE_GPU_AWARE_MPI
   Kokkos::deep_copy(space, view, recv_view);
@@ -113,8 +225,17 @@ void mpi_alltoall(MPI_Comm comm, ExecutionSpace const &space, View const &view)
   space.fence("ArborX::KokkosExt::mpi_alltoall");
 
   using ValueType = typename View::value_type;
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, view.data(),
-                sizeof(ValueType), MPI_BYTE, comm);
+  if (is_known_mpi_type<ValueType>)
+  {
+    auto mpi_t = mpi_type_v<ValueType>;
+    MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, view.data(), per_rank,
+                 mpi_t, comm);
+  }
+  else
+  {
+    MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, view.data(),
+                 per_rank * sizeof(ValueType), MPI_BYTE, comm);
+  }
 
 #ifndef ARBORX_ENABLE_GPU_MPI
   Kokkos::deep_copy(space, view, send_view);
@@ -153,8 +274,18 @@ void mpi_allgather(MPI_Comm comm, ExecutionSpace const &space, View const &view)
   space.fence("ArborX::KokkosExt::mpi_allgather");
 
   using ValueType = typename View::value_type;
-  MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, view.data(),
-               sizeof(ValueType), MPI_BYTE, comm);
+
+  if (is_known_mpi_type<ValueType>)
+  {
+    auto mpi_t = mpi_type_v<ValueType>;
+    MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, send_view.data(),
+                  per_rank, mpi_t, comm);
+  }
+  else
+  {
+    MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, send_view.data(),
+                  per_rank * sizeof(ValueType), MPI_BYTE, comm);
+  }
 
 #ifndef ARBORX_ENABLE_GPU_MPI
   Kokkos::deep_copy(space, view, send_view);
