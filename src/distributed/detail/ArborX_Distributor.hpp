@@ -128,71 +128,69 @@ determineBufferLayout(ExecutionSpace const &space, InputView batched_ranks,
 // Computes the array of indices that sort the input array (in reverse order)
 // but also returns the sorted unique elements in that array with the
 // corresponding element counts and displacement (offsets)
-template <typename ExecutionSpace, typename InputView, typename OutputView>
+template <typename ExecutionSpace, typename Ranks, typename Permute>
 static void sortAndDetermineBufferLayout(ExecutionSpace const &space,
-                                         InputView ranks,
-                                         OutputView permutation_indices,
+                                         Ranks ranks, Permute &permute,
                                          std::vector<int> &unique_ranks,
                                          std::vector<int> &offsets)
 {
-  Kokkos::Profiling::ScopedRegion guard(
-      "ArborX::Distributor::sortAndDetermineBufferLayout");
+  std::string prefix = "ArborX::Distributor::sortAndDetermineBufferLayout";
+  Kokkos::Profiling::ScopedRegion guard(prefix);
+  prefix += "::";
 
   ARBORX_ASSERT(unique_ranks.empty());
   ARBORX_ASSERT(offsets.empty());
-  ARBORX_ASSERT(permutation_indices.extent_int(0) == ranks.extent_int(0));
-  static_assert(std::is_same_v<typename InputView::non_const_value_type, int>);
-  static_assert(std::is_same_v<typename OutputView::value_type, int>);
+  ARBORX_ASSERT(permute.size() == 0);
+  static_assert(std::is_same_v<typename Ranks::non_const_value_type, int>);
+  static_assert(std::is_same_v<typename Permute::value_type, int>);
 
   offsets.push_back(0);
 
-  auto const n = ranks.extent_int(0);
+  int const n = ranks.extent(0);
   if (n == 0)
     return;
 
-  // this implements a "sort" which is O(N * R) where (R) is the total number of
-  // unique destination ranks. it performs better than other algorithms in the
-  // case when (R) is small, but results may vary
-  using DeviceType = typename InputView::traits::device_type;
+  auto [smallest_rank, largest_rank] = KokkosExt::minmax_reduce(space, ranks);
 
-  Kokkos::View<int *, DeviceType> device_ranks_duplicate(
-      Kokkos::view_alloc(space, Kokkos::WithoutInitializing, ranks.label()),
-      ranks.size());
-  Kokkos::deep_copy(space, device_ranks_duplicate, ranks);
-  auto device_permutation_indices = Kokkos::create_mirror_view(
-      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                         typename DeviceType::memory_space{}),
-      permutation_indices);
-  int offset = 0;
-  while (true)
+  if (smallest_rank == largest_rank)
   {
-    int const largest_rank =
-        KokkosExt::max_reduce(space, device_ranks_duplicate);
-    if (largest_rank == -1)
-      break;
-    unique_ranks.push_back(largest_rank);
-    int result = 0;
-    Kokkos::parallel_scan(
-        "ArborX::Distributor::process_biggest_rank_items",
-        Kokkos::RangePolicy(space, 0, n),
-        KOKKOS_LAMBDA(int i, int &update, bool last_pass) {
-          bool const is_largest_rank =
-              (device_ranks_duplicate(i) == largest_rank);
-          if (is_largest_rank)
-          {
-            if (last_pass)
-            {
-              device_permutation_indices(i) = update + offset;
-              device_ranks_duplicate(i) = -1;
-            }
-            ++update;
-          }
-        },
-        result);
-    offset += result;
-    offsets.push_back(offset);
+    // The data is only sent to one rank, no need to permute
+    unique_ranks = {smallest_rank};
+    offsets = {0, n};
+    return;
   }
-  Kokkos::deep_copy(space, permutation_indices, device_permutation_indices);
+
+  using MemorySpace = typename Ranks::memory_space;
+
+  Kokkos::View<int *, MemorySpace> rank_offsets(
+      Kokkos::view_alloc(space, prefix + "rank_offsets"), largest_rank + 2);
+  // FIXME: maybe use ScatterView here
+  Kokkos::parallel_for(
+      prefix + "count_ranks", Kokkos::RangePolicy(space, 0, n),
+      KOKKOS_LAMBDA(int i) { Kokkos::atomic_inc(&rank_offsets(ranks(i))); });
+
+  KokkosExt::exclusive_scan(space, rank_offsets, rank_offsets, 0);
+
+  auto rank_offsets_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, rank_offsets);
+
+  for (int i = 1; i < (int)rank_offsets.size(); ++i)
+  {
+    if (rank_offsets_host(i) == rank_offsets_host(i - 1))
+      continue;
+    offsets.push_back(rank_offsets_host(i));
+    unique_ranks.push_back(i - 1);
+  }
+
+  // FIXME: is there a way to be stable here, i.e. preserve the relative order?
+  KokkosExt::reallocWithoutInitializing(space, permute, n);
+  Kokkos::parallel_for(
+      prefix + "fill_permute", Kokkos::RangePolicy(space, 0, n),
+      KOKKOS_LAMBDA(int i) {
+        auto index = Kokkos::atomic_fetch_inc(&rank_offsets(ranks(i)));
+        permute(i) = index;
+      });
+
   ARBORX_ASSERT(offsets.back() == static_cast<int>(ranks.size()));
 }
 
@@ -241,33 +239,8 @@ public:
     static_assert(
         std::is_same<typename View::non_const_value_type, int>::value);
 
-    auto const n = destination_ranks.extent_int(0);
-
-    if (n == 0)
-    {
-      _destinations = {};
-      _dest_offsets = {0};
-    }
-    else
-    {
-      auto [smallest_rank, largest_rank] =
-          KokkosExt::minmax_reduce(space, destination_ranks);
-
-      if (smallest_rank == largest_rank)
-      {
-        // The data is only sent to one rank, no need to permute
-        _destinations = {smallest_rank};
-        _dest_offsets = {0, n};
-      }
-      else
-      {
-        KokkosExt::reallocWithoutInitializing(space, _permute,
-                                              destination_ranks.size());
-
-        sortAndDetermineBufferLayout(space, destination_ranks, _permute,
-                                     _destinations, _dest_offsets);
-      }
-    }
+    sortAndDetermineBufferLayout(space, destination_ranks, _permute,
+                                 _destinations, _dest_offsets);
 
     return preparePointToPointCommunication();
   }
