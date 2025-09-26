@@ -18,6 +18,7 @@
 #include <detail/ArborX_DistributedTreeNearest.hpp>
 #include <detail/ArborX_DistributedTreeSpatial.hpp>
 #include <detail/ArborX_PairValueIndex.hpp>
+#include <kokkos_ext/ArborX_KokkosExtDistributedComm.hpp>
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 
 #include <Kokkos_Core.hpp>
@@ -199,29 +200,10 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
                          "ArborX::DistributedTree::DistributedTree::"
                          "rank_bounding_volumes"),
       comm_size);
-
-  Kokkos::DefaultHostExecutionSpace host_exec;
-#ifdef ARBORX_ENABLE_GPU_AWARE_MPI
   Kokkos::deep_copy(space, Kokkos::subview(volumes, comm_rank),
                     _bottom_tree.bounds());
-  space.fence("ArborX::DistributedTree::DistributedTree"
-              " (fill on device done before MPI_Allgather)");
 
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(volumes.data()), sizeof(BoundingVolume),
-                MPI_BYTE, getComm());
-#else
-  auto volumes_host = Kokkos::create_mirror_view(
-      Kokkos::view_alloc(host_exec, Kokkos::WithoutInitializing), volumes);
-  host_exec.fence();
-  volumes_host(comm_rank) = _bottom_tree.bounds();
-
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(volumes_host.data()),
-                sizeof(BoundingVolume), MPI_BYTE, getComm());
-
-  Kokkos::deep_copy(space, volumes, volumes_host);
-#endif
+  Details::KokkosExt::mpi_allgather(getComm(), space, volumes);
 
   // Build top tree with attached ranks
   _top_tree = TopTree{space, Experimental::attach_indices<int>(volumes)};
@@ -235,15 +217,10 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
                          "ArborX::DistributedTree::"
                          "leave_count_in_local_trees"),
       comm_size);
-  auto bottom_tree_sizes_host = Kokkos::create_mirror_view(
-      Kokkos::view_alloc(host_exec, Kokkos::WithoutInitializing),
-      _bottom_tree_sizes);
-  host_exec.fence();
-  bottom_tree_sizes_host(comm_rank) = _bottom_tree.size();
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(bottom_tree_sizes_host.data()),
-                sizeof(size_type), MPI_BYTE, getComm());
-  Kokkos::deep_copy(space, _bottom_tree_sizes, bottom_tree_sizes_host);
+  Kokkos::deep_copy(space, Kokkos::subview(_bottom_tree_sizes, comm_rank),
+                    _bottom_tree.size());
+
+  Details::KokkosExt::mpi_allgather(getComm(), space, _bottom_tree_sizes);
 
   _top_tree_size = Details::KokkosExt::reduce(space, _bottom_tree_sizes, 0);
 

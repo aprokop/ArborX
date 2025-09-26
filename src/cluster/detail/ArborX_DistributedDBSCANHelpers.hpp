@@ -17,6 +17,7 @@
 #include <detail/ArborX_Distributor.hpp>
 #include <detail/ArborX_Predicates.hpp>
 #include <detail/ArborX_TreeConstruction.hpp>
+#include <kokkos_ext/ArborX_KokkosExtDistributedComm.hpp>
 #include <kokkos_ext/ArborX_KokkosExtKernelStdAlgorithms.hpp>
 #include <kokkos_ext/ArborX_KokkosExtViewHelpers.hpp>
 #include <misc/ArborX_SortUtils.hpp>
@@ -155,27 +156,9 @@ auto gatherGlobalBoxes(MPI_Comm comm, ExecutionSpace const &space,
       Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                          "ArborX::DistributedDBSCAN::rank_boxes"),
       comm_size);
-#ifdef ARBORX_ENABLE_GPU_AWARE_MPI
   Kokkos::deep_copy(space, Kokkos::subview(global_boxes, comm_rank), local_box);
-  space.fence(
-      "ArborX::DistributedDBSCAN (fill on device done before MPI_Allgather)");
 
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(global_boxes.data()), sizeof(Box), MPI_BYTE,
-                comm);
-#else
-  Kokkos::DefaultHostExecutionSpace host_exec;
-  auto global_boxes_host = Kokkos::create_mirror_view(
-      Kokkos::view_alloc(host_exec, Kokkos::WithoutInitializing), global_boxes);
-  host_exec.fence();
-  global_boxes_host(comm_rank) = local_box;
-
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(global_boxes_host.data()), sizeof(Box),
-                MPI_BYTE, comm);
-
-  Kokkos::deep_copy(space, global_boxes, global_boxes_host);
-#endif
+  KokkosExt::mpi_allgather(comm, space, global_boxes);
 
   return global_boxes;
 }

@@ -14,6 +14,7 @@
 #include <ArborX_Config.hpp>
 
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
+#include <kokkos_ext/ArborX_KokkosExtDistributedComm.hpp>
 #include <kokkos_ext/ArborX_KokkosExtMinMaxReduce.hpp>
 #include <kokkos_ext/ArborX_KokkosExtViewHelpers.hpp>
 #include <misc/ArborX_Exception.hpp>
@@ -227,7 +228,7 @@ public:
     determineBufferLayout(space, batched_destination_ranks, batch_offsets,
                           _destinations, _dest_offsets);
 
-    return preparePointToPointCommunication();
+    return preparePointToPointCommunication(space);
   }
 
   template <typename ExecutionSpace, typename View>
@@ -269,7 +270,7 @@ public:
       }
     }
 
-    return preparePointToPointCommunication();
+    return preparePointToPointCommunication(space);
   }
 
   template <typename ExecutionSpace, typename ExportView, typename ImportView>
@@ -375,18 +376,19 @@ public:
 
     int const indegrees = _sources.size();
     int const outdegrees = _destinations.size();
+    constexpr int tag = 123;
     std::vector<MPI_Request> requests;
     requests.reserve(outdegrees + indegrees);
     for (int i = 0; i < indegrees; ++i)
     {
       if (_sources[i] != comm_rank)
       {
-        auto const receive_buffer_ptr = imports_comm.data() + _src_offsets[i];
-        auto const message_size =
-            (_src_offsets[i + 1] - _src_offsets[i]) * sizeof(ValueType);
         requests.emplace_back();
-        MPI_Irecv(receive_buffer_ptr, message_size, MPI_BYTE, _sources[i], 123,
-                  _comm, &requests.back());
+        KokkosExt::mpi_irecv(
+            _comm, space,
+            Kokkos::subview(imports_comm, std::make_pair(_src_offsets[i],
+                                                         _src_offsets[i + 1])),
+            _sources[i], tag, requests.back());
       }
     }
 
@@ -399,9 +401,11 @@ public:
       if (_destinations[i] != comm_rank)
       {
         requests.emplace_back();
-        MPI_Isend(exports_comm.data() + _dest_offsets[i],
-                  (_dest_offsets[i + 1] - _dest_offsets[i]) * sizeof(ValueType),
-                  MPI_BYTE, _destinations[i], 123, _comm, &requests.back());
+        KokkosExt::mpi_isend(
+            _comm, space,
+            Kokkos::subview(exports_comm, std::make_pair(_dest_offsets[i],
+                                                         _dest_offsets[i + 1])),
+            _destinations[i], tag, requests.back());
       }
     }
     if (!requests.empty())
@@ -442,7 +446,8 @@ public:
   size_t getTotalSendLength() const { return _dest_offsets.back(); }
 
 private:
-  size_t preparePointToPointCommunication()
+  template <typename ExecutionSpace>
+  size_t preparePointToPointCommunication(ExecutionSpace const &space)
   {
     Kokkos::Profiling::ScopedRegion guard(
         "ArborX::Distributor::preparePointToPointCommunication");
@@ -457,8 +462,10 @@ private:
       src_counts_dense[_destinations[i]] =
           _dest_offsets[i + 1] - _dest_offsets[i];
     }
-    MPI_Alltoall(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, src_counts_dense.data(), 1,
-                 MPI_INT, _comm);
+    KokkosExt::mpi_alltoall(
+        _comm, space,
+        Kokkos::View<int *, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
+            src_counts_dense.data(), comm_size));
 
     _src_offsets.push_back(0);
     for (int i = 0; i < comm_size; ++i)
