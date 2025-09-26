@@ -203,7 +203,7 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
   Kokkos::deep_copy(space, Kokkos::subview(volumes, comm_rank),
                     _bottom_tree.bounds());
 
-  Details::KokkosExt::mpi_allgather(getComm(), space, volumes);
+  Details::KokkosExt::mpi_allgather_inplace(getComm(), space, volumes);
 
   // Build top tree with attached ranks
   _top_tree = TopTree{space, Experimental::attach_indices<int>(volumes)};
@@ -220,7 +220,8 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
   Kokkos::deep_copy(space, Kokkos::subview(_bottom_tree_sizes, comm_rank),
                     _bottom_tree.size());
 
-  Details::KokkosExt::mpi_allgather(getComm(), space, _bottom_tree_sizes);
+  Details::KokkosExt::mpi_allgather_inplace(getComm(), space,
+                                            _bottom_tree_sizes);
 
   _top_tree_size = Details::KokkosExt::reduce(space, _bottom_tree_sizes, 0);
 

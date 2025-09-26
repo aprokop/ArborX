@@ -462,7 +462,7 @@ private:
       src_counts_dense[_destinations[i]] =
           _dest_offsets[i + 1] - _dest_offsets[i];
     }
-    KokkosExt::mpi_alltoall(
+    KokkosExt::mpi_alltoall_inplace(
         _comm, space,
         Kokkos::View<int *, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
             src_counts_dense.data(), comm_size));

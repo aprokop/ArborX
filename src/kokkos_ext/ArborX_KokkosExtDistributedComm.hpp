@@ -197,7 +197,8 @@ void mpi_irecv(MPI_Comm comm, ExecutionSpace const &space, View const &view,
 }
 
 template <typename ExecutionSpace, typename View>
-void mpi_alltoall(MPI_Comm comm, ExecutionSpace const &space, View const &view)
+void mpi_alltoall_inplace(MPI_Comm comm, ExecutionSpace const &space,
+                          View const &view)
 {
   static_assert(Kokkos::is_view_v<View>);
   static_assert(is_valid_mpi_view_v<View>);
@@ -222,7 +223,7 @@ void mpi_alltoall(MPI_Comm comm, ExecutionSpace const &space, View const &view)
       view);
   Kokkos::deep_copy(space, send_view, view);
 #endif
-  space.fence("ArborX::KokkosExt::mpi_alltoall");
+  space.fence("ArborX::KokkosExt::mpi_alltoall_inplace");
 
   using ValueType = typename View::value_type;
   if (is_known_mpi_type<ValueType>)
@@ -243,7 +244,8 @@ void mpi_alltoall(MPI_Comm comm, ExecutionSpace const &space, View const &view)
 }
 
 template <typename ExecutionSpace, typename View>
-void mpi_allgather(MPI_Comm comm, ExecutionSpace const &space, View const &view)
+void mpi_allgather_inplace(MPI_Comm comm, ExecutionSpace const &space,
+                           View const &view)
 {
   static_assert(Kokkos::is_view_v<View>);
   static_assert(is_valid_mpi_view_v<View>);
@@ -271,7 +273,7 @@ void mpi_allgather(MPI_Comm comm, ExecutionSpace const &space, View const &view)
   Kokkos::deep_copy(space, Kokkos::subview(send_view, slice),
                     Kokkos::subview(view, slice));
 #endif
-  space.fence("ArborX::KokkosExt::mpi_allgather");
+  space.fence("ArborX::KokkosExt::mpi_allgather_inplace");
 
   using ValueType = typename View::value_type;
 

@@ -158,7 +158,7 @@ auto gatherGlobalBoxes(MPI_Comm comm, ExecutionSpace const &space,
       comm_size);
   Kokkos::deep_copy(space, Kokkos::subview(global_boxes, comm_rank), local_box);
 
-  KokkosExt::mpi_allgather(comm, space, global_boxes);
+  KokkosExt::mpi_allgather_inplace(comm, space, global_boxes);
 
   return global_boxes;
 }
