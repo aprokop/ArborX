@@ -22,6 +22,10 @@ target_include_directories(ArborX_Benchmark_HDBSCAN.exe PRIVATE ${CMAKE_CURRENT_
 target_link_libraries(ArborX_Benchmark_HDBSCAN.exe ArborX::ArborX Boost::program_options cluster_benchmark_helpers)
 add_test(NAME ArborX_Benchmark_MST COMMAND ArborX_Benchmark_MST.exe --ascii --filename=${input_file})
 
+add_executable(ArborX_Benchmark_DendrogramCount.exe dendrogram_count.cpp)
+target_link_libraries(ArborX_Benchmark_DendrogramCount.exe ArborX::ArborX)
+add_test(NAME ArborX_Benchmark_DendrogramCount COMMAND ArborX_Benchmark_DendrogramCount.exe)
+
 if (ARBORX_ENABLE_MPI)
   add_executable(ArborX_Benchmark_DistributedDBSCAN.exe distributed_dbscan.cpp)
   target_include_directories(ArborX_Benchmark_DistributedDBSCAN.exe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
