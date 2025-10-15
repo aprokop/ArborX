@@ -260,6 +260,9 @@ dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
     BoundingVolumeHierarchy bvh(exec_space,
                                 Experimental::attach_indices(points));
     Kokkos::Profiling::popRegion();
+    Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_update");
+    bvh.update(exec_space, Experimental::attach_indices(points));
+    Kokkos::Profiling::popRegion();
 
     // Initialize labels after the hierarchy construction to lower memory high
     // water mark
