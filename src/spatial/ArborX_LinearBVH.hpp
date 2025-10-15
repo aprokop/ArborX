@@ -72,9 +72,12 @@ public:
       IndexableGetter const &indexable_getter = IndexableGetter(),
       SpaceFillingCurve const &curve = SpaceFillingCurve());
 
-  // FIXME: should we provide an update with IndexableGetter argument?
   template <typename ExecutionSpace, typename Values>
   void update(ExecutionSpace const &space, Values const &values);
+
+  template <typename ExecutionSpace, typename Values>
+  void update(ExecutionSpace const &space, Values const &values,
+              IndexableGetter const &indexable_getter);
 
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
@@ -268,6 +271,18 @@ void BoundingVolumeHierarchy<
     BoundingVolume>::update(ExecutionSpace const &space,
                             UserValues const &user_values)
 {
+  update(space, user_values, _indexable_getter);
+}
+
+template <typename MemorySpace, typename Value, typename IndexableGetter,
+          typename BoundingVolume>
+template <typename ExecutionSpace, typename UserValues>
+void BoundingVolumeHierarchy<
+    MemorySpace, Value, IndexableGetter,
+    BoundingVolume>::update(ExecutionSpace const &space,
+                            UserValues const &user_values,
+                            IndexableGetter const &indexable_getter)
+{
   static_assert(Details::KokkosExt::is_accessible_from<MemorySpace,
                                                        ExecutionSpace>::value);
   Details::check_valid_access_traits(user_values);
@@ -283,6 +298,8 @@ void BoundingVolumeHierarchy<
   KOKKOS_ASSERT(values.size() == size());
 
   Kokkos::Profiling::ScopedRegion guard("ArborX::BVH::update");
+
+  _indexable_getter = indexable_getter;
 
   if (empty())
     return;
