@@ -72,6 +72,10 @@ public:
       IndexableGetter const &indexable_getter = IndexableGetter(),
       SpaceFillingCurve const &curve = SpaceFillingCurve());
 
+  // FIXME: should we provide an update with IndexableGetter argument?
+  template <typename ExecutionSpace, typename Values>
+  void update(ExecutionSpace const &space, Values const &values);
+
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
 
@@ -137,6 +141,9 @@ private:
   bounding_volume_type _bounds;
   Kokkos::View<leaf_node_type *, MemorySpace> _leaf_nodes;
   Kokkos::View<internal_node_type *, MemorySpace> _internal_nodes;
+  // FIXME: make storing permutation indices optional, only to be used for
+  // hierarchies that will be updated
+  Kokkos::View<unsigned int *, MemorySpace> _permutation_indices;
   IndexableGetter _indexable_getter;
 };
 
@@ -240,18 +247,56 @@ BoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter, BoundingVolume>::
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::sort_linearized_order");
 
   // Compute the ordering of the indexables along the space-filling curve
-  auto permutation_indices =
-      Details::sortObjects(space, linear_ordering_indices);
+  _permutation_indices = Details::sortObjects(space, linear_ordering_indices);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
   // Generate bounding volume hierarchy
   Details::TreeConstruction::generateHierarchy(
-      space, values, _indexable_getter, permutation_indices,
+      space, values, _indexable_getter, _permutation_indices,
       linear_ordering_indices, _leaf_nodes, _internal_nodes, _bounds);
 
   Kokkos::Profiling::popRegion();
+}
+
+template <typename MemorySpace, typename Value, typename IndexableGetter,
+          typename BoundingVolume>
+template <typename ExecutionSpace, typename UserValues>
+void BoundingVolumeHierarchy<
+    MemorySpace, Value, IndexableGetter,
+    BoundingVolume>::update(ExecutionSpace const &space,
+                            UserValues const &user_values)
+{
+  static_assert(Details::KokkosExt::is_accessible_from<MemorySpace,
+                                                       ExecutionSpace>::value);
+  Details::check_valid_access_traits(user_values);
+
+  using Values = Details::AccessValues<UserValues>;
+  Values values{user_values}; // NOLINT
+
+  static_assert(
+      Details::KokkosExt::is_accessible_from<typename Values::memory_space,
+                                             ExecutionSpace>::value,
+      "Values must be accessible from the execution space");
+
+  KOKKOS_ASSERT(values.size() == size());
+
+  Kokkos::Profiling::ScopedRegion guard("ArborX::BVH::update");
+
+  if (empty())
+    return;
+
+  if (size() == 1)
+  {
+    Details::TreeConstruction::initializeSingleLeafTree(
+        space, values, _indexable_getter, _leaf_nodes, _bounds);
+    return;
+  }
+
+  Details::TreeConstruction::updateHierarchy(space, values, _indexable_getter,
+                                             _permutation_indices, _leaf_nodes,
+                                             _internal_nodes, _bounds);
 }
 
 template <typename MemorySpace, typename Value, typename IndexableGetter,

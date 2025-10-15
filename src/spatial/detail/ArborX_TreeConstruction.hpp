@@ -321,6 +321,138 @@ private:
   int _num_internal_nodes;
 };
 
+template <typename Values, typename IndexableGetter,
+          typename PermutationIndices, typename LeafNodes,
+          typename InternalNodes>
+class UpdateHierarchy
+{
+  static constexpr int UNTOUCHED_NODE = -1;
+
+  using MemorySpace = typename LeafNodes::memory_space;
+  using BoundingVolume =
+      typename InternalNodes::value_type::bounding_volume_type;
+
+public:
+  template <typename ExecutionSpace>
+  UpdateHierarchy(ExecutionSpace const &space, Values const &values,
+                  IndexableGetter const &indexable_getter,
+                  PermutationIndices const &permutation_indices,
+                  LeafNodes leaf_nodes, InternalNodes internal_nodes,
+                  BoundingVolume &bounds)
+      : _values(values)
+      , _indexable_getter(indexable_getter)
+      , _permutation_indices(permutation_indices)
+      , _leaf_nodes(leaf_nodes)
+      , _internal_nodes(internal_nodes)
+      , _flags(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                                  "ArborX::BVH::BVH::flags"),
+               internal_nodes.extent(0))
+      , _parents(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                                    "ArborX::BVH::BVH::parents"),
+                 2 * leaf_nodes.extent(0) - 1)
+  {
+    Kokkos::deep_copy(space, _flags, UNTOUCHED_NODE);
+    computeParents(space, leaf_nodes, internal_nodes, _parents);
+
+    Kokkos::parallel_for("ArborX::TreeConstruction::update_hierarchy",
+                         Kokkos::RangePolicy(space, 0, leaf_nodes.extent(0)),
+                         *this);
+
+    Kokkos::deep_copy(
+        space,
+        Kokkos::View<BoundingVolume, Kokkos::HostSpace,
+                     Kokkos::MemoryUnmanaged>(&bounds),
+        Kokkos::View<BoundingVolume const, MemorySpace,
+                     Kokkos::MemoryUnmanaged>(getRootBoundingVolumePtr()));
+  }
+
+  KOKKOS_FUNCTION
+  BoundingVolume const *getRootBoundingVolumePtr() const
+  {
+    // Need address of the root node's bounding box to copy it back on the host,
+    // but can't access node elements from the constructor since the data is on
+    // the device.
+    return &_internal_nodes.data()->bounding_volume;
+  }
+
+  template <typename ExecutionSpace>
+  KOKKOS_FUNCTION void computeParents(ExecutionSpace const &space,
+                                      LeafNodes const &leaf_nodes,
+                                      InternalNodes const &internal_nodes,
+                                      Kokkos::View<int *, MemorySpace> &parents)
+  {
+    auto const n = leaf_nodes.extent_int(0);
+    Kokkos::parallel_for(
+        "ArborX::TreeConstruction::find_parents",
+        Kokkos::RangePolicy(space, n, 2 * n - 1), KOKKOS_LAMBDA(int i) {
+          auto is_leaf = [n](int j) { return j < n; };
+
+          auto const left_child = internal_nodes(i - n).left_child;
+          auto const right_child =
+              (is_leaf(left_child) ? leaf_nodes(left_child).rope
+                                   : internal_nodes(left_child - n).rope);
+          parents(left_child) = i;
+          parents(right_child) = i;
+        });
+  }
+
+  KOKKOS_FUNCTION void operator()(int i) const
+  {
+    auto const n = _leaf_nodes.extent_int(0);
+
+    // Index in the original order values were given in
+    auto const original_index = _permutation_indices(i);
+
+    // Update leaf node value
+    auto &leaf_node = _leaf_nodes(i);
+    leaf_node = {leaf_node.rope, _values(original_index)};
+
+    BoundingVolume bounding_volume{};
+    expand(bounding_volume, _indexable_getter(leaf_node.value));
+
+    // Walk toward the root and do process it even though technically its
+    // bounding box has already been computed (bounding box of the scene)
+    auto const root = n;
+    do
+    {
+      auto parent = _parents(i);
+
+      // Use an atomic flag per internal node to terminate the first
+      // thread that enters it, while letting the second one through.
+      // This ensures that every node gets processed only once, and not
+      // before both of its children are processed.
+      auto other_child = Kokkos::atomic_compare_exchange(&_flags(parent - n),
+                                                         UNTOUCHED_NODE, i);
+      if (other_child == UNTOUCHED_NODE)
+        break;
+
+      auto &parent_node = _internal_nodes(parent - n);
+
+      Kokkos::load_fence();
+      bool const other_child_is_leaf = (other_child < n);
+      if (other_child_is_leaf)
+        expand(bounding_volume,
+               _indexable_getter(_leaf_nodes(other_child).value));
+      else
+        expand(bounding_volume,
+               _internal_nodes(other_child - n).bounding_volume);
+
+      parent_node.bounding_volume = bounding_volume;
+
+      i = parent;
+    } while (i != root);
+  }
+
+private:
+  Values _values;
+  IndexableGetter _indexable_getter;
+  PermutationIndices _permutation_indices;
+  LeafNodes _leaf_nodes;
+  InternalNodes _internal_nodes;
+  Kokkos::View<int *, MemorySpace> _flags;
+  Kokkos::View<int *, MemorySpace> _parents;
+};
+
 template <typename ExecutionSpace, typename Values, typename IndexableGetter,
           typename... PermutationIndicesViewProperties,
           typename LinearOrderingValueType,
@@ -345,6 +477,24 @@ void generateHierarchy(
                     ConstPermutationIndices(permutation_indices),
                     ConstLinearOrdering(sorted_morton_codes), leaf_nodes,
                     internal_nodes, bounds);
+}
+
+template <typename ExecutionSpace, typename Values, typename IndexableGetter,
+          typename... PermutationIndicesViewProperties, typename LeafNodes,
+          typename InternalNodes>
+void updateHierarchy(
+    ExecutionSpace const &space, Values const &values,
+    IndexableGetter const &indexable_getter,
+    Kokkos::View<unsigned int *, PermutationIndicesViewProperties...>
+        permutation_indices,
+    LeafNodes leaf_nodes, InternalNodes internal_nodes,
+    typename InternalNodes::value_type::bounding_volume_type &bounds)
+{
+  using ConstPermutationIndices =
+      Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>;
+  UpdateHierarchy(space, values, indexable_getter,
+                  ConstPermutationIndices(permutation_indices), leaf_nodes,
+                  internal_nodes, bounds);
 }
 
 } // namespace ArborX::Details::TreeConstruction
