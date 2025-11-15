@@ -732,6 +732,51 @@ void computeParentsAndReorderEdges(
   Kokkos::resize(Kokkos::WithoutInitializing, chain_levels, num_levels);
 }
 
+template <typename BVH, typename Labels, typename Metric, typename Radii>
+struct RadiiFunctor
+{
+  using value_type = int;
+
+  BVH bvh;
+  Labels labels;
+  Metric metric;
+  Radii radii;
+
+  KOKKOS_FUNCTION
+  void operator()(int const i, value_type &update, bool const final_pass) const
+  {
+    auto const label_i = labels(i);
+
+    if (label_i != labels(i - 1))
+      update = i;
+
+    if (update == 0)
+      return;
+
+    if (final_pass)
+    {
+      auto const j = update - 1;
+      auto const label_j = labels(j);
+      KOKKOS_ASSERT(label_i != label_j);
+
+      auto const r = metric(HappyTreeFriends::getValue(bvh, i).index,
+                            HappyTreeFriends::getValue(bvh, j).index,
+                            distance(HappyTreeFriends::getIndexable(bvh, i),
+                                     HappyTreeFriends::getIndexable(bvh, j)));
+      Kokkos::atomic_min(&radii(label_i), r);
+      Kokkos::atomic_min(&radii(label_j), r);
+    }
+  }
+
+  KOKKOS_FUNCTION void init(value_type &value) const { value = 0; }
+
+  KOKKOS_FUNCTION
+  void join(value_type &update, value_type const &input) const
+  {
+    update = input;
+  }
+};
+
 // Compute upper bound on the shortest edge of each component.
 template <class ExecutionSpace, class BVH, class Labels, class Metric,
           class Radii>
@@ -757,30 +802,7 @@ void resetSharedRadii(ExecutionSpace const &space, BVH const &bvh,
   auto const n = bvh.size();
   Kokkos::parallel_scan(
       "ArborX::MST::reset_shared_radii", Kokkos::RangePolicy(space, 1, n),
-      KOKKOS_LAMBDA(int i, int &update, bool final_pass) {
-        auto const label_i = labels(i);
-
-        if (label_i != labels(i - 1))
-          update = i;
-
-        if (update == 0)
-          return;
-
-        if (final_pass)
-        {
-          auto const j = update - 1;
-          auto const label_j = labels(j);
-          KOKKOS_ASSERT(label_i != label_j);
-
-          auto const r =
-              metric(HappyTreeFriends::getValue(bvh, i).index,
-                     HappyTreeFriends::getValue(bvh, j).index,
-                     distance(HappyTreeFriends::getIndexable(bvh, i),
-                              HappyTreeFriends::getIndexable(bvh, j)));
-          Kokkos::atomic_min(&radii(label_i), r);
-          Kokkos::atomic_min(&radii(label_j), r);
-        }
-      });
+      RadiiFunctor<BVH, Labels, Metric, Radii>{bvh, labels, metric, radii});
 }
 
 } // namespace ArborX::Details
