@@ -755,14 +755,23 @@ void resetSharedRadii(ExecutionSpace const &space, BVH const &bvh,
   // distance between all such pairs. Given that the Morton neighbors are
   // typically close to each other, this should provide a reasonably low bound.
   auto const n = bvh.size();
-  Kokkos::parallel_for(
-      "ArborX::MST::reset_shared_radii", Kokkos::RangePolicy(space, 0, n - 1),
-      KOKKOS_LAMBDA(int i) {
-        int const j = i + 1;
+  Kokkos::parallel_scan(
+      "ArborX::MST::reset_shared_radii", Kokkos::RangePolicy(space, 1, n),
+      KOKKOS_LAMBDA(int i, int &update, bool final_pass) {
         auto const label_i = labels(i);
-        auto const label_j = labels(j);
-        if (label_i != label_j)
+
+        if (label_i != labels(i - 1))
+          update = i;
+
+        if (update == 0)
+          return;
+
+        if (final_pass)
         {
+          auto const j = update - 1;
+          auto const label_j = labels(j);
+          KOKKOS_ASSERT(label_i != label_j);
+
           auto const r =
               metric(HappyTreeFriends::getValue(bvh, i).index,
                      HappyTreeFriends::getValue(bvh, j).index,
