@@ -309,6 +309,9 @@ struct FindComponentNearestNeighbors
       }
     } while (node != SENTINEL);
 
+    if (radius < _radii(component))
+      Kokkos::atomic_min(&_radii(component), radius);
+
     // This check is only here to reduce hammering the atomics for large
     // components. Otherwise, for a large number of points and a small number of
     // components it becomes extremely expensive.
