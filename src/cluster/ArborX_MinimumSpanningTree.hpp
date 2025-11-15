@@ -148,17 +148,6 @@ private:
         false;
 #endif
 
-    // Shared radii may or may not be faster for CUDA depending on the problem.
-    // In the ICPP'51 paper experiments, we ended up using it only in Serial.
-    // But we would like to keep an option open for the future, so the code is
-    // written to be able to run it if we want.
-    constexpr bool use_shared_radii =
-#ifdef KOKKOS_ENABLE_SERIAL
-        std::is_same<ExecutionSpace, Kokkos::Serial>::value;
-#else
-        false;
-#endif
-
     if constexpr (use_lower_bounds)
     {
       KokkosExt::reallocWithoutInitializing(space, lower_bounds, n);
@@ -205,9 +194,9 @@ private:
       Kokkos::deep_copy(space, radii, inf);
       resetSharedRadii(space, bvh, labels, metric, radii);
 
-      Details::FindComponentNearestNeighbors(
-          space, bvh, labels, weights, component_out_edges, metric, radii,
-          lower_bounds, std::bool_constant<use_shared_radii>());
+      Details::FindComponentNearestNeighbors(space, bvh, labels, weights,
+                                             component_out_edges, metric, radii,
+                                             lower_bounds);
       retrieveEdges(space, labels, weights, component_out_edges);
       if constexpr (use_lower_bounds)
       {

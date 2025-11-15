@@ -105,7 +105,7 @@ public:
 };
 
 template <class BVH, class Labels, class Weights, class Edges, class Metric,
-          class Radii, class LowerBounds, bool UseSharedRadii>
+          class Radii, class LowerBounds>
 struct FindComponentNearestNeighbors
 {
   BVH _bvh;
@@ -124,8 +124,7 @@ struct FindComponentNearestNeighbors
                                 Labels const &labels, Weights const &weights,
                                 Edges const &edges, Metric const &metric,
                                 Radii const &radii,
-                                LowerBounds const &lower_bounds,
-                                std::bool_constant<UseSharedRadii>)
+                                LowerBounds const &lower_bounds)
       : _bvh(bvh)
       , _labels(labels)
       , _weights(weights)
@@ -189,8 +188,7 @@ struct FindComponentNearestNeighbors
     DirectedEdge current_best{};
 
     // Use a reference for shared radii, and a copy otherwise.
-    std::conditional_t<UseSharedRadii, float &, float> radius =
-        _radii(component);
+    auto radius = _radii(component);
 
     constexpr int SENTINEL = -1;
     int stack[64];
@@ -246,10 +244,7 @@ struct FindComponentNearestNeighbors
             if (candidate_edge < current_best)
             {
               current_best = candidate_edge;
-              if constexpr (UseSharedRadii)
-                Kokkos::atomic_min(&radius, candidate_dist);
-              else
-                radius = candidate_dist;
+              radius = candidate_dist;
             }
           }
           else
@@ -271,10 +266,7 @@ struct FindComponentNearestNeighbors
             if (candidate_edge < current_best)
             {
               current_best = candidate_edge;
-              if constexpr (UseSharedRadii)
-                Kokkos::atomic_min(&radius, candidate_dist);
-              else
-                radius = candidate_dist;
+              radius = candidate_dist;
             }
           }
           else
@@ -335,13 +327,11 @@ struct FindComponentNearestNeighbors
 // For every component C, find the shortest edge (v, w) such that v is in C
 // and w is not in C. The found edge is stored in component_out_edges(C).
 template <class ExecutionSpace, class BVH, class Labels, class Weights,
-          class Edges, class Metric, class Radii, class LowerBounds,
-          bool UseSharedRadii>
+          class Edges, class Metric, class Radii, class LowerBounds>
 FindComponentNearestNeighbors(ExecutionSpace, BVH, Labels, Weights, Edges,
-                              Metric, Radii, LowerBounds,
-                              std::bool_constant<UseSharedRadii>)
+                              Metric, Radii, LowerBounds)
     -> FindComponentNearestNeighbors<BVH, Labels, Weights, Edges, Metric, Radii,
-                                     LowerBounds, UseSharedRadii>;
+                                     LowerBounds>;
 
 template <class ExecutionSpace, class Labels, class ComponentOutEdges,
           class LowerBounds>
