@@ -37,12 +37,12 @@ pipeline {
 
         stage('Build') {
             parallel {
-                stage('CUDA-12.0.1-NVCC-CUDA-AWARE-MPI') {
+                stage('CUDA-12.2.0-NVCC-CUDA-AWARE-MPI') {
                     agent {
                         dockerfile {
                             filename "Dockerfile.nvcc"
                             dir "docker"
-                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.0.1-devel-ubuntu22.04 --build-arg KOKKOS_VERSION=4.7.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON" --build-arg CUDA_AWARE_MPI=1'
+                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.2.0-devel-ubuntu22.04 --build-arg KOKKOS_VERSION=4.7.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON" --build-arg CUDA_AWARE_MPI=1'
                             args '-v /tmp/ccache:/tmp/ccache --env NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}'
                             label 'NVIDIA_Tesla_V100-PCIE-32GB && nvidia-docker'
                         }
