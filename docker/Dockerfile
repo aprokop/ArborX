@@ -31,7 +31,7 @@ RUN KEYDUMP_URL=https://cloud1.cees.ornl.gov/download && \
     rm ${KEYDUMP_FILE}*
 
 # Install Kokkos
-ARG KOKKOS_VERSION=4.5.00
+ARG KOKKOS_VERSION=5.0.0
 ARG KOKKOS_OPTIONS="-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_STANDARD=20 -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=ON"
 ENV KOKKOS_DIR=/opt/kokkos
 RUN KOKKOS_URL=https://github.com/kokkos/kokkos/archive/${KOKKOS_VERSION}.tar.gz && \
