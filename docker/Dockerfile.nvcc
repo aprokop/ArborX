@@ -77,7 +77,7 @@ RUN BOOST_VERSION=1.75.0 && \
 ENV LD_LIBRARY_PATH=/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
 
 # Install Kokkos
-ARG KOKKOS_VERSION=4.5.00
+ARG KOKKOS_VERSION=4.7.00
 ENV KOKKOS_DIR=/opt/kokkos
 ARG KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=ON -DKokkos_ENABLE_CUDA=ON"
 RUN KOKKOS_URL=https://github.com/kokkos/kokkos/archive/${KOKKOS_VERSION}.tar.gz && \
