@@ -42,7 +42,7 @@ pipeline {
                         dockerfile {
                             filename "Dockerfile.nvcc"
                             dir "docker"
-                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.2.2-devel-ubuntu22.04 --build-arg KOKKOS_VERSION=4.5.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON" --build-arg CUDA_AWARE_MPI=1'
+                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.2.2-devel-ubuntu22.04 --build-arg KOKKOS_VERSION=5.1.0 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON" --build-arg CUDA_AWARE_MPI=1'
                             args '-v /tmp/ccache:/tmp/ccache --env NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}'
                             label 'NVIDIA_Tesla_V100-PCIE-32GB && nvidia-docker'
                         }
@@ -103,7 +103,7 @@ pipeline {
                         dockerfile {
                             filename "Dockerfile.nvcc"
                             dir "docker"
-                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.9.1-devel-ubuntu24.04 --build-arg KOKKOS_VERSION=4.6.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON -DKokkos_ENABLE_BOUNDS_CHECK=ON"'
+                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.9.1-devel-ubuntu24.04 --build-arg KOKKOS_VERSION=5.0.0 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_SERIAL=ON -DKokkos_ENABLE_OPENMP=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON -DKokkos_ENABLE_BOUNDS_CHECK=ON"'
                             args '-v /tmp/ccache:/tmp/ccache --env NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}'
                             label 'NVIDIA_Tesla_V100-PCIE-32GB && nvidia-docker'
                         }
@@ -163,7 +163,7 @@ pipeline {
                         // dockerfile {
                             // filename "Dockerfile"
                             // dir "docker"
-                            // additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.8.1-devel-ubuntu24.04 --build-arg ADDITIONAL_PACKAGES="clang-19" --build-arg KOKKOS_VERSION="4.5.00" --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_THREADS=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
+                            // additionalBuildArgs '--build-arg BASE=nvidia/cuda:12.8.1-devel-ubuntu24.04 --build-arg ADDITIONAL_PACKAGES="clang-19" --build-arg KOKKOS_VERSION=5.1.0 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_COMPILER=clang++-19 -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_THREADS=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
                             // args '-v /tmp/ccache:/tmp/ccache --env NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}'
                             // label 'NVIDIA_Tesla_V100-PCIE-32GB && nvidia-docker'
                         // }
@@ -221,7 +221,7 @@ pipeline {
                         dockerfile {
                             filename "Dockerfile"
                             dir "docker"
-                            additionalBuildArgs '--build-arg BASE=ubuntu:22.04 --build-arg ADDITIONAL_PACKAGES="clang clang-tidy" --build-arg KOKKOS_VERSION=4.6.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_STANDARD=20 -DKokkos_ENABLE_OPENMP=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
+                            additionalBuildArgs '--build-arg BASE=ubuntu:22.04 --build-arg ADDITIONAL_PACKAGES="clang clang-tidy" --build-arg KOKKOS_VERSION=5.0.0 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_STANDARD=20 -DKokkos_ENABLE_OPENMP=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
                             args '-v /tmp/ccache:/tmp/ccache'
                             label 'docker'
                         }
@@ -284,7 +284,7 @@ pipeline {
                             // We use gfortran- to avoid problems with openmpi
                             // when using gcc images. See
                             // https://github.com/docker-library/gcc/issues/57
-                            additionalBuildArgs '--build-arg BASE=gcc:13.3 --build-arg ADDITIONAL_PACKAGES="gfortran-" --build-arg KOKKOS_VERSION=4.6.00 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_EXTENSIONS=OFF -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_OPENMP=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
+                            additionalBuildArgs '--build-arg BASE=gcc:13.3 --build-arg ADDITIONAL_PACKAGES="gfortran-" --build-arg KOKKOS_VERSION=5.0.0 --build-arg KOKKOS_OPTIONS="-DCMAKE_CXX_EXTENSIONS=OFF -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=OFF -DKokkos_ENABLE_OPENMP=ON -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu"'
                             args '-v /tmp/ccache:/tmp/ccache'
                             label 'docker'
                         }
@@ -345,7 +345,7 @@ pipeline {
                         dockerfile {
                             filename "Dockerfile.hipcc"
                             dir "docker"
-                            additionalBuildArgs '--build-arg BASE=rocm/dev-ubuntu-24.04:6.2.4-complete --build-arg KOKKOS_VERSION=4.6.00 --build-arg KOKKOS_ARCH=${KOKKOS_ARCH}'
+                            additionalBuildArgs '--build-arg BASE=rocm/dev-ubuntu-24.04:6.2.4-complete --build-arg KOKKOS_VERSION=5.0.0 --build-arg KOKKOS_ARCH=${KOKKOS_ARCH}'
                             args '-v /tmp/ccache.kokkos:/tmp/ccache --device=/dev/kfd --device=/dev/dri --security-opt seccomp=unconfined --group-add video --env HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES} --env AMDGPU_TARGET=${AMDGPU_TARGET}'
                             label 'rocm-docker'
                         }
