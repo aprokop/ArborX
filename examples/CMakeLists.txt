@@ -17,6 +17,7 @@ add_subdirectory(triangle_intersection)
 
 if(ARBORX_ENABLE_MPI)
   add_subdirectory(distributed_tree)
+  add_subdirectory(wall_distance)
 endif()
 
 find_package(Boost COMPONENTS program_options)
