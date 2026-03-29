@@ -320,6 +320,18 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_fdbscan_densebox_double, DeviceType,
   dbscan_f<DeviceType, double>(ArborX::DBSCAN::Implementation::FDBSCAN_DenseBox,
                                ArborX::DBSCAN::Algorithm::DBSCAN);
 }
+BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_fdbscan_hybrid_float, DeviceType,
+                              ARBORX_DEVICE_TYPES)
+{
+  dbscan_f<DeviceType, float>(ArborX::DBSCAN::Implementation::FDBSCAN_Hybrid,
+                              ArborX::DBSCAN::Algorithm::DBSCAN);
+}
+BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_fdbscan_hybrid_double, DeviceType,
+                              ARBORX_DEVICE_TYPES)
+{
+  dbscan_f<DeviceType, double>(ArborX::DBSCAN::Implementation::FDBSCAN_Hybrid,
+                               ArborX::DBSCAN::Algorithm::DBSCAN);
+}
 
 BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_star_fdbscan_float, DeviceType,
                               ARBORX_DEVICE_TYPES)

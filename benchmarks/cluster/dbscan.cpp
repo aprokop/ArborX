@@ -162,6 +162,8 @@ bool run_dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Implementation implementation = Implementation::FDBSCAN;
   if (params.implementation == "fdbscan-densebox")
     implementation = Implementation::FDBSCAN_DenseBox;
+  if (params.implementation == "fdbscan-hybrid")
+    implementation = Implementation::FDBSCAN_Hybrid;
 
   using ArborX::DBSCAN::Algorithm;
   Algorithm algorithm = Algorithm::DBSCAN;
@@ -193,7 +195,8 @@ bool run_dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   {
     bool const is_special_case = (params.core_min_size == 2);
 
-    if (implementation == ArborX::DBSCAN::Implementation::FDBSCAN_DenseBox)
+    if (implementation == ArborX::DBSCAN::Implementation::FDBSCAN_DenseBox ||
+        implementation == ArborX::DBSCAN::Implementation::FDBSCAN_Hybrid)
       printf("-- dense cells      : %10.3f\n",
              ArborXBenchmark::get_time("ArborX::DBSCAN::dense_cells"));
     printf("-- construction     : %10.3f\n",
@@ -267,7 +270,8 @@ int main(int argc, char *argv[])
 
   Parameters params;
 
-  std::vector<std::string> allowed_impls = {"fdbscan", "fdbscan-densebox"};
+  std::vector<std::string> allowed_impls = {"fdbscan", "fdbscan-densebox",
+                                            "fdbscan-hybrid"};
   std::vector<std::string> allowed_algorithms = {"dbscan", "dbscan*"};
 
   bpo::options_description desc("Allowed options");
