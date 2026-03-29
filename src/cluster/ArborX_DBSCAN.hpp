@@ -21,6 +21,7 @@
 #include <detail/ArborX_FDBSCANDenseBox.hpp>
 #include <detail/ArborX_HalfTraversal.hpp>
 #include <detail/ArborX_PredicateHelpers.hpp>
+#include <detail/ArborX_TreeNodeLabeling.hpp>
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 #include <misc/ArborX_SortUtils.hpp>
@@ -180,7 +181,8 @@ namespace DBSCAN
 enum class Implementation
 {
   FDBSCAN,
-  FDBSCAN_DenseBox
+  FDBSCAN_DenseBox,
+  FDBSCAN_Hybrid
 };
 
 enum class Algorithm
@@ -266,7 +268,8 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::View<int *, MemorySpace> num_neigh("ArborX::DBSCAN::num_neighbors",
                                              0);
 
-  if (parameters._implementation == DBSCAN::Implementation::FDBSCAN)
+  auto const implementation = parameters._implementation;
+  if (implementation == DBSCAN::Implementation::FDBSCAN)
   {
     // Build the tree
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
@@ -325,8 +328,9 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
       Kokkos::Profiling::popRegion();
     }
   }
-  else if (parameters._implementation ==
-           DBSCAN::Implementation::FDBSCAN_DenseBox)
+
+  if (implementation == DBSCAN::Implementation::FDBSCAN_DenseBox ||
+      implementation == DBSCAN::Implementation::FDBSCAN_Hybrid)
   {
     // Find dense boxes
     Kokkos::Profiling::pushRegion("ArborX::DBSCAN::dense_cells");
@@ -394,89 +398,180 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
     Kokkos::Profiling::popRegion();
 
-    // Build the tree
-    Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
-    Details::MixedBoxPrimitives<Points, decltype(dense_cell_offsets),
-                                decltype(cell_indices), decltype(permute)>
-        mixed_primitives{points,
-                         grid,
-                         dense_cell_offsets,
-                         num_points_in_dense_cells,
-                         sorted_cell_indices,
-                         permute};
-
-    BoundingVolumeHierarchy bvh(exec_space,
-                                Experimental::attach_indices(mixed_primitives));
-
-    Kokkos::Profiling::popRegion();
-
-    Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters");
-
-    if (is_special_case)
+    if (implementation == DBSCAN::Implementation::FDBSCAN_Hybrid)
     {
-      // Perform the queries and build clusters through callback
-      using CorePoints = Details::CCSCorePoints;
-      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
-      auto const predicates = Experimental::attach_indices(
-          Experimental::make_intersects(points, eps));
-      // For the special case, there's no difference between DBSCAN and DBSCAN*
-      bvh.query(exec_space, predicates,
-                Details::FDBSCANDenseBoxCallback<UnionFind, CorePoints, Points,
-                                                 decltype(dense_cell_offsets),
-                                                 decltype(permute)>{
-                    labels, CorePoints{}, points, dense_cell_offsets,
-                    exec_space, permute, eps});
+      KOKKOS_ASSERT(parameters._algorithm == DBSCAN::Algorithm::DBSCAN);
+
+      // Free memory
+      Kokkos::resize(cell_indices, 0);
+      Kokkos::resize(dense_cell_offsets, 0);
+
+      // Build the tree
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
+      BoundingVolumeHierarchy bvh(exec_space,
+                                  Experimental::attach_indices(points));
       Kokkos::Profiling::popRegion();
+
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_labels");
+      Kokkos::View<int *, MemorySpace> tree_parents(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "ArborX::MST::tree_parents"),
+          2 * n - 1);
+      Details::findParents(exec_space, bvh, tree_parents);
+      Kokkos::resize(exec_space, labels, 2 * n - 1);
+      Details::reduceLabels(exec_space, tree_parents, labels);
+      Kokkos::Profiling::popRegion();
+
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters");
+      if (is_special_case)
+      {
+        // Perform the queries and build clusters through callback
+        using CorePoints = Details::CCSCorePoints;
+        Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
+        // For the special case, there's no difference between DBSCAN and
+        // DBSCAN*
+        Details::HalfTraversal(exec_space, bvh,
+                               Details::FDBSCANCallback<UnionFind, CorePoints>{
+                                   labels, CorePoints{}},
+                               Details::WithinRadiusGetter<Coordinate>{eps});
+        Kokkos::Profiling::popRegion();
+
+        auto callback = Details::FDBSCANCallback<UnionFind, CorePoints>{
+            labels, CorePoints{}};
+        Kokkos::parallel_for(
+            "ArborX::Experimental::HalfTraversal",
+            Kokkos::RangePolicy(exec_space, 0, bvh.size()),
+            KOKKOS_LAMBDA(int i) {
+              using HappyTreeFriends = Details::HappyTreeFriends;
+              auto const leaf_value = HappyTreeFriends::getValue(bvh, i);
+              auto const point = points(i);
+              auto const label_predicate = [label_i = labels(i),
+                                            &labels = labels](int j) {
+                return label_i != labels(j);
+              };
+
+              int node = HappyTreeFriends::getRope(bvh, i);
+              while (node != Details::ROPE_SENTINEL)
+              {
+                if (HappyTreeFriends::isLeaf(bvh, node))
+                {
+                  if (distance(point, HappyTreeFriends::getIndexable(
+                                          bvh, node)) <= eps)
+                    callback(leaf_value, HappyTreeFriends::getValue(bvh, node));
+                  node = HappyTreeFriends::getRope(bvh, node);
+                }
+                else
+                {
+                  if (distance(point,
+                               HappyTreeFriends::getInternalBoundingVolume(
+                                   bvh, node)) <= eps)
+                  {
+                    auto left_child = HappyTreeFriends::getLeftChild(bvh, node);
+                    auto right_child =
+                        HappyTreeFriends::getRightChild(bvh, node);
+                    if (label_predicate(left_child))
+                      node = left_child;
+                    else if (label_predicate(right_child))
+                      node = right_child;
+                    else
+                      node = HappyTreeFriends::getRope(bvh, node);
+                  }
+                  else
+                    node = HappyTreeFriends::getRope(bvh, node);
+                }
+              }
+            });
+      }
+      Kokkos::resize(exec_space, labels, n);
     }
     else
     {
-      // Determine core points
-      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::num_neigh");
-      Kokkos::resize(Kokkos::view_alloc(exec_space), num_neigh, n);
-      // Set num neighbors for points in dense cells to max, so that they are
-      // automatically core points
-      Kokkos::parallel_for(
-          "ArborX::DBSCAN::mark_dense_cells_core_points",
-          Kokkos::RangePolicy(exec_space, 0, num_points_in_dense_cells),
-          KOKKOS_LAMBDA(int i) { num_neigh(permute(i)) = INT_MAX; });
-      // Count neighbors for points in sparse cells
-      auto sparse_permute = Kokkos::subview(
-          permute, Kokkos::make_pair(num_points_in_dense_cells, n));
+      // Build the tree
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_construction");
+      Details::MixedBoxPrimitives<Points, decltype(dense_cell_offsets),
+                                  decltype(cell_indices), decltype(permute)>
+          mixed_primitives{points,
+                           grid,
+                           dense_cell_offsets,
+                           num_points_in_dense_cells,
+                           sorted_cell_indices,
+                           permute};
 
-      auto const sparse_predicates =
-          Details::PointsWithRadiusReorderedAndFiltered<
-              Points, decltype(sparse_permute)>{points, eps, sparse_permute};
-      bvh.query(exec_space, sparse_predicates,
-                Details::CountUpToN_DenseBox<MemorySpace, Points,
-                                             decltype(dense_cell_offsets),
-                                             decltype(permute)>(
-                    num_neigh, points, dense_cell_offsets, permute,
-                    core_min_size, eps, core_min_size));
+      BoundingVolumeHierarchy bvh(
+          exec_space, Experimental::attach_indices(mixed_primitives));
+
       Kokkos::Profiling::popRegion();
 
-      using CorePoints = Details::DBSCANCorePoints<MemorySpace>;
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters");
 
-      // Perform the queries and build clusters through callback
-      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
-      auto const predicates = Experimental::attach_indices(
-          Experimental::make_intersects(points, eps));
-      if (parameters._algorithm == DBSCAN::Algorithm::DBSCAN)
+      if (is_special_case)
+      {
+        // Perform the queries and build clusters through callback
+        using CorePoints = Details::CCSCorePoints;
+        Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
+        auto const predicates = Experimental::attach_indices(
+            Experimental::make_intersects(points, eps));
+        // For the special case, there's no difference between DBSCAN and
+        // DBSCAN*
         bvh.query(
             exec_space, predicates,
             Details::FDBSCANDenseBoxCallback<UnionFind, CorePoints, Points,
                                              decltype(dense_cell_offsets),
                                              decltype(permute)>{
-                labels, CorePoints{num_neigh, core_min_size}, points,
-                dense_cell_offsets, exec_space, permute, eps});
+                labels, CorePoints{}, points, dense_cell_offsets, exec_space,
+                permute, eps});
+        Kokkos::Profiling::popRegion();
+      }
       else
-        bvh.query(
-            exec_space, predicates,
-            Details::FDBSCANDenseBoxCallback<
-                UnionFind, CorePoints, Points, decltype(dense_cell_offsets),
-                decltype(permute), Details::DBSCANStarTag>{
-                labels, CorePoints{num_neigh, core_min_size}, points,
-                dense_cell_offsets, exec_space, permute, eps});
-      Kokkos::Profiling::popRegion();
+      {
+        // Determine core points
+        Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::num_neigh");
+        Kokkos::resize(Kokkos::view_alloc(exec_space), num_neigh, n);
+        // Set num neighbors for points in dense cells to max, so that they
+        // are automatically core points
+        Kokkos::parallel_for(
+            "ArborX::DBSCAN::mark_dense_cells_core_points",
+            Kokkos::RangePolicy(exec_space, 0, num_points_in_dense_cells),
+            KOKKOS_LAMBDA(int i) { num_neigh(permute(i)) = INT_MAX; });
+        // Count neighbors for points in sparse cells
+        auto sparse_permute = Kokkos::subview(
+            permute, Kokkos::make_pair(num_points_in_dense_cells, n));
+
+        auto const sparse_predicates =
+            Details::PointsWithRadiusReorderedAndFiltered<
+                Points, decltype(sparse_permute)>{points, eps, sparse_permute};
+        bvh.query(exec_space, sparse_predicates,
+                  Details::CountUpToN_DenseBox<MemorySpace, Points,
+                                               decltype(dense_cell_offsets),
+                                               decltype(permute)>(
+                      num_neigh, points, dense_cell_offsets, permute,
+                      core_min_size, eps, core_min_size));
+        Kokkos::Profiling::popRegion();
+
+        using CorePoints = Details::DBSCANCorePoints<MemorySpace>;
+
+        // Perform the queries and build clusters through callback
+        Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
+        auto const predicates = Experimental::attach_indices(
+            Experimental::make_intersects(points, eps));
+        if (parameters._algorithm == DBSCAN::Algorithm::DBSCAN)
+          bvh.query(
+              exec_space, predicates,
+              Details::FDBSCANDenseBoxCallback<UnionFind, CorePoints, Points,
+                                               decltype(dense_cell_offsets),
+                                               decltype(permute)>{
+                  labels, CorePoints{num_neigh, core_min_size}, points,
+                  dense_cell_offsets, exec_space, permute, eps});
+        else
+          bvh.query(
+              exec_space, predicates,
+              Details::FDBSCANDenseBoxCallback<
+                  UnionFind, CorePoints, Points, decltype(dense_cell_offsets),
+                  decltype(permute), Details::DBSCANStarTag>{
+                  labels, CorePoints{num_neigh, core_min_size}, points,
+                  dense_cell_offsets, exec_space, permute, eps});
+        Kokkos::Profiling::popRegion();
+      }
     }
   }
 
