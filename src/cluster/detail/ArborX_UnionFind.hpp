@@ -118,7 +118,7 @@ struct UnionFind
     {
       index_type next;
       auto prev = i;
-      while (curr > (next = _labels(curr)))
+      while (curr != (next = _labels(curr)))
       {
         _labels(prev) = next;
         prev = curr;

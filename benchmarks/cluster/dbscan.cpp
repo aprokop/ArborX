@@ -201,6 +201,9 @@ bool run_dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
              ArborXBenchmark::get_time("ArborX::DBSCAN::dense_cells"));
     printf("-- construction     : %10.3f\n",
            ArborXBenchmark::get_time("ArborX::DBSCAN::tree_construction"));
+    if (implementation == ArborX::DBSCAN::Implementation::FDBSCAN_Hybrid)
+      printf("-- tree labels      : %10.3f\n",
+             ArborXBenchmark::get_time("ArborX::DBSCAN::tree_labels"));
     printf("-- query+cluster    : %10.3f\n",
            ArborXBenchmark::get_time("ArborX::DBSCAN::clusters"));
     if (!is_special_case)

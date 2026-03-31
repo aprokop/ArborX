@@ -268,6 +268,8 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
   Kokkos::View<int *, MemorySpace> num_neigh("ArborX::DBSCAN::num_neighbors",
                                              0);
 
+  // #define PRINT_STUFF
+
   auto const implementation = parameters._implementation;
   if (implementation == DBSCAN::Implementation::FDBSCAN)
   {
@@ -295,6 +297,12 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
           Details::FDBSCANCallback<UnionFind, CorePoints>{labels, CorePoints{}},
           Details::WithinRadiusGetter<Coordinate>{eps});
       Kokkos::Profiling::popRegion();
+#ifdef PRINT_STUFF
+      printf("Labels:");
+      for (int i = 0; i < n; ++i)
+        printf(" %d", labels(i));
+      printf("\n");
+#endif
     }
     else
     {
@@ -398,6 +406,13 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
 
     Kokkos::Profiling::popRegion();
 
+#ifdef PRINT_STUFF
+    printf("Labels after dense cell union-find:");
+    for (int i = 0; i < n; ++i)
+      printf(" %d", labels(i));
+    printf("\n");
+#endif
+
     if (implementation == DBSCAN::Implementation::FDBSCAN_Hybrid)
     {
       KOKKOS_ASSERT(parameters._algorithm == DBSCAN::Algorithm::DBSCAN);
@@ -412,15 +427,72 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
                                   Experimental::attach_indices(points));
       Kokkos::Profiling::popRegion();
 
-      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_labels");
-      Kokkos::View<int *, MemorySpace> tree_parents(
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::permutations");
+      Kokkos::View<int *, MemorySpace> tree_permute(
           Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
-                             "ArborX::MST::tree_parents"),
-          2 * n - 1);
-      Details::findParents(exec_space, bvh, tree_parents);
-      Kokkos::resize(exec_space, labels, 2 * n - 1);
-      Details::reduceLabels(exec_space, tree_parents, labels);
+                             "ArborX::DBSCAN::tree_permute"),
+          n);
+      Kokkos::View<int *, MemorySpace> tree_rev_permute(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "ArborX::DBSCAN::tree_rev_permute"),
+          n);
+      Kokkos::parallel_for(
+          "ArborX::DBSCAN::compute_tree_permutation",
+          Kokkos::RangePolicy(exec_space, 0, n), KOKKOS_LAMBDA(int i) {
+            auto index = Details::HappyTreeFriends::getValue(bvh, i).index;
+            tree_permute(i) = index;
+            tree_rev_permute(index) = i;
+          });
       Kokkos::Profiling::popRegion();
+
+#ifdef PRINT_STUFF
+      printf("Tree permutation:");
+      for (int i = 0; i < n; ++i)
+        printf(" %d", tree_permute(i));
+      printf("\nTree reverse permutation:");
+      for (int i = 0; i < n; ++i)
+        printf(" %d", tree_rev_permute(i));
+      printf("\n");
+#endif
+
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_labels");
+      Kokkos::View<int *, MemorySpace> tree_labels(
+          Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                             "ArborX::DBSCAN::tree_labels"),
+          2 * n - 1);
+      {
+        Kokkos::View<int *, MemorySpace> tree_parents(
+            Kokkos::view_alloc(exec_space, Kokkos::WithoutInitializing,
+                               "ArborX::MST::tree_parents"),
+            2 * n - 1);
+        Details::findParents(exec_space, bvh, tree_parents);
+        // FIXME: it's not that easy. For union-find to work, we need
+        // label(root) = root. With this random permutation, that may not
+        // happen.
+        Kokkos::parallel_for(
+            "ArborX::DBSCAN::initialize_tree_labels",
+            Kokkos::RangePolicy(exec_space, 0, n), KOKKOS_LAMBDA(int i) {
+              tree_labels(i) = tree_rev_permute(labels(tree_permute(i)));
+            });
+        Details::reduceLabels(exec_space, tree_parents, tree_labels);
+
+#ifdef PRINT_STUFF
+        printf("Tree parents:");
+        for (int i = 0; i < 2 * n - 1; ++i)
+          printf(" %d", tree_parents(i));
+        printf("\n");
+#endif
+      }
+      Kokkos::Profiling::popRegion();
+
+#ifdef PRINT_STUFF
+      printf("Initial tree labels:");
+      for (int i = 0; i < 2 * n - 1; ++i)
+        printf(" %d", tree_labels(i));
+      printf("\n");
+#endif
+
+      auto tree_labels_copy = KokkosExt::clone(exec_space, tree_labels);
 
       Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters");
       if (is_special_case)
@@ -430,59 +502,84 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
         Kokkos::Profiling::pushRegion("ArborX::DBSCAN::clusters::query");
         // For the special case, there's no difference between DBSCAN and
         // DBSCAN*
-        Details::HalfTraversal(exec_space, bvh,
-                               Details::FDBSCANCallback<UnionFind, CorePoints>{
-                                   labels, CorePoints{}},
-                               Details::WithinRadiusGetter<Coordinate>{eps});
-        Kokkos::Profiling::popRegion();
-
         auto callback = Details::FDBSCANCallback<UnionFind, CorePoints>{
             labels, CorePoints{}};
         Kokkos::parallel_for(
             "ArborX::Experimental::HalfTraversal",
             Kokkos::RangePolicy(exec_space, 0, bvh.size()),
             KOKKOS_LAMBDA(int i) {
+#ifdef PRINT_STUFF
+              printf("\n---- %d ----\n", i);
+#endif
               using HappyTreeFriends = Details::HappyTreeFriends;
               auto const leaf_value = HappyTreeFriends::getValue(bvh, i);
-              auto const point = points(i);
-              auto const label_predicate = [label_i = labels(i),
-                                            &labels = labels](int j) {
+              auto predicate = [point = leaf_value.value,
+                                eps](auto const &indexable) {
+                return distance(point, indexable) <= eps;
+              };
+              auto const label_predicate = [label_i = tree_labels_copy(i),
+                                            &labels = tree_labels_copy](int j) {
                 return label_i != labels(j);
               };
 
               int node = HappyTreeFriends::getRope(bvh, i);
               while (node != Details::ROPE_SENTINEL)
               {
+                if (!label_predicate(node))
+                {
+#ifdef PRINT_STUFF
+                  printf("  skipping node %d\n", node);
+#endif
+                  node = HappyTreeFriends::getRope(bvh, node);
+                  continue;
+                }
+
                 if (HappyTreeFriends::isLeaf(bvh, node))
                 {
-                  if (distance(point, HappyTreeFriends::getIndexable(
-                                          bvh, node)) <= eps)
+                  if (predicate(HappyTreeFriends::getIndexable(bvh, node)))
+                  {
+#ifdef PRINT_STUFF
+                    printf("  merging with %d\n", node);
+#endif
                     callback(leaf_value, HappyTreeFriends::getValue(bvh, node));
+                  }
                   node = HappyTreeFriends::getRope(bvh, node);
                 }
                 else
                 {
-                  if (distance(point,
-                               HappyTreeFriends::getInternalBoundingVolume(
-                                   bvh, node)) <= eps)
-                  {
-                    auto left_child = HappyTreeFriends::getLeftChild(bvh, node);
-                    auto right_child =
-                        HappyTreeFriends::getRightChild(bvh, node);
-                    if (label_predicate(left_child))
-                      node = left_child;
-                    else if (label_predicate(right_child))
-                      node = right_child;
-                    else
-                      node = HappyTreeFriends::getRope(bvh, node);
-                  }
-                  else
-                    node = HappyTreeFriends::getRope(bvh, node);
+                  node = (predicate(HappyTreeFriends::getInternalBoundingVolume(
+                              bvh, node))
+                              ? HappyTreeFriends::getLeftChild(bvh, node)
+                              : HappyTreeFriends::getRope(bvh, node));
                 }
               }
             });
       }
-      Kokkos::resize(exec_space, labels, n);
+      Kokkos::Profiling::popRegion();
+
+#ifdef PRINT_STUFF
+      printf("Final tree labels:");
+      for (int i = 0; i < 2 * n - 1; ++i)
+        printf(" %d", tree_labels(i));
+      printf("\n");
+#endif
+
+      Kokkos::Profiling::pushRegion("ArborX::DBSCAN::tree_labels");
+      // Kokkos::deep_copy(exec_space, labels,
+      // Kokkos::subview(tree_labels, Kokkos::make_pair(0, n)));
+      // Kokkos::parallel_for(
+      // "ArborX::DBSCAN::copy_tree_labels",
+      // Kokkos::RangePolicy(exec_space, 0, n), KOKKOS_LAMBDA(int i) {
+      // labels(i) = tree_permute(tree_labels(tree_rev_permute(i)));
+      // });
+      Kokkos::Profiling::popRegion();
+
+#ifdef PRINT_STUFF
+      printf("Labels:");
+      for (int i = 0; i < n; ++i)
+        printf(" %d", labels(i));
+      printf("\n");
+#endif
     }
     else
     {
@@ -590,7 +687,7 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
         int next;
         int vstat = labels(i);
         int const old = vstat;
-        while (vstat > (next = labels(vstat)))
+        while (vstat != (next = labels(vstat)))
         {
           vstat = next;
         }
