@@ -479,12 +479,6 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
               int node = HappyTreeFriends::getRope(bvh, i);
               while (node != Details::ROPE_SENTINEL)
               {
-                if (!label_predicate(node))
-                {
-                  node = HappyTreeFriends::getRope(bvh, node);
-                  continue;
-                }
-
                 if (HappyTreeFriends::isLeaf(bvh, node))
                 {
                   if (predicate(HappyTreeFriends::getIndexable(bvh, node)))
@@ -494,7 +488,8 @@ void dbscan(ExecutionSpace const &exec_space, Primitives const &primitives,
                 else
                 {
                   node = (predicate(HappyTreeFriends::getInternalBoundingVolume(
-                              bvh, node))
+                              bvh, node)) &&
+                                  label_predicate(node)
                               ? HappyTreeFriends::getLeftChild(bvh, node)
                               : HappyTreeFriends::getRope(bvh, node));
                 }
