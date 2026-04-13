@@ -75,8 +75,9 @@ struct ArborX::AccessTraits<Geometries<T, MemorySpace>>
   }
 };
 
-namespace ArborX::Details
+namespace ArborX::WallDistance
 {
+// #define WALL_DISTANCE_USE_REPLICATION
 
 #ifdef WALL_DISTANCE_USE_REPLICATION
 template <typename LocalSides, typename GlobalSides>
@@ -84,7 +85,7 @@ static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
                               GlobalSides &global_sides)
 {
   Kokkos::Profiling::ScopedRegion guard(
-      "Spinnaker::WallDistanceArborX::gatherGlobalSides");
+      "ArborX::WallDistance::gatherGlobalSides");
 
   using ExecutionSpace = typename GlobalSides::execution_space;
   using MemorySpace = typename GlobalSides::memory_space;
@@ -118,7 +119,7 @@ static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
   auto global_sides_host = create_layout_right_mirror_view_no_init(
       space, Kokkos::HostSpace{}, global_sides);
   Kokkos::parallel_for(
-      "Spinnaker::WallDistanceArborX::gatherGlobalSides::copy_local",
+      "ArborX::WallDistance::gatherGlobalSides::copy_local",
       Kokkos::RangePolicy(space, 0, local_sides.extent(0)),
       KOKKOS_LAMBDA(int i) {
         for (int j = 0; j < (int)local_sides.extent(1); ++j)
@@ -191,6 +192,10 @@ auto buildIndex(ExecutionSpace const &space,
                 panzer_stk::STK_Interface const &mesh,
                 std::vector<std::string> const &wall_names)
 {
+  std::string prefix = "ArborX::WallDistance::buildIndex";
+  Kokkos::Profiling::ScopedRegion guard(prefix);
+  prefix += "::";
+
   using MemorySpace = typename ExecutionSpace::memory_space;
 
   // Get sideset names of sidesets
@@ -221,8 +226,8 @@ auto buildIndex(ExecutionSpace const &space,
   auto key = get_topology_key(mesh);
 
 #ifdef WALL_DISTANCE_USE_REPLICATION
-  Kokkos::View<Scalar ***, MemorySpace> global_sides(
-      "ArborX::WalDistance::global_sides", 0, 0, 0);
+  Kokkos::View<Scalar ***, MemorySpace> global_sides(prefix + "global_sides", 0,
+                                                     0, 0);
   MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
   gatherGlobalSides(comm, local_sides, global_sides);
   if constexpr (DIM == 2)
@@ -231,7 +236,7 @@ auto buildIndex(ExecutionSpace const &space,
       return ArborX::DistributedTree(
           comm, space,
           Geometries<Topology::TRIANGLE, MemorySpace>{global_sides});
-    else if (key == shards::Quadrilateral<4>::key)
+    else
       return ArborX::DistributedTree(
           comm, space, Geometries<Topology::QUADRILATERAL, MemorySpace>{sides});
   }
@@ -241,7 +246,7 @@ auto buildIndex(ExecutionSpace const &space,
       return ArborX::DistributedTree(
           comm, space,
           Geometries<Topology::TETRAHEDRON, MemorySpace>{global_sides});
-    else if (key == shards::Hexahedron<8>::key)
+    else
       return ArborX::DistributedTree(
           comm, space,
           Geometries<Topology::HEXAHEDRON, MemorySpace>{global_sides});
@@ -252,7 +257,7 @@ auto buildIndex(ExecutionSpace const &space,
     if (key == shards::Triangle<3>::key)
       return ArborX::BoundingVolumeHierarchy(
           space, Geometries<Topology::TRIANGLE, MemorySpace>{local_sides});
-    else if (key == shards::Quadrilateral<4>::key)
+    else
       return ArborX::BoundingVolumeHierarchy(
           space, Geometries<Topology::QUADRILATERAL, MemorySpace>{local_sides});
   }
@@ -261,11 +266,11 @@ auto buildIndex(ExecutionSpace const &space,
     if (key == shards::Tetrahedron<4>::key)
       return ArborX::BoundingVolumeHierarchy(
           space, Geometries<Topology::TETRAHEDRON, MemorySpace>{local_sides});
-    else if (key == shards::Hexahedron<8>::key)
+    else
       return ArborX::BoundingVolumeHierarchy(
           space, Geometries<Topology::HEXAHEDRON, MemorySpace>{local_sides});
   }
 #endif
 }
 
-} // namespace ArborX::Details
+} // namespace ArborX::WallDistance
