@@ -10,8 +10,14 @@
  ****************************************************************************/
 
 #include "wall_distance.hpp"
+#include <Panzer_IntegrationRule.hpp>
 #include <Panzer_STK_ExodusReaderFactory.hpp>
+#include <Panzer_STK_WorksetFactory.hpp>
+#include <Panzer_WorksetContainer.hpp>
+#include <Panzer_WorksetNeeds.hpp>
 #include <mpi.h>
+
+constexpr int workset_size = 64;
 
 void print_mesh_info(stk::mesh::MetaData const &meta_data)
 {
@@ -35,10 +41,41 @@ void print_mesh_info(stk::mesh::MetaData const &meta_data)
               << ", rank=" << field->entity_rank() << std::endl;
 }
 
+auto build_worksets(Teuchos::RCP<panzer_stk::STK_Interface> const &mesh,
+                    std::string const &block_name,
+                    std::string const &basis_type, int const basis_order,
+                    int int_order)
+{
+  using Teuchos::rcp;
+
+  panzer::CellData cell_data(workset_size, mesh->getCellTopology(block_name));
+
+  panzer::WorksetNeeds needs;
+  auto basis = rcp(new panzer::PureBasis(basis_type, basis_order, cell_data));
+  auto ir = rcp(new panzer::IntegrationRule(int_order, cell_data));
+  needs.bases.push_back(basis);
+  needs.int_rules.push_back(ir);
+  needs.cellData = cell_data;
+
+  auto workset_factory = Teuchos::rcp(new panzer_stk::WorksetFactory(mesh));
+
+  panzer::WorksetContainer workset_container;
+  workset_container.setFactory(workset_factory);
+  workset_container.setNeeds(block_name, needs);
+
+  panzer::WorksetDescriptor workset_descriptor(block_name);
+  return workset_container.getWorksets(workset_descriptor);
+}
+
 int main(int argc, char *argv[])
 {
   MPI_Init(&argc, &argv);
   Kokkos::initialize(argc, argv);
+
+  std::string basis_type = "HGrad";
+  constexpr int basis_order = 1;
+  constexpr int int_order = 2;
+  constexpr int DIM = 2;
 
   {
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;
@@ -48,13 +85,21 @@ int main(int argc, char *argv[])
         factory.buildMesh(MPI_COMM_WORLD);
     print_mesh_info(*mesh->getMetaData());
 
-    constexpr int DIM = 2;
+    std::cout << "Mesh loaded" << std::endl;
+
+    auto worksets =
+        build_worksets(mesh, "eblock-0_0", basis_type, basis_order, int_order);
+    std::cout << "Worksets built" << std::endl;
+
     std::vector<std::string> wall_names = {"left_tri3_edge2",
                                            "right_tri3_edge2", "top_tri3_edge2",
                                            "bottom_tri3_edge2"};
 
     ExecutionSpace space;
-    auto index = ArborX::Details::buildIndex<DIM>(space, *mesh, wall_names);
+    auto index =
+        ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
+
+    std::cout << "Index built" << std::endl;
   }
 
   Kokkos::finalize();
