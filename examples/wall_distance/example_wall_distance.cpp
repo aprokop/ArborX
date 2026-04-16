@@ -100,6 +100,12 @@ int main(int argc, char *argv[])
         ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
 
     std::cout << "Index built" << std::endl;
+
+    panzer::CellData cell_data(64, mesh->getCellTopology("eblock-0_0"));
+    panzer::IntegrationRule ir(int_order, cell_data);
+    auto distances =
+        ArborX::WallDistance::distance<DIM>(space, index, *worksets, ir);
+    std::cout << "Distances computed" << std::endl;
   }
 
   Kokkos::finalize();
