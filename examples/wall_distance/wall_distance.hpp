@@ -13,12 +13,13 @@
 
 #include <Kokkos_DynRankView.hpp>
 
+#include <numeric> // exclusive_scan
+
 #include <Panzer_IntegrationRule.hpp>
 #include <Panzer_PureBasis.hpp>
 #include <Panzer_STK_Interface.hpp>
 #include <Panzer_Workset.hpp>
 #include <Panzer_Workset_Utilities.hpp> // getIntegrationRuleIndex
-
 namespace
 {
 enum class Topology
@@ -81,9 +82,68 @@ struct ArborX::AccessTraits<Geometries<T, MemorySpace>>
 
 namespace ArborX::WallDistance
 {
-// #define WALL_DISTANCE_USE_REPLICATION
+#define WALL_DISTANCE_USE_REPLICATION
 
 #ifdef WALL_DISTANCE_USE_REPLICATION
+namespace internal
+{
+template <typename PointerType>
+struct PointerDepth
+{
+  static constexpr int value = 0;
+};
+
+template <typename PointerType>
+struct PointerDepth<PointerType *>
+{
+  static constexpr int value = PointerDepth<PointerType>::value + 1;
+};
+
+template <typename PointerType, std::size_t N>
+struct PointerDepth<PointerType[N]>
+{
+  static constexpr int value = PointerDepth<PointerType>::value;
+};
+} // namespace internal
+
+template <typename View, typename ExecutionSpace, typename MemorySpace>
+inline Kokkos::View<typename View::traits::data_type, Kokkos::LayoutRight,
+                    MemorySpace>
+create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
+                                        MemorySpace const &memory_space,
+                                        View const &src)
+{
+  static_assert(Kokkos::is_execution_space<ExecutionSpace>::value);
+  static_assert(Kokkos::is_memory_space<MemorySpace>::value);
+
+  constexpr bool has_compatible_layout =
+      std::is_same_v<typename View::array_layout, Kokkos::LayoutRight>;
+  constexpr bool has_compatible_memory_space =
+      std::is_same_v<typename View::memory_space, MemorySpace>;
+
+  if constexpr (has_compatible_layout && has_compatible_memory_space)
+  {
+    return src;
+  }
+  else
+  {
+    constexpr int pointer_depth =
+        internal::PointerDepth<typename View::traits::data_type>::value;
+    return Kokkos::View<typename View::traits::data_type, Kokkos::LayoutRight,
+                        MemorySpace>(
+        Kokkos::view_alloc(
+            execution_space, memory_space, Kokkos::WithoutInitializing,
+            std::string(src.label()).append("_layout_right_mirror")),
+        src.extent(0), pointer_depth > 1 ? src.extent(1) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 2 ? src.extent(2) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 3 ? src.extent(3) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 4 ? src.extent(4) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 5 ? src.extent(5) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 6 ? src.extent(6) : KOKKOS_INVALID_INDEX,
+        pointer_depth > 7 ? src.extent(7) : KOKKOS_INVALID_INDEX);
+  }
+}
+
 template <typename LocalSides, typename GlobalSides>
 static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
                               GlobalSides &global_sides)
@@ -243,7 +303,8 @@ auto buildIndex(ExecutionSpace const &space,
           Geometries<Topology::TRIANGLE, MemorySpace>{global_sides});
     else
       return ArborX::DistributedTree(
-          comm, space, Geometries<Topology::QUADRILATERAL, MemorySpace>{sides});
+          comm, space,
+          Geometries<Topology::QUADRILATERAL, MemorySpace>{global_sides});
   }
   else
   {
