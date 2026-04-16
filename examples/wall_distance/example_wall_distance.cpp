@@ -75,10 +75,10 @@ int main(int argc, char *argv[])
   std::string basis_type = "HGrad";
   constexpr int basis_order = 1;
   constexpr int int_order = 2;
-  constexpr int DIM = 2;
 
   {
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+    ExecutionSpace space;
 
     panzer_stk::STK_ExodusReaderFactory factory("mesh.exo");
     Teuchos::RCP<panzer_stk::STK_Interface> mesh =
@@ -92,14 +92,26 @@ int main(int argc, char *argv[])
                                            "right_tri3_edge2", "top_tri3_edge2",
                                            "bottom_tri3_edge2"};
 
-    ExecutionSpace space;
-    auto index =
-        ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
-
     panzer::CellData cell_data(64, mesh->getCellTopology("eblock-0_0"));
     panzer::IntegrationRule ir(int_order, cell_data);
-    auto distances =
-        ArborX::WallDistance::distance<DIM>(space, index, *worksets, ir);
+
+    if (mesh->getDimension() == 2)
+    {
+      constexpr int DIM = 2;
+
+      auto index =
+          ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
+      auto distances =
+          ArborX::WallDistance::distance(space, index, *worksets, ir);
+    }
+    else
+    {
+      constexpr int DIM = 3;
+      auto index =
+          ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
+      auto distances =
+          ArborX::WallDistance::distance(space, index, *worksets, ir);
+    }
   }
 
   Kokkos::finalize();

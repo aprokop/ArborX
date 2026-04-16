@@ -277,7 +277,7 @@ auto buildIndex(ExecutionSpace const &space,
 #endif
 }
 
-template <int DIM, typename ExecutionSpace, typename Index>
+template <typename ExecutionSpace, typename Index>
 auto distance(ExecutionSpace const &space, Index const &index,
               std::vector<panzer::Workset> const &worksets,
               panzer::IntegrationRule const &int_rule)
@@ -288,6 +288,8 @@ auto distance(ExecutionSpace const &space, Index const &index,
 
   using MemorySpace = typename Index::memory_space;
 
+  constexpr int DIM =
+      ArborX::GeometryTraits::dimension_v<typename Index::value_type>;
   using Scalar = double;
   using Point = ArborX::Point<DIM, Scalar>;
 
