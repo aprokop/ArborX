@@ -278,7 +278,7 @@ auto buildIndex(ExecutionSpace const &space,
 #endif
 }
 
-template <int DIM, typename ExecutionSpace, typename Index>
+template <typename ExecutionSpace, typename Index>
 Kokkos::View<
     ArborX::GeometryTraits::coordinate_type_t<typename Index::value_type> ***,
     typename Index::memory_space>
@@ -292,6 +292,8 @@ distance(ExecutionSpace const &space, Index const &index,
 
   using MemorySpace = typename Index::memory_space;
 
+  constexpr int DIM =
+      ArborX::GeometryTraits::dimension_v<typename Index::value_type>;
   using Scalar = double;
   using Point = ArborX::Point<DIM, Scalar>;
 
