@@ -13,7 +13,11 @@
 
 #include <Kokkos_DynRankView.hpp>
 
+#include <Panzer_IntegrationRule.hpp>
+#include <Panzer_PureBasis.hpp>
 #include <Panzer_STK_Interface.hpp>
+#include <Panzer_Workset.hpp>
+#include <Panzer_Workset_Utilities.hpp> // getIntegrationRuleIndex
 
 namespace
 {
@@ -271,6 +275,110 @@ auto buildIndex(ExecutionSpace const &space,
           space, Geometries<Topology::HEXAHEDRON, MemorySpace>{local_sides});
   }
 #endif
+}
+
+template <int DIM, typename ExecutionSpace, typename Index>
+auto distance(ExecutionSpace const &space, Index const &index,
+              std::vector<panzer::Workset> const &worksets,
+              panzer::IntegrationRule const &int_rule)
+{
+  std::string prefix = "ArborX::WallDistance::distance";
+  Kokkos::Profiling::ScopedRegion guard(prefix);
+  prefix += "::";
+
+  using MemorySpace = typename Index::memory_space;
+
+  using Scalar = double;
+  using Point = ArborX::Point<DIM, Scalar>;
+
+  PHX::MDField<Scalar, panzer::Cell, panzer::Point> blah_distances(
+      prefix + "workset_distances", int_rule.dl_scalar);
+
+  auto const num_worksets = worksets.size();
+  auto const max_num_cells_per_workset = blah_distances.extent(0);
+  int const num_int_points_per_cell = blah_distances.extent(1);
+
+  auto int_rule_index =
+      panzer::getIntegrationRuleIndex(int_rule.order(), worksets[0]);
+
+  size_t num_queries = 0;
+  std::vector<size_t> workset_sizes(num_worksets);
+  for (size_t workset_id = 0; workset_id < num_worksets; ++workset_id)
+  {
+    auto const &workset = worksets[workset_id];
+    auto const num_cells = workset.num_cells;
+    workset_sizes[workset_id] = num_cells;
+    num_queries += num_cells * num_int_points_per_cell;
+  }
+
+  Kokkos::View<Point *, MemorySpace> points(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing, prefix + "points"),
+      num_queries);
+  for (size_t workset_id = 0, queries_offset = 0; workset_id < num_worksets;
+       ++workset_id)
+  {
+    auto const &workset = worksets[workset_id];
+    auto const num_cells = workset.num_cells;
+
+    if (num_cells == 0)
+      continue;
+
+    auto const &ip_coords = workset.int_rules[int_rule_index]->ip_coordinates;
+
+    Kokkos::parallel_for(
+        prefix + "create_queries", Kokkos::RangePolicy(space, 0, num_cells),
+        KOKKOS_LAMBDA(int cell) {
+          auto offset = queries_offset + cell * num_int_points_per_cell;
+          Point p;
+          for (int int_point = 0; int_point < num_int_points_per_cell;
+               ++int_point)
+          {
+            for (int d = 0; d < DIM; ++d)
+              p[d] = ip_coords(cell, int_point, d);
+            points(offset++) = p;
+          }
+        });
+    queries_offset += num_cells * num_int_points_per_cell;
+  }
+  auto queries = ArborX::Experimental::make_nearest(points, 1);
+
+  Kokkos::View<int *, MemorySpace> offset(prefix + "offset", 0);
+  Kokkos::View<Scalar *, MemorySpace> distances(prefix + "distances", 0);
+  index.query(space, queries,
+#ifdef WALL_DISTANCE_USE_REPLICATION
+              WallDistanceCallback{},
+#else
+              ArborX::Experimental::declare_callback_constrained(
+                  WallDistanceCallback{}),
+#endif
+              distances, offset);
+
+  space.fence();
+
+  Kokkos::View<Scalar ***, MemorySpace> workset_distances(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         "ArborX::WallDistance::workset_distances"),
+      num_worksets, max_num_cells_per_workset, num_int_points_per_cell);
+
+  for (size_t workset_id = 0, workset_offset = 0; workset_id < num_worksets;
+       ++workset_id)
+  {
+    auto const num_cells = workset_sizes[workset_id];
+    if (num_cells == 0)
+      continue;
+
+    Kokkos::parallel_for(
+        "ArborX::WallDistance::reshape_distances",
+        Kokkos::RangePolicy(space, 0, num_cells), KOKKOS_LAMBDA(int cell) {
+          auto offset = workset_offset + cell * num_int_points_per_cell;
+          for (int int_point = 0; int_point < num_int_points_per_cell;
+               ++int_point)
+            workset_distances(workset_id, cell, int_point) =
+                distances(offset++);
+        });
+    workset_offset += num_cells * num_int_points_per_cell;
+  }
+  return workset_distances;
 }
 
 } // namespace ArborX::WallDistance
