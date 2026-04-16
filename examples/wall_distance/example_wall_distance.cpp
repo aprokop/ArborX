@@ -85,11 +85,8 @@ int main(int argc, char *argv[])
         factory.buildMesh(MPI_COMM_WORLD);
     print_mesh_info(*mesh->getMetaData());
 
-    std::cout << "Mesh loaded" << std::endl;
-
     auto worksets =
         build_worksets(mesh, "eblock-0_0", basis_type, basis_order, int_order);
-    std::cout << "Worksets built" << std::endl;
 
     std::vector<std::string> wall_names = {"left_tri3_edge2",
                                            "right_tri3_edge2", "top_tri3_edge2",
@@ -99,13 +96,10 @@ int main(int argc, char *argv[])
     auto index =
         ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
 
-    std::cout << "Index built" << std::endl;
-
     panzer::CellData cell_data(64, mesh->getCellTopology("eblock-0_0"));
     panzer::IntegrationRule ir(int_order, cell_data);
     auto distances =
         ArborX::WallDistance::distance<DIM>(space, index, *worksets, ir);
-    std::cout << "Distances computed" << std::endl;
   }
 
   Kokkos::finalize();
