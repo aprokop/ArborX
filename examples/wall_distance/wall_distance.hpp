@@ -30,19 +30,19 @@ enum class Topology
   HEXAHEDRON
 };
 
-template <Topology T, typename MemorySpace>
+template <Topology T, typename Sides>
 struct Geometries
 {
-  Kokkos::DynRankView<double, MemorySpace> _sides;
+  Sides _sides;
 };
 
 } // namespace
 
-template <Topology T, typename MemorySpace>
-struct ArborX::AccessTraits<Geometries<T, MemorySpace>>
+template <Topology T, typename Sides>
+struct ArborX::AccessTraits<Geometries<T, Sides>>
 {
-  using Self = Geometries<T, MemorySpace>;
-  using memory_space = MemorySpace;
+  using Self = Geometries<T, Sides>;
+  using memory_space = typename Sides::memory_space;
 
   KOKKOS_FUNCTION static auto size(Self const &self)
   {
@@ -144,17 +144,18 @@ create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
   }
 }
 
-template <typename LocalSides, typename GlobalSides>
-static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
+template <typename ExecutionSpace, typename LocalSides, typename GlobalSides>
+static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
+                              LocalSides const &local_sides,
                               GlobalSides &global_sides)
 {
   Kokkos::Profiling::ScopedRegion guard(
       "ArborX::WallDistance::gatherGlobalSides");
 
-  using ExecutionSpace = typename GlobalSides::execution_space;
   using MemorySpace = typename GlobalSides::memory_space;
 
-  ExecutionSpace space;
+  int num_local = local_sides.extent(0);
+  auto const data_size = local_sides.extent(1) * local_sides.extent(2);
 
   int comm_size;
   MPI_Comm_size(comm, &comm_size);
@@ -167,10 +168,11 @@ static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
   MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
                 static_cast<void *>(global_counts.data()), 1, MPI_INT, comm);
 
-  std::vector<int> offsets(comm_size, 0);
+  std::vector<int> offsets(comm_size + 1, 0);
   std::exclusive_scan(global_counts.begin(), global_counts.end(),
                       offsets.begin(), 0);
-  int num_global_sides = global_counts.back() + offsets.back();
+  offsets[comm_size] = offsets[comm_size - 1] + global_counts.back();
+  int num_global_sides = offsets.back();
 
   Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing), global_sides,
                  num_global_sides, local_sides.extent(1),
@@ -182,22 +184,18 @@ static void gatherGlobalSides(MPI_Comm comm, LocalSides const &local_sides,
       Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, local_sides);
   auto global_sides_host = create_layout_right_mirror_view_no_init(
       space, Kokkos::HostSpace{}, global_sides);
-  Kokkos::parallel_for(
-      "ArborX::WallDistance::gatherGlobalSides::copy_local",
-      Kokkos::RangePolicy(space, 0, local_sides.extent(0)),
-      KOKKOS_LAMBDA(int i) {
-        for (int j = 0; j < (int)local_sides.extent(1); ++j)
-          for (int k = 0; k < (int)local_sides.extent(2); ++k)
-            global_sides_host(offsets[comm_rank] + i, j, k) =
-                local_sides_host(i, j, k);
-      });
-  space.fence();
+  Kokkos::fence();
 
-  auto const side_data_size = local_sides.extent(1) * local_sides.extent(2);
+  auto const offset_rank = offsets[comm_rank];
+  for (int i = 0; i < num_local; ++i)
+    for (int j = 0; j < (int)local_sides.extent(1); ++j)
+      for (int k = 0; k < (int)local_sides.extent(2); ++k)
+        global_sides_host(offset_rank + i, j, k) = local_sides_host(i, j, k);
+
   for (int rank = 0; rank < comm_size; ++rank)
   {
-    offsets[rank] *= side_data_size;
-    global_counts[rank] *= side_data_size;
+    offsets[rank] *= data_size;
+    global_counts[rank] *= data_size;
   }
 
   // FIXME: hardcoded to MPI_DOUBLE
@@ -282,8 +280,7 @@ auto buildIndex(ExecutionSpace const &space,
                                sideset_sides.end());
   }
 
-  using Scalar =
-      ArborX::GeometryTraits::coordinate_type_t<typename Index::value_type>;
+  using Scalar = double;
 
   Kokkos::DynRankView<Scalar, MemorySpace> local_sides;
   mesh.getElementVertices(local_side_entities, local_sides);
@@ -294,47 +291,47 @@ auto buildIndex(ExecutionSpace const &space,
   Kokkos::View<Scalar ***, MemorySpace> global_sides(prefix + "global_sides", 0,
                                                      0, 0);
   MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
-  gatherGlobalSides(comm, local_sides, global_sides);
+  gatherGlobalSides(comm, space, local_sides, global_sides);
+
+  using Sides = decltype(global_sides);
   if constexpr (DIM == 2)
   {
     if (key == shards::Triangle<3>::key)
       return ArborX::DistributedTree(
-          comm, space,
-          Geometries<Topology::TRIANGLE, MemorySpace>{global_sides});
+          comm, space, Geometries<Topology::TRIANGLE, Sides>{global_sides});
     else
       return ArborX::DistributedTree(
           comm, space,
-          Geometries<Topology::QUADRILATERAL, MemorySpace>{global_sides});
+          Geometries<Topology::QUADRILATERAL, Sides>{global_sides});
   }
   else
   {
     if (key == shards::Tetrahedron<4>::key)
       return ArborX::DistributedTree(
-          comm, space,
-          Geometries<Topology::TETRAHEDRON, MemorySpace>{global_sides});
+          comm, space, Geometries<Topology::TETRAHEDRON, Sides>{global_sides});
     else
       return ArborX::DistributedTree(
-          comm, space,
-          Geometries<Topology::HEXAHEDRON, MemorySpace>{global_sides});
+          comm, space, Geometries<Topology::HEXAHEDRON, Sides>{global_sides});
   }
 #else
+  using Sides = decltype(local_sides);
   if constexpr (DIM == 2)
   {
     if (key == shards::Triangle<3>::key)
       return ArborX::BoundingVolumeHierarchy(
-          space, Geometries<Topology::TRIANGLE, MemorySpace>{local_sides});
+          space, Geometries<Topology::TRIANGLE, Sides>{local_sides});
     else
       return ArborX::BoundingVolumeHierarchy(
-          space, Geometries<Topology::QUADRILATERAL, MemorySpace>{local_sides});
+          space, Geometries<Topology::QUADRILATERAL, Sides>{local_sides});
   }
   else
   {
     if (key == shards::Tetrahedron<4>::key)
       return ArborX::BoundingVolumeHierarchy(
-          space, Geometries<Topology::TETRAHEDRON, MemorySpace>{local_sides});
+          space, Geometries<Topology::TETRAHEDRON, Sides>{local_sides});
     else
       return ArborX::BoundingVolumeHierarchy(
-          space, Geometries<Topology::HEXAHEDRON, MemorySpace>{local_sides});
+          space, Geometries<Topology::HEXAHEDRON, Sides>{local_sides});
   }
 #endif
 }
@@ -355,7 +352,8 @@ distance(ExecutionSpace const &space, Index const &index,
 
   constexpr int DIM =
       ArborX::GeometryTraits::dimension_v<typename Index::value_type>;
-  using Scalar = double;
+  using Scalar =
+      ArborX::GeometryTraits::coordinate_type_t<typename Index::value_type>;
   using Point = ArborX::Point<DIM, Scalar>;
 
   PHX::MDField<Scalar, panzer::Cell, panzer::Point> blah_distances(
