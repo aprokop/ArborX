@@ -108,7 +108,7 @@ struct PointerDepth<PointerType[N]>
 
 template <typename View, typename ExecutionSpace, typename MemorySpace>
 inline Kokkos::View<typename View::traits::data_type, Kokkos::LayoutRight,
-                    MemorySpace>
+                    typename ExecutionSpace::memory_space>
 create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
                                         MemorySpace const &memory_space,
                                         View const &src)
@@ -117,7 +117,10 @@ create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
   static_assert(Kokkos::is_memory_space<MemorySpace>::value);
 
   constexpr bool has_compatible_layout =
-      std::is_same_v<typename View::array_layout, Kokkos::LayoutRight>;
+      (std::is_same_v<typename View::array_layout, Kokkos::LayoutRight> ||
+       (View::rank == 1 &&
+        (std::is_same_v<typename View::array_layout, Kokkos::LayoutLeft> ||
+         std::is_same_v<typename View::array_layout, Kokkos::LayoutRight>)));
   constexpr bool has_compatible_memory_space =
       std::is_same_v<typename View::memory_space, MemorySpace>;
 
@@ -142,6 +145,16 @@ create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
         pointer_depth > 6 ? src.extent(6) : KOKKOS_INVALID_INDEX,
         pointer_depth > 7 ? src.extent(7) : KOKKOS_INVALID_INDEX);
   }
+}
+
+template <typename View>
+inline auto create_layout_right_mirror_view_no_init(View const &src)
+{
+  typename View::traits::host_mirror_space::execution_space exec;
+  auto mirror_view = create_layout_right_mirror_view_no_init(
+      exec, typename View::traits::host_mirror_space{}, src);
+  exec.fence();
+  return mirror_view;
 }
 
 template <typename ExecutionSpace, typename LocalSides, typename GlobalSides>
@@ -182,9 +195,9 @@ static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
   // Have to be careful with layouts
   auto local_sides_host =
       Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, local_sides);
-  auto global_sides_host = create_layout_right_mirror_view_no_init(
-      space, Kokkos::HostSpace{}, global_sides);
   Kokkos::fence();
+  auto global_sides_host =
+      create_layout_right_mirror_view_no_init(global_sides);
 
   auto const offset_rank = offsets[comm_rank];
   for (int i = 0; i < num_local; ++i)
