@@ -9,7 +9,8 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
-#include "wall_distance.hpp"
+#include "ArborX_WallDistance.hpp"
+
 #include <Panzer_IntegrationRule.hpp>
 #include <Panzer_STK_ExodusReaderFactory.hpp>
 #include <Panzer_STK_WorksetFactory.hpp>
@@ -72,12 +73,18 @@ int main(int argc, char *argv[])
   MPI_Init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 
+  using Coordinate = double;
+
   std::string basis_type = "HGrad";
   constexpr int basis_order = 1;
   constexpr int int_order = 2;
 
+  constexpr bool ReplicateSides = true;
+
   {
     using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+    using MemorySpace = typename ExecutionSpace::memory_space;
+
     ExecutionSpace space;
 
     panzer_stk::STK_ExodusReaderFactory factory("mesh.exo");
@@ -95,22 +102,34 @@ int main(int argc, char *argv[])
     panzer::CellData cell_data(64, mesh->getCellTopology("eblock-0_0"));
     panzer::IntegrationRule ir(int_order, cell_data);
 
+    // FIXME: there must be a better way to get max_num_cells_per_workset and
+    // num_int_points_per_cell without creating an MDField just for that
+    PHX::MDField<Coordinate, panzer::Cell, panzer::Point> blah_distances(
+        "Example::blah", ir.dl_scalar);
+    auto const num_worksets = (*worksets).size();
+    auto const max_num_cells_per_workset = blah_distances.extent(0);
+    int const num_int_points_per_cell = blah_distances.extent(1);
+
+    Kokkos::View<Coordinate ***, MemorySpace> workset_distances(
+        Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                           "Example::workset_distances"),
+        num_worksets, max_num_cells_per_workset, num_int_points_per_cell);
+
     if (mesh->getDimension() == 2)
     {
       constexpr int DIM = 2;
-
-      auto index =
-          ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
-      auto distances =
-          ArborX::WallDistance::distance(space, index, *worksets, ir);
+      ArborX::Experimental::WallDistance<MemorySpace, DIM, Coordinate,
+                                         ReplicateSides>
+          wall_distance(space, *mesh, wall_names);
+      wall_distance.distance(space, *worksets, ir, workset_distances);
     }
     else
     {
       constexpr int DIM = 3;
-      auto index =
-          ArborX::WallDistance::buildIndex<DIM>(space, *mesh, wall_names);
-      auto distances =
-          ArborX::WallDistance::distance(space, index, *worksets, ir);
+      ArborX::Experimental::WallDistance<MemorySpace, DIM, Coordinate,
+                                         ReplicateSides>
+          wall_distance(space, *mesh, wall_names);
+      wall_distance.distance(space, *worksets, ir, workset_distances);
     }
   }
 
