@@ -59,9 +59,9 @@ public:
                 panzer::IntegrationRule const &ir,
                 WorksetDistances &workset_distances);
 
-  // template <typename ExecutionSpace, typename Points, typename Distances>
-  // void distance(ExecutionSpace const &space, Points const &points,
-  // Distances &distances);
+  template <typename ExecutionSpace, typename Points, typename Distances>
+  void distance(ExecutionSpace const &space, Points const &points,
+                Distances &distances);
 };
 
 template <typename MemorySpace, int DIM, typename Coordinate,
@@ -146,12 +146,34 @@ WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::WallDistance(
 
 template <typename MemorySpace, int DIM, typename Coordinate,
           bool ReplicateSides>
+template <typename ExecutionSpace, typename Points, typename Distances>
+void WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::distance(
+    ExecutionSpace const &space, Points const &points, Distances &distances)
+{
+  std::string prefix = "ArborX::WallDistance::distance";
+  Kokkos::Profiling::ScopedRegion guard(prefix);
+  prefix += "::";
+
+  auto queries = ArborX::Experimental::make_nearest(points, 1);
+
+  Kokkos::View<int *, MemorySpace> offset(prefix + "offset", 0);
+  if constexpr (ReplicateSides)
+    _index.query(space, queries, Details::WallDistanceCallback{}, distances,
+                 offset);
+  else
+    _index.query(space, queries,
+                 declare_callback_constrained(Details::WallDistanceCallback{}),
+                 distances, offset);
+}
+
+template <typename MemorySpace, int DIM, typename Coordinate,
+          bool ReplicateSides>
 template <typename ExecutionSpace, typename WorksetDistances>
 void WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::distance(
     ExecutionSpace const &space, std::vector<panzer::Workset> const &worksets,
     panzer::IntegrationRule const &ir, WorksetDistances &workset_distances)
 {
-  std::string prefix = "ArborX::WallDistance::distance";
+  std::string prefix = "ArborX::WallDistance::workset_distance";
   Kokkos::Profiling::ScopedRegion guard(prefix);
   prefix += "::";
 
@@ -207,19 +229,12 @@ void WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::distance(
         });
     queries_offset += num_cells * num_int_points_per_cell;
   }
-  auto queries = ArborX::Experimental::make_nearest(points, 1);
 
-  Kokkos::View<int *, MemorySpace> offset(prefix + "offset", 0);
-  Kokkos::View<Coordinate *, MemorySpace> distances(prefix + "distances", 0);
-  if constexpr (ReplicateSides)
-    _index.query(space, queries, Details::WallDistanceCallback{}, distances,
-                 offset);
-  else
-    _index.query(space, queries,
-                 declare_callback_constrained(Details::WallDistanceCallback{}),
-                 distances, offset);
-
-  space.fence();
+  Kokkos::View<Coordinate *, MemorySpace> distances(
+      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                         prefix + "distances"),
+      0);
+  distance(space, points, distances);
 
   for (int workset_id = 0, workset_offset = 0; workset_id < num_worksets;
        ++workset_id)
