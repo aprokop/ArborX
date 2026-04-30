@@ -26,33 +26,26 @@
 
 namespace ArborX::Details
 {
-enum class Topology
-{
-  TRIANGLE,
-  QUADRILATERAL,
-  TETRAHEDRON,
-  HEXAHEDRON
-};
 
-template <Topology T, typename Sides>
+template <int DIM, typename Sides>
 struct Geometries
 {
+  static_assert(DIM == 2 || DIM == 3);
+  int _topology_key;
   Sides _sides;
 };
 
 } // namespace ArborX::Details
 
-template <ArborX::Details::Topology T, typename Sides>
-struct ArborX::AccessTraits<ArborX::Details::Geometries<T, Sides>>
+template <int DIM, typename Sides>
+struct ArborX::AccessTraits<ArborX::Details::Geometries<DIM, Sides>>
 {
-  using Self = ArborX::Details::Geometries<T, Sides>;
+  using Self = ArborX::Details::Geometries<DIM, Sides>;
   using memory_space = typename Sides::memory_space;
 
   KOKKOS_FUNCTION static auto size(Self const &self)
   {
-    using namespace ArborX::Details;
-
-    if constexpr (T == Topology::HEXAHEDRON)
+    if (self._topology_key == shards::Hexahedron<8>::key)
       return 2 * self._sides.extent(0);
     else
       return self._sides.extent(0);
@@ -63,20 +56,23 @@ struct ArborX::AccessTraits<ArborX::Details::Geometries<T, Sides>>
     using namespace ArborX::Details;
 
     auto const &sides = self._sides;
-    if constexpr (T == Topology::TRIANGLE || T == Topology::QUADRILATERAL)
+    if constexpr (DIM == 2)
     {
       return ArborX::Experimental::Segment{{sides(i, 0, 0), sides(i, 0, 1)},
                                            {sides(i, 1, 0), sides(i, 1, 1)}};
     }
-    else if constexpr (T == Topology::TETRAHEDRON)
+    else
     {
-      return ArborX::Triangle{{sides(i, 0, 0), sides(i, 0, 1), sides(i, 0, 2)},
-                              {sides(i, 1, 0), sides(i, 1, 1), sides(i, 1, 2)},
-                              {sides(i, 2, 0), sides(i, 2, 1), sides(i, 2, 2)}};
-    }
-    else if constexpr (T == Topology::HEXAHEDRON)
-    {
-      auto const &sides = self._sides;
+      if (self._topology_key == shards::Tetrahedron<4>::key)
+      {
+        return ArborX::Triangle{
+            {sides(i, 0, 0), sides(i, 0, 1), sides(i, 0, 2)},
+            {sides(i, 1, 0), sides(i, 1, 1), sides(i, 1, 2)},
+            {sides(i, 2, 0), sides(i, 2, 1), sides(i, 2, 2)}};
+      }
+
+      KOKKOS_ASSERT(self._topology_key == shards::Hexahedron<8>::key);
+
       // Split quad side into two triangles
       bool const odd = (i % 2);
       int j = (odd ? 1 : 2);
@@ -91,39 +87,13 @@ struct ArborX::AccessTraits<ArborX::Details::Geometries<T, Sides>>
 
 namespace ArborX::Details
 {
-#define WALL_DISTANCE_USE_REPLICATION
 
-#ifdef WALL_DISTANCE_USE_REPLICATION
-namespace internal
+template <typename View>
+inline auto create_layout_right_mirror_view_no_init(View const &src)
 {
-template <typename PointerType>
-struct PointerDepth
-{
-  static constexpr int value = 0;
-};
+  static_assert(View::rank == 3);
 
-template <typename PointerType>
-struct PointerDepth<PointerType *>
-{
-  static constexpr int value = PointerDepth<PointerType>::value + 1;
-};
-
-template <typename PointerType, std::size_t N>
-struct PointerDepth<PointerType[N]>
-{
-  static constexpr int value = PointerDepth<PointerType>::value;
-};
-} // namespace internal
-
-template <typename View, typename ExecutionSpace, typename MemorySpace>
-inline Kokkos::View<typename View::traits::data_type, Kokkos::LayoutRight,
-                    typename ExecutionSpace::memory_space>
-create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
-                                        MemorySpace const &memory_space,
-                                        View const &src)
-{
-  static_assert(Kokkos::is_execution_space<ExecutionSpace>::value);
-  static_assert(Kokkos::is_memory_space<MemorySpace>::value);
+  using HostMemorySpace = typename View::traits::host_mirror_space;
 
   constexpr bool has_compatible_layout =
       (std::is_same_v<typename View::array_layout, Kokkos::LayoutRight> ||
@@ -131,7 +101,7 @@ create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
         (std::is_same_v<typename View::array_layout, Kokkos::LayoutLeft> ||
          std::is_same_v<typename View::array_layout, Kokkos::LayoutRight>)));
   constexpr bool has_compatible_memory_space =
-      std::is_same_v<typename View::memory_space, MemorySpace>;
+      std::is_same_v<typename View::memory_space, HostMemorySpace>;
 
   if constexpr (has_compatible_layout && has_compatible_memory_space)
   {
@@ -139,31 +109,16 @@ create_layout_right_mirror_view_no_init(ExecutionSpace const &execution_space,
   }
   else
   {
-    constexpr int pointer_depth =
-        internal::PointerDepth<typename View::traits::data_type>::value;
-    return Kokkos::View<typename View::traits::data_type, Kokkos::LayoutRight,
-                        MemorySpace>(
+    typename HostMemorySpace::execution_space space;
+    auto mirror_view = Kokkos::View<typename View::traits::data_type,
+                                    Kokkos::LayoutRight, HostMemorySpace>(
         Kokkos::view_alloc(
-            execution_space, memory_space, Kokkos::WithoutInitializing,
+            space, HostMemorySpace{}, Kokkos::WithoutInitializing,
             std::string(src.label()).append("_layout_right_mirror")),
-        src.extent(0), pointer_depth > 1 ? src.extent(1) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 2 ? src.extent(2) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 3 ? src.extent(3) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 4 ? src.extent(4) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 5 ? src.extent(5) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 6 ? src.extent(6) : KOKKOS_INVALID_INDEX,
-        pointer_depth > 7 ? src.extent(7) : KOKKOS_INVALID_INDEX);
+        src.extent(0), src.extent(1), src.extent(2));
+    space.fence();
+    return mirror_view;
   }
-}
-
-template <typename View>
-inline auto create_layout_right_mirror_view_no_init(View const &src)
-{
-  typename View::traits::host_mirror_space::execution_space exec;
-  auto mirror_view = create_layout_right_mirror_view_no_init(
-      exec, typename View::traits::host_mirror_space{}, src);
-  exec.fence();
-  return mirror_view;
 }
 
 template <typename LocalSides>
@@ -259,7 +214,6 @@ static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
   Kokkos::deep_copy(space, global_sides, tmp_view);
   space.fence();
 }
-#endif
 
 // Check that the topologies in all element blocks are the same, and are ones
 // from the list and return the key

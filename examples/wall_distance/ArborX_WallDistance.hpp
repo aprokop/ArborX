@@ -87,60 +87,15 @@ WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::WallDistance(
     MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
     Details::gatherGlobalSides(comm, space, local_sides, global_sides);
 
-    using Sides = decltype(global_sides);
-    using enum Details::Topology;
-    if constexpr (DIM == 2)
-    {
-      if (key == shards::Triangle<3>::key)
-        _index = ArborX::DistributedTree(
-            comm, space,
-            Details::Geometries<Details::Topology::TRIANGLE, Sides>{
-                global_sides});
-      else
-        _index = ArborX::DistributedTree(
-            comm, space,
-            Details::Geometries<Details::Topology::QUADRILATERAL, Sides>{
-                global_sides});
-    }
-    else
-    {
-      if (key == shards::Tetrahedron<4>::key)
-        _index = ArborX::DistributedTree(
-            comm, space,
-            Details::Geometries<Details::Topology::TETRAHEDRON, Sides>{
-                global_sides});
-      else
-        _index = ArborX::DistributedTree(
-            comm, space,
-            Details::Geometries<Details::Topology::HEXAHEDRON, Sides>{
-                global_sides});
-    }
+    _index = DistributedTree(
+        comm, space,
+        Details::Geometries<DIM, decltype(global_sides)>{key, global_sides});
   }
   else
   {
-    using Sides = decltype(local_sides);
-    if constexpr (DIM == 2)
-    {
-      if (key == shards::Triangle<3>::key)
-        _index = ArborX::BoundingVolumeHierarchy(
-            space, Details::Geometries<Details::Topology::TRIANGLE, Sides>{
-                       local_sides});
-      else
-        _index = ArborX::BoundingVolumeHierarchy(
-            space, Details::Geometries<Details::Topology::QUADRILATERAL, Sides>{
-                       local_sides});
-    }
-    else
-    {
-      if (key == shards::Tetrahedron<4>::key)
-        _index = ArborX::BoundingVolumeHierarchy(
-            space, Details::Geometries<Details::Topology::TETRAHEDRON, Sides>{
-                       local_sides});
-      else
-        _index = ArborX::BoundingVolumeHierarchy(
-            space, Details::Geometries<Details::Topology::HEXAHEDRON, Sides>{
-                       local_sides});
-    }
+    _index = BoundingVolumeHierarchy(
+        space,
+        Details::Geometries<DIM, decltype(local_sides)>{key, local_sides});
   }
 }
 
