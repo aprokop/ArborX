@@ -10,15 +10,79 @@
  ****************************************************************************/
 
 #include "ArborX_WallDistance.hpp"
+#include <ArborX_Version.hpp>
+
+#include <boost/program_options.hpp>
 
 #include <Panzer_IntegrationRule.hpp>
 #include <Panzer_STK_ExodusReaderFactory.hpp>
 #include <Panzer_STK_WorksetFactory.hpp>
 #include <Panzer_WorksetContainer.hpp>
 #include <Panzer_WorksetNeeds.hpp>
+#include <Teuchos_RCPStdSharedPtrConversions.hpp>
 #include <mpi.h>
 
 constexpr int workset_size = 64;
+
+class STKMeshFactory : public panzer_stk::STK_ExodusReaderFactory
+{
+public:
+  STKMeshFactory(std::string const &file_name)
+      : panzer_stk::STK_ExodusReaderFactory(file_name)
+  {}
+
+  virtual Teuchos::RCP<panzer_stk::STK_Interface>
+  buildUncommitedMesh(stk::ParallelMachine parallelMach) const override
+  {
+    PANZER_FUNC_TIME_MONITOR("STKMeshFactory::buildUncomittedMesh()");
+
+    using Teuchos::rcp;
+
+    // read in meta data
+    stk::io::StkMeshIoBroker *meshData =
+        new stk::io::StkMeshIoBroker(parallelMach);
+    meshData->use_simple_fields();
+    meshData->property_add(Ioss::Property("LOWER_CASE_VARIABLE_NAMES", false));
+
+    // add in "FAMILY_TREE" entity for doing refinement
+    std::vector<std::string> entity_rank_names = stk::mesh::entity_rank_names();
+    entity_rank_names.push_back("FAMILY_TREE");
+    meshData->set_rank_name_vector(entity_rank_names);
+
+    // NOTE: the only difference with Panzer's STK_ExodusReaderFactory is that
+    // we add the DECOMPOSITION_METHOD property
+    meshData->property_add(Ioss::Property("DECOMPOSITION_METHOD", "RIB"));
+
+    meshData->add_mesh_database(fileName_,
+                                panzer_stk::fileTypeToIOSSType(fileType_),
+                                stk::io::READ_MESH);
+
+    meshData->create_input_mesh();
+    auto metaData = rcp(meshData->meta_data_ptr());
+
+    auto mesh = rcp(new panzer_stk::STK_Interface(metaData));
+    mesh->initializeFromMetaData();
+    mesh->instantiateBulkData(parallelMach);
+    meshData->set_bulk_data(Teuchos::get_shared_ptr(mesh->getBulkData()));
+
+    // read in other transient fields, these will be useful later when
+    // trying to read other fields for use in solve
+    meshData->add_all_mesh_fields_as_input_fields();
+
+    // store mesh data pointer for later use in initializing
+    // bulk data
+    mesh->getMetaData()->declare_attribute_with_delete(meshData);
+
+    // build element blocks
+    registerElementBlocks(*mesh, *meshData);
+    registerSidesets(*mesh);
+    registerNodesets(*mesh);
+
+    buildMetaData(parallelMach, *mesh);
+
+    return mesh;
+  }
+};
 
 void print_mesh_info(stk::mesh::MetaData const &meta_data)
 {
@@ -73,33 +137,89 @@ int main(int argc, char *argv[])
   MPI_Init(&argc, &argv);
   Kokkos::initialize(argc, argv);
 
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = typename ExecutionSpace::memory_space;
+
+  std::cout << "ArborX version    : " << ArborX::version() << std::endl;
+  std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << std::endl;
+  std::cout << "Kokkos version    : " << ArborX::Details::KokkosExt::version()
+            << std::endl;
+
   using Coordinate = double;
 
-  std::string basis_type = "HGrad";
-  constexpr int basis_order = 1;
-  constexpr int int_order = 2;
+  namespace bpo = boost::program_options;
+
+  std::string basis_type;
+  std::string filename;
+  int basis_order;
+  int int_order;
+  std::string block_name;
+  std::vector<std::string> wall_names;
+  bool verbose;
+  bool inspect;
+
+  bpo::options_description desc("Allowed options");
+  // clang-format off
+  desc.add_options()
+    ("help", "help message" )
+    ("basis-order", bpo::value<int>(&basis_order)->default_value(1), "basis order")
+    ("basis-type", bpo::value<std::string>(&basis_type)->default_value("HGrad"), "basis type")
+    ("block-name", bpo::value<std::string>(&block_name)->default_value("eblock-0_0"), "block name")
+    ("filename", bpo::value<std::string>(&filename)->default_value("mesh.exo"), "mesh filename")
+    ("int-order", bpo::value<int>(&int_order)->default_value(2), "integration order")
+    ( "inspect", bpo::bool_switch(&inspect), "inspect mesh file")
+    ( "verbose", bpo::bool_switch(&verbose), "verbose")
+    ("wall-names", bpo::value<std::vector<std::string>>(&wall_names)->multitoken(), "names of walls")
+    ;
+  // clang-format on
+  bpo::variables_map vm;
+  bpo::store(bpo::command_line_parser(argc, argv).options(desc).run(), vm);
+  bpo::notify(vm);
+
+  if (vm.count("help") > 0)
+  {
+    std::cout << desc << '\n';
+    return 1;
+  }
+
+  auto vec2string = [](std::vector<std::string> const &names) {
+    if (names.empty())
+      return std::string("(none)");
+    std::string result = names[0];
+    for (size_t i = 1; i < names.size(); ++i)
+      result += ", " + names[i];
+    return result;
+  };
+
+  // Print out the runtime parameters
+  printf("basis order       : %d\n", basis_order);
+  printf("basis type        : %s\n", basis_type.c_str());
+  printf("block name        : %s\n", block_name.c_str());
+  printf("filename          : %s\n", filename.c_str());
+  printf("inspect           : %s\n", (inspect ? "true" : "false"));
+  printf("integration order : %d\n", int_order);
+  printf("verbose           : %s\n", (verbose ? "true" : "false"));
+  printf("wall names        : %s\n", vec2string(wall_names).c_str());
 
   constexpr bool ReplicateSides = true;
 
   {
-    using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-    using MemorySpace = typename ExecutionSpace::memory_space;
-
     ExecutionSpace space;
 
-    panzer_stk::STK_ExodusReaderFactory factory("mesh.exo");
+    STKMeshFactory factory(filename);
     Teuchos::RCP<panzer_stk::STK_Interface> mesh =
         factory.buildMesh(MPI_COMM_WORLD);
-    print_mesh_info(*mesh->getMetaData());
+
+    if (inspect)
+    {
+      print_mesh_info(*mesh->getMetaData());
+      return 0;
+    }
 
     auto worksets =
-        build_worksets(mesh, "eblock-0_0", basis_type, basis_order, int_order);
+        build_worksets(mesh, block_name, basis_type, basis_order, int_order);
 
-    std::vector<std::string> wall_names = {"left_tri3_edge2",
-                                           "right_tri3_edge2", "top_tri3_edge2",
-                                           "bottom_tri3_edge2"};
-
-    panzer::CellData cell_data(64, mesh->getCellTopology("eblock-0_0"));
+    panzer::CellData cell_data(64, mesh->getCellTopology(block_name));
     panzer::IntegrationRule ir(int_order, cell_data);
 
     // FIXME: there must be a better way to get max_num_cells_per_workset and
