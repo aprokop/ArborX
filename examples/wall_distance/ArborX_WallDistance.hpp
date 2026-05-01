@@ -81,22 +81,23 @@ WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::WallDistance(
 
   auto key = Details::get_topology_key(mesh);
 
+  MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
   if constexpr (ReplicateSides)
-  {
-    _index = BoundingVolumeHierarchy(
-        space,
-        Details::Geometries<DIM, decltype(local_sides)>{key, local_sides});
-  }
-  else
   {
     Kokkos::View<Coordinate ***, MemorySpace> global_sides(
         prefix + "global_sides", 0, 0, 0);
-    MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
     Details::gatherGlobalSides(comm, space, local_sides, global_sides);
 
+    space.fence();
+    _index = BoundingVolumeHierarchy(
+        space,
+        Details::Geometries<DIM, decltype(global_sides)>{key, global_sides});
+  }
+  else
+  {
     _index = DistributedTree(
         comm, space,
-        Details::Geometries<DIM, decltype(global_sides)>{key, global_sides});
+        Details::Geometries<DIM, decltype(local_sides)>{key, local_sides});
   }
 }
 

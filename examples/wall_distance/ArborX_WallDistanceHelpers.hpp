@@ -161,17 +161,32 @@ static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
 
   using MemorySpace = typename GlobalSides::memory_space;
 
-  int num_local = local_sides.extent(0);
-  auto const data_size = local_sides.extent(1) * local_sides.extent(2);
-
   int comm_size;
   MPI_Comm_size(comm, &comm_size);
   int comm_rank;
   MPI_Comm_rank(comm, &comm_rank);
 
+  int num_local = local_sides.extent(0);
+  int extent1 = local_sides.extent(1);
+  int extent2 = local_sides.extent(2);
+
+  // Some ranks may contain no data, which will result in data_size being 0. As
+  // we need all ranks the same knowledge of data_size, we inform all ranks on
+  // the correct value.
+  for (int i = 1; i <= 2; ++i)
+  {
+    auto &extent = (i == 1) ? extent1 : extent2;
+
+    int max_extent = 0;
+    MPI_Allreduce(&extent, &max_extent, 1, MPI_INT, MPI_MAX, comm);
+    KOKKOS_ASSERT(extent == 0 || extent == max_extent);
+    extent = max_extent;
+  }
+  auto data_size = extent1 * extent2;
+
   // Compose gather communication pattern.
   std::vector<int> global_counts(comm_size, 0);
-  global_counts[comm_rank] = local_sides.size();
+  global_counts[comm_rank] = num_local;
   MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
                 static_cast<void *>(global_counts.data()), 1, MPI_INT, comm);
 
@@ -182,8 +197,7 @@ static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
   int num_global_sides = offsets.back();
 
   Kokkos::resize(Kokkos::view_alloc(Kokkos::WithoutInitializing), global_sides,
-                 num_global_sides, local_sides.extent(1),
-                 local_sides.extent(2));
+                 num_global_sides, extent1, extent2);
 
   // Create host-side mirror for sides
   // Have to be careful with layouts
@@ -195,8 +209,8 @@ static void gatherGlobalSides(MPI_Comm comm, ExecutionSpace const &space,
 
   auto const offset_rank = offsets[comm_rank];
   for (int i = 0; i < num_local; ++i)
-    for (int j = 0; j < (int)local_sides.extent(1); ++j)
-      for (int k = 0; k < (int)local_sides.extent(2); ++k)
+    for (int j = 0; j < extent1; ++j)
+      for (int k = 0; k < extent2; ++k)
         global_sides_host(offset_rank + i, j, k) = local_sides_host(i, j, k);
 
   for (int rank = 0; rank < comm_size; ++rank)
