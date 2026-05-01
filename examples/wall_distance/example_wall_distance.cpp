@@ -84,28 +84,6 @@ public:
   }
 };
 
-void print_mesh_info(stk::mesh::MetaData const &meta_data)
-{
-  stk::mesh::BulkData const &bulk_data = meta_data.mesh_bulk_data();
-  for (stk::mesh::Part const *part : meta_data.get_parts())
-    if (part->id() >= 0)
-    {
-      auto topology = part->topology();
-      auto rank = part->primary_entity_rank();
-      std::cout << "Part: name=" << part->name()
-                << (rank == meta_data.side_rank() ? " (side)" : "")
-                << ", id=" << part->id() << ", rank=" << rank
-                << ", topology=" << topology.name()
-                << ", n=" << stk::mesh::count_entities(bulk_data, rank, *part)
-                << std::endl;
-    }
-
-  stk::mesh::FieldVector const &fields = meta_data.get_fields();
-  for (stk::mesh::FieldBase *field : fields)
-    std::cout << "Field: name=" << field->name()
-              << ", rank=" << field->entity_rank() << std::endl;
-}
-
 auto build_worksets(Teuchos::RCP<panzer_stk::STK_Interface> const &mesh,
                     std::string const &block_name,
                     std::string const &basis_type, int const basis_order,
@@ -179,7 +157,6 @@ int main(int argc, char *argv[])
   std::string block_name;
   std::vector<std::string> wall_names;
   bool verbose;
-  bool inspect;
 
   bpo::options_description desc("Allowed options");
   // clang-format off
@@ -190,7 +167,6 @@ int main(int argc, char *argv[])
     ("block-name", bpo::value<std::string>(&block_name)->default_value("eblock-0_0"), "block name")
     ("filename", bpo::value<std::string>(&filename)->default_value("mesh.exo"), "mesh filename")
     ("int-order", bpo::value<int>(&int_order)->default_value(2), "integration order")
-    ( "inspect", bpo::bool_switch(&inspect), "inspect mesh file")
     ( "verbose", bpo::bool_switch(&verbose), "verbose")
     ("wall-names", bpo::value<std::vector<std::string>>(&wall_names)->multitoken(), "names of walls")
     ;
@@ -223,7 +199,6 @@ int main(int argc, char *argv[])
     printf("basis type        : %s\n", basis_type.c_str());
     printf("block name        : %s\n", block_name.c_str());
     printf("filename          : %s\n", filename.c_str());
-    printf("inspect           : %s\n", (inspect ? "true" : "false"));
     printf("integration order : %d\n", int_order);
     printf("verbose           : %s\n", (verbose ? "true" : "false"));
     printf("wall names        : %s\n", vec2string(wall_names).c_str());
@@ -234,16 +209,11 @@ int main(int argc, char *argv[])
   {
     ExecutionSpace space;
 
-    STKMeshFactory factory(filename);
+    panzer_stk::STK_ExodusReaderFactory factory(filename);
+    // STKMeshFactory factory(filename);
+
     Teuchos::RCP<panzer_stk::STK_Interface> mesh =
         factory.buildMesh(MPI_COMM_WORLD);
-
-    if (inspect)
-    {
-      if (comm_rank == 0)
-        print_mesh_info(*mesh->getMetaData());
-      return 0;
-    }
 
     auto worksets =
         build_worksets(mesh, block_name, basis_type, basis_order, int_order);
