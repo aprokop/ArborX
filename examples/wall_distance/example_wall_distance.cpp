@@ -24,66 +24,6 @@
 
 constexpr int workset_size = 64;
 
-class STKMeshFactory : public panzer_stk::STK_ExodusReaderFactory
-{
-public:
-  STKMeshFactory(std::string const &file_name)
-      : panzer_stk::STK_ExodusReaderFactory(file_name)
-  {}
-
-  virtual Teuchos::RCP<panzer_stk::STK_Interface>
-  buildUncommitedMesh(stk::ParallelMachine parallelMach) const override
-  {
-    PANZER_FUNC_TIME_MONITOR("STKMeshFactory::buildUncomittedMesh()");
-
-    using Teuchos::rcp;
-
-    // read in meta data
-    stk::io::StkMeshIoBroker *meshData =
-        new stk::io::StkMeshIoBroker(parallelMach);
-    meshData->use_simple_fields();
-    meshData->property_add(Ioss::Property("LOWER_CASE_VARIABLE_NAMES", false));
-
-    // add in "FAMILY_TREE" entity for doing refinement
-    std::vector<std::string> entity_rank_names = stk::mesh::entity_rank_names();
-    entity_rank_names.push_back("FAMILY_TREE");
-    meshData->set_rank_name_vector(entity_rank_names);
-
-    // NOTE: the only difference with Panzer's STK_ExodusReaderFactory is that
-    // we add the DECOMPOSITION_METHOD property
-    meshData->property_add(Ioss::Property("DECOMPOSITION_METHOD", "RIB"));
-
-    meshData->add_mesh_database(fileName_,
-                                panzer_stk::fileTypeToIOSSType(fileType_),
-                                stk::io::READ_MESH);
-
-    meshData->create_input_mesh();
-    auto metaData = rcp(meshData->meta_data_ptr());
-
-    auto mesh = rcp(new panzer_stk::STK_Interface(metaData));
-    mesh->initializeFromMetaData();
-    mesh->instantiateBulkData(parallelMach);
-    meshData->set_bulk_data(Teuchos::get_shared_ptr(mesh->getBulkData()));
-
-    // read in other transient fields, these will be useful later when
-    // trying to read other fields for use in solve
-    meshData->add_all_mesh_fields_as_input_fields();
-
-    // store mesh data pointer for later use in initializing
-    // bulk data
-    mesh->getMetaData()->declare_attribute_with_delete(meshData);
-
-    // build element blocks
-    registerElementBlocks(*mesh, *meshData);
-    registerSidesets(*mesh);
-    registerNodesets(*mesh);
-
-    buildMetaData(parallelMach, *mesh);
-
-    return mesh;
-  }
-};
-
 auto build_worksets(Teuchos::RCP<panzer_stk::STK_Interface> const &mesh,
                     std::string const &block_name,
                     std::string const &basis_type, int const basis_order,
@@ -167,7 +107,7 @@ int main(int argc, char *argv[])
     ("block-name", bpo::value<std::string>(&block_name)->default_value("eblock-0_0"), "block name")
     ("filename", bpo::value<std::string>(&filename)->default_value("mesh.exo"), "mesh filename")
     ("int-order", bpo::value<int>(&int_order)->default_value(2), "integration order")
-    ( "verbose", bpo::bool_switch(&verbose), "verbose")
+    ("verbose", bpo::bool_switch(&verbose), "verbose")
     ("wall-names", bpo::value<std::vector<std::string>>(&wall_names)->multitoken(), "names of walls")
     ;
   // clang-format on
@@ -181,6 +121,14 @@ int main(int argc, char *argv[])
       std::cout << desc << '\n';
     MPI_Finalize();
     return 0;
+  }
+
+  if (wall_names.empty())
+  {
+    if (comm_rank == 0)
+      std::cerr << "At least one wall name must be provided\n";
+    MPI_Finalize();
+    return 1;
   }
 
   auto vec2string = [](std::vector<std::string> const &names) {
@@ -207,11 +155,11 @@ int main(int argc, char *argv[])
   constexpr bool ReplicateSides = true;
 
   {
-    ExecutionSpace space;
-
+    // Note: when running in parallel, use
+    //   export IOSS_PROPERTIES="DECOMPOSITION_METHOD=RIB"
+    // for automatic mesh decomposition. This requires NetCDF-C compiled
+    // with parallel support.
     panzer_stk::STK_ExodusReaderFactory factory(filename);
-    // STKMeshFactory factory(filename);
-
     Teuchos::RCP<panzer_stk::STK_Interface> mesh =
         factory.buildMesh(MPI_COMM_WORLD);
 
@@ -228,6 +176,8 @@ int main(int argc, char *argv[])
     auto const num_worksets = (*worksets).size();
     auto const max_num_cells_per_workset = blah_distances.extent(0);
     int const num_int_points_per_cell = blah_distances.extent(1);
+
+    ExecutionSpace space;
 
     Kokkos::View<Coordinate ***, MemorySpace> workset_distances(
         Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
