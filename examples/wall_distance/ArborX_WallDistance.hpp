@@ -39,8 +39,9 @@ class WallDistance
   using Geometry = std::conditional_t<DIM == 2, Segment<DIM, Coordinate>,
                                       Triangle<DIM, Coordinate>>;
   using Index =
-      std::conditional_t<ReplicateSides, DistributedTree<MemorySpace, Geometry>,
-                         BoundingVolumeHierarchy<MemorySpace, Geometry>>;
+      std::conditional_t<ReplicateSides,
+                         BoundingVolumeHierarchy<MemorySpace, Geometry>,
+                         DistributedTree<MemorySpace, Geometry>>;
 
   Index _index;
 
@@ -82,6 +83,12 @@ WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::WallDistance(
 
   if constexpr (ReplicateSides)
   {
+    _index = BoundingVolumeHierarchy(
+        space,
+        Details::Geometries<DIM, decltype(local_sides)>{key, local_sides});
+  }
+  else
+  {
     Kokkos::View<Coordinate ***, MemorySpace> global_sides(
         prefix + "global_sides", 0, 0, 0);
     MPI_Comm comm = Teuchos::getRawMpiComm(*mesh.getComm());
@@ -90,12 +97,6 @@ WallDistance<MemorySpace, DIM, Coordinate, ReplicateSides>::WallDistance(
     _index = DistributedTree(
         comm, space,
         Details::Geometries<DIM, decltype(global_sides)>{key, global_sides});
-  }
-  else
-  {
-    _index = BoundingVolumeHierarchy(
-        space,
-        Details::Geometries<DIM, decltype(local_sides)>{key, local_sides});
   }
 }
 
