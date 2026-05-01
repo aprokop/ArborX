@@ -135,19 +135,42 @@ auto build_worksets(Teuchos::RCP<panzer_stk::STK_Interface> const &mesh,
 int main(int argc, char *argv[])
 {
   MPI_Init(&argc, &argv);
-  Kokkos::initialize(argc, argv);
 
   using ExecutionSpace = Kokkos::DefaultExecutionSpace;
   using MemorySpace = typename ExecutionSpace::memory_space;
 
-  std::cout << "ArborX version    : " << ArborX::version() << std::endl;
-  std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << std::endl;
-  std::cout << "Kokkos version    : " << ArborX::Details::KokkosExt::version()
-            << std::endl;
+  MPI_Comm const comm = MPI_COMM_WORLD;
+  int comm_rank;
+  MPI_Comm_rank(comm, &comm_rank);
+  int comm_size;
+  MPI_Comm_size(comm, &comm_size);
+  if (comm_rank == 0)
+  {
+    std::cout << "ArborX version    : " << ArborX::version() << std::endl;
+    std::cout << "ArborX hash       : " << ArborX::gitCommitHash() << std::endl;
+    std::cout << "Kokkos version    : " << ArborX::Details::KokkosExt::version()
+              << std::endl;
+    std::cout << "#MPI ranks        : " << comm_size << std::endl;
+  }
 
   using Coordinate = double;
 
   namespace bpo = boost::program_options;
+
+  // Strip "--help" and "--kokkos-help" from the flags passed to Kokkos if we
+  // are not on MPI rank 0 to prevent Kokkos from printing the help message
+  // multiply.
+  auto *help_it = std::find_if(argv, argv + argc, [](std::string const &x) {
+    return x == "--help" || x == "--kokkos-help";
+  });
+  bool is_help_present = (help_it != argv + argc);
+  if (is_help_present && comm_rank != 0)
+  {
+    std::swap(*help_it, *(argv + argc - 1));
+    --argc;
+  }
+
+  Kokkos::ScopeGuard guard(argc, argv);
 
   std::string basis_type;
   std::string filename;
@@ -176,10 +199,12 @@ int main(int argc, char *argv[])
   bpo::store(bpo::command_line_parser(argc, argv).options(desc).run(), vm);
   bpo::notify(vm);
 
-  if (vm.count("help") > 0)
+  if (is_help_present)
   {
-    std::cout << desc << '\n';
-    return 1;
+    if (comm_rank == 0)
+      std::cout << desc << '\n';
+    MPI_Finalize();
+    return 0;
   }
 
   auto vec2string = [](std::vector<std::string> const &names) {
@@ -192,14 +217,17 @@ int main(int argc, char *argv[])
   };
 
   // Print out the runtime parameters
-  printf("basis order       : %d\n", basis_order);
-  printf("basis type        : %s\n", basis_type.c_str());
-  printf("block name        : %s\n", block_name.c_str());
-  printf("filename          : %s\n", filename.c_str());
-  printf("inspect           : %s\n", (inspect ? "true" : "false"));
-  printf("integration order : %d\n", int_order);
-  printf("verbose           : %s\n", (verbose ? "true" : "false"));
-  printf("wall names        : %s\n", vec2string(wall_names).c_str());
+  if (comm_rank == 0)
+  {
+    printf("basis order       : %d\n", basis_order);
+    printf("basis type        : %s\n", basis_type.c_str());
+    printf("block name        : %s\n", block_name.c_str());
+    printf("filename          : %s\n", filename.c_str());
+    printf("inspect           : %s\n", (inspect ? "true" : "false"));
+    printf("integration order : %d\n", int_order);
+    printf("verbose           : %s\n", (verbose ? "true" : "false"));
+    printf("wall names        : %s\n", vec2string(wall_names).c_str());
+  }
 
   constexpr bool ReplicateSides = true;
 
@@ -212,7 +240,8 @@ int main(int argc, char *argv[])
 
     if (inspect)
     {
-      print_mesh_info(*mesh->getMetaData());
+      if (comm_rank == 0)
+        print_mesh_info(*mesh->getMetaData());
       return 0;
     }
 
@@ -253,7 +282,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  Kokkos::finalize();
   MPI_Finalize();
 
   return 0;
