@@ -128,23 +128,29 @@ struct expand<KDOPTag, KDOPTag, KDOP1, KDOP2>
 template <typename KDOP, typename Point>
 struct expand<KDOPTag, PointTag, KDOP, Point>
 {
-  KOKKOS_FUNCTION static void apply(KDOP &kdop, Point const &point)
+  template <size_t D>
+  KOKKOS_FUNCTION static void kernel(KDOP &kdop, Point const &point)
   {
     using Kokkos::max;
     using Kokkos::min;
 
-    constexpr int DIM = GeometryTraits::dimension_v<Point>;
-    constexpr int n_directions = KDOP::n_directions;
-    for (int i = 0; i < n_directions; ++i)
-    {
-      auto const &dir = kdop.directions()[i];
-      auto proj_i = point[0] * dir[0];
-      for (int d = 1; d < DIM; ++d)
-        proj_i += point[d] * dir[d];
+    auto proj = KDOP::template project<D, Point>(point);
+    kdop._min_values[D] = min(kdop._min_values[D], proj);
+    kdop._max_values[D] = max(kdop._max_values[D], proj);
+  }
 
-      kdop._min_values[i] = min(kdop._min_values[i], proj_i);
-      kdop._max_values[i] = max(kdop._max_values[i], proj_i);
-    }
+  template <size_t... I>
+  KOKKOS_FUNCTION static void apply_kernel(KDOP &kdop, Point const &point,
+                                           std::index_sequence<I...>)
+  {
+    auto unfold = {(kernel<I>(kdop, point), 0)...};
+    std::ignore = unfold;
+  }
+
+  KOKKOS_FUNCTION static void apply(KDOP &kdop, Point const &point)
+  {
+    constexpr int n_directions = KDOP::n_directions;
+    apply_kernel(kdop, point, std::make_index_sequence<n_directions>());
   }
 };
 

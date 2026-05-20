@@ -328,22 +328,23 @@ struct intersects<KDOPTag, BoxTag, KDOP, Box>
 template <typename Point, typename KDOP>
 struct intersects<PointTag, KDOPTag, Point, KDOP>
 {
+  template <size_t D>
+  KOKKOS_FUNCTION static bool kernel(KDOP const &kdop, Point const &point)
+  {
+    auto proj = KDOP::template project<D, Point>(point);
+    return (proj >= kdop._min_values[D] && proj <= kdop._max_values[D]);
+  }
+  template <size_t... I>
+  KOKKOS_FUNCTION static bool apply_kernel(KDOP const &kdop, Point const &point,
+                                           std::index_sequence<I...>)
+  {
+    return (kernel<I>(kdop, point) && ...);
+  }
   KOKKOS_FUNCTION static constexpr bool apply(Point const &point,
                                               KDOP const &kdop)
   {
-    constexpr int DIM = GeometryTraits::dimension_v<Point>;
     constexpr int n_directions = KDOP::n_directions;
-    for (int i = 0; i < n_directions; ++i)
-    {
-      auto const &dir = kdop.directions()[i];
-      auto proj_i = point[0] * dir[0];
-      for (int d = 1; d < DIM; ++d)
-        proj_i += point[d] * dir[d];
-
-      if (proj_i < kdop._min_values[i] || proj_i > kdop._max_values[i])
-        return false;
-    }
-    return true;
+    return apply_kernel(kdop, point, std::make_index_sequence<n_directions>());
   }
 };
 
