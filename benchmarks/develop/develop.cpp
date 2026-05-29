@@ -1,49 +1,37 @@
-/****************************************************************************
- * Copyright (c) 2025, ArborX authors                                       *
- * All rights reserved.                                                     *
- *                                                                          *
- * This file is part of the ArborX library. ArborX is                       *
- * distributed under a BSD 3-clause license. For the licensing terms see    *
- * the LICENSE file in the top-level directory.                             *
- *                                                                          *
- * SPDX-License-Identifier: BSD-3-Clause                                    *
- ****************************************************************************/
+#include <vector>
 
-#include <Kokkos_Core.hpp>
-
-#include <benchmark/benchmark.h>
-
-void BM_benchmark(benchmark::State &state)
-{
-  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-
-  ExecutionSpace exec_space;
-
-  auto const n = state.range(0);
-
-  Kokkos::View<int *> view(Kokkos::view_alloc(exec_space, "Benchmark::view",
-                                              Kokkos::WithoutInitializing),
-                           n);
-
-  exec_space.fence();
-  for (auto _ : state)
-  {
-    // This code gets timed
-    Kokkos::parallel_for(
-        "Benchmark::iota", Kokkos::RangePolicy(exec_space, 0, n),
-        KOKKOS_LAMBDA(int i) { view(i) = i; });
-    exec_space.fence();
-  }
-}
-
+#include <mpi.h>
 int main(int argc, char *argv[])
 {
-  Kokkos::ScopeGuard guard(argc, argv);
-  benchmark::Initialize(&argc, argv);
-
-  BENCHMARK(BM_benchmark)->RangeMultiplier(10)->Range(100, 10000);
-
-  benchmark::RunSpecifiedBenchmarks();
-
+  MPI_Init(&argc, &argv);
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int comm_rank;
+  MPI_Comm_rank(comm, &comm_rank);
+  int outdegree;
+  std::vector<int> destinations;
+  std::vector<int> weights;
+  // clang-format off
+  switch(comm_rank) {
+    case 0: outdegree = 2; destinations = {9, 8}; weights = {1, 1}; break;
+    case 1: outdegree = 2; destinations = {8, 7}; weights = {1, 1}; break;
+    case 2: outdegree = 2; destinations = {7, 6}; weights = {1, 1}; break;
+    case 3: outdegree = 2; destinations = {6, 5}; weights = {1, 1}; break;
+    case 4: outdegree = 2; destinations = {5, 4}; weights = {1, 1}; break;
+    case 5: outdegree = 2; destinations = {4, 3}; weights = {1, 1}; break;
+    case 6: outdegree = 2; destinations = {3, 2}; weights = {1, 1}; break;
+    case 7: outdegree = 2; destinations = {2, 1}; weights = {1, 1}; break;
+    case 8: outdegree = 2; destinations = {1, 0}; weights = {1, 1}; break;
+    case 9: outdegree = 1; destinations = {0}; weights = {1}; break;
+  }
+  // clang-format on
+  constexpr int reorder = 0;
+  for (int it = 0; it < 10; ++it)
+  {
+    MPI_Comm graph_comm;
+    MPI_Dist_graph_create(comm, 1, &comm_rank, &outdegree, destinations.data(),
+                          weights.data(), MPI_INFO_NULL, reorder, &graph_comm);
+    MPI_Comm_free(&graph_comm);
+  }
+  MPI_Finalize();
   return EXIT_SUCCESS;
 }
