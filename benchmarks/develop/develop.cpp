@@ -24,13 +24,27 @@ int main(int argc, char *argv[])
     case 9: outdegree = 1; destinations = {0}; weights = {1}; break;
   }
   // clang-format on
+
+  // #define DUPLICATE_COMM
+
   constexpr int reorder = 0;
   for (int it = 0; it < 10; ++it)
   {
+#ifdef DUPLICATE_COMM
+    MPI_Comm comm_dup;
+    MPI_Comm_dup(comm, &comm_dup);
+    auto comm_to_use = comm_dup;
+#else
+    auto comm_to_use = comm;
+#endif
     MPI_Comm graph_comm;
-    MPI_Dist_graph_create(comm, 1, &comm_rank, &outdegree, destinations.data(),
-                          weights.data(), MPI_INFO_NULL, reorder, &graph_comm);
+    MPI_Dist_graph_create(comm_to_use, 1, &comm_rank, &outdegree,
+                          destinations.data(), weights.data(), MPI_INFO_NULL,
+                          reorder, &graph_comm);
     MPI_Comm_free(&graph_comm);
+#ifdef DUPLICATE_COMM
+    MPI_Comm_free(&comm_dup);
+#endif
   }
   MPI_Finalize();
   return EXIT_SUCCESS;
