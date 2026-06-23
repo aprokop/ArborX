@@ -32,7 +32,7 @@ KOKKOS_FUNCTION void translateAndScale(Point const &in, Point &out,
   {
     auto const a = ref.minCorner()[d];
     auto const b = ref.maxCorner()[d];
-    out[d] = (a != b ? (in[d] - a) / (b - a) : 0);
+    out[d] = (in[d] - a) * b;
   }
 }
 } // namespace ArborX::Details

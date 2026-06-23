@@ -76,10 +76,23 @@ projectOntoSpaceFillingCurve(ExecutionSpace const &space, Values const &values,
   static_assert(std::is_same_v<typename LinearOrdering::value_type,
                                decltype(curve(scene_bounding_box, values(0)))>);
 
+  Box scaling_box = scene_bounding_box;
+  if constexpr (std::is_same_v<SpaceFillingCurve, Experimental::Morton32> ||
+                std::is_same_v<SpaceFillingCurve, Experimental::Morton64>)
+  {
+    constexpr int DIM = GeometryTraits::dimension_v<Box>;
+    for (int d = 0; d < DIM; ++d)
+    {
+      auto t = (scene_bounding_box.maxCorner()[d] -
+                scene_bounding_box.minCorner()[d]);
+      scaling_box.maxCorner()[d] = (t != 0 ? 1 / t : 0);
+    }
+  }
+
   Kokkos::parallel_for(
       "ArborX::SpaceFillingCurve::project_onto_space_filling_curve",
       Kokkos::RangePolicy(space, 0, values.size()), KOKKOS_LAMBDA(int i) {
-        linear_ordering_indices(i) = curve(scene_bounding_box, values(i));
+        linear_ordering_indices(i) = curve(scaling_box, values(i));
       });
 }
 
