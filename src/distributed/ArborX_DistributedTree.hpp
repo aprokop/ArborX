@@ -155,6 +155,13 @@ KOKKOS_DEDUCTION_GUIDE DistributedTree(MPI_Comm, ExecutionSpace, Values)
     -> DistributedTree<typename Details::AccessValues<Values>::memory_space,
                        typename Details::AccessValues<Values>::value_type>;
 
+template <typename ExecutionSpace, typename Values, typename IndexableGetter>
+KOKKOS_DEDUCTION_GUIDE DistributedTree(MPI_Comm, ExecutionSpace, Values,
+                                       IndexableGetter)
+    -> DistributedTree<typename Details::AccessValues<Values>::memory_space,
+                       typename Details::AccessValues<Values>::value_type,
+                       IndexableGetter>;
+
 template <typename BottomTree>
 template <typename ExecutionSpace, typename... Args>
 DistributedTreeBase<BottomTree>::DistributedTreeBase(
