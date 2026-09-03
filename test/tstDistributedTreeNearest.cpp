@@ -130,7 +130,7 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(hello_world_nearest, DeviceType,
             {0, 2}));
   }
 
-  // Now do the same with callbacks
+  // Now do the same with constrained callbacks
   if (comm_rank < comm_size - 1)
   {
     std::vector<int> offsets = {0, 3};
@@ -155,6 +155,29 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(hello_world_nearest, DeviceType,
         ArborX::Experimental::declare_callback_constrained(
             DistributedNearestCallback{comm_rank}),
         make_compressed_storage(offsets, values));
+  }
+
+  // Now do the same with unconstrained callbacks
+  if (comm_rank < comm_size - 1)
+  {
+    std::vector<int> offsets = {0, 3};
+    std::vector<PairIndexRank> values = {{comm_size - 1 - comm_rank, 0},
+                                         {comm_size - 2 - comm_rank, n - 1},
+                                         {comm_size - 1 - comm_rank, 1}};
+
+    ARBORX_TEST_QUERY_TREE_CALLBACK(ExecutionSpace{}, tree, nearest_queries,
+                                    DistributedNearestCallback{comm_rank},
+                                    make_compressed_storage(offsets, values));
+  }
+  else
+  {
+    std::vector<int> offsets = {0, 2};
+    std::vector<PairIndexRank> values = {{comm_size - 1 - comm_rank, 0},
+                                         {comm_size - 1 - comm_rank, 1}};
+
+    ARBORX_TEST_QUERY_TREE_CALLBACK(ExecutionSpace{}, tree, nearest_queries,
+                                    DistributedNearestCallback{comm_rank},
+                                    make_compressed_storage(offsets, values));
   }
 }
 
@@ -590,4 +613,100 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(distributed_ray, DeviceType, ARBORX_DEVICE_TYPES)
                              ArborXTest::toView<MemorySpace>(rays), 1),
                          make_reference_solution<PairIndexRank>(
                              {{0, comm_rank}, {0, 0}}, {0, 1, 2}));
+}
+
+struct DistributedNearestCallbackWithVariableOutput
+{
+  int rank;
+
+  template <typename Predicate, typename Value, typename OutputFunctor>
+  KOKKOS_FUNCTION void operator()(Predicate const &, Value const &value,
+                                  OutputFunctor const &out) const
+  {
+    auto const i = value.index;
+    if (i % 4 == 3)
+    {
+      out({rank, i});
+      out({rank, i});
+      out({rank, i});
+    }
+    else if (i % 4 == 1)
+    {
+      out({rank, i});
+      out({rank, i});
+    }
+    else
+    {
+      // do nothing
+    }
+  }
+};
+
+BOOST_AUTO_TEST_CASE_TEMPLATE(nearest_with_variable_callback_output, DeviceType,
+                              ARBORX_DEVICE_TYPES)
+{
+  using ExecutionSpace = typename DeviceType::execution_space;
+
+  using Point = ArborX::Point<3, double>;
+
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int comm_rank;
+  MPI_Comm_rank(comm, &comm_rank);
+  int comm_size;
+  MPI_Comm_size(comm, &comm_size);
+
+  int const n = 4;
+  std::vector<Point> points(n);
+  // [  rank 0       [  rank 1       [  rank 2       [  rank 3       [
+  // x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---x---
+  // ^   ^   ^   ^
+  // 0   1   2   3   ^   ^   ^   ^
+  //                 0   1   2   3   ^   ^   ^   ^
+  //                                 0   1   2   3   ^   ^   ^   ^
+  //                                                 0   1   2   3
+  for (int i = 0; i < n; ++i)
+    points[i] = {{(double)i / n + comm_rank, 0., 0.}};
+
+  auto tree = makeDistributedTree<DeviceType>(comm, ExecutionSpace{}, points);
+
+  // 0---0---0---0---1---1---1---1---2---2---2---2---3---3---3---3---
+  // |               |               |               |               |
+  // |               |               |           x   x   x           |
+  // |               |           x   x   x        <--0-->            |
+  // |           x   x   x        <--1-->            |               |
+  // x   x        <--2-->            |               |               |
+  // 3-->            |               |               |               |
+  // |               |               |               |               |
+  Kokkos::View<ArborX::Nearest<Point> *, DeviceType> nearest_queries(
+      "Testing::nearest_queries", 1);
+  auto nearest_queries_host = Kokkos::create_mirror_view(nearest_queries);
+  nearest_queries_host(0) =
+      ArborX::nearest<Point>({{comm_size - 1.f - comm_rank, 0.f, 0.f}},
+                             comm_rank < comm_size - 1 ? 3 : 2);
+  deep_copy(nearest_queries, nearest_queries_host);
+
+  if (comm_rank < comm_size - 1)
+  {
+    std::vector<int> offsets = {0, 5};
+    std::vector<PairIndexRank> values = {{comm_size - 2 - comm_rank, 3},
+                                         {comm_size - 2 - comm_rank, 3},
+                                         {comm_size - 2 - comm_rank, 3},
+                                         {comm_size - 1 - comm_rank, 1},
+                                         {comm_size - 1 - comm_rank, 1}};
+
+    ARBORX_TEST_QUERY_TREE_CALLBACK(
+        ExecutionSpace{}, tree, nearest_queries,
+        DistributedNearestCallbackWithVariableOutput{comm_rank},
+        make_compressed_storage(offsets, values));
+  }
+  else
+  {
+    std::vector<int> offsets = {0, 2};
+    std::vector<PairIndexRank> values = {{0, 1}, {0, 1}};
+
+    ARBORX_TEST_QUERY_TREE_CALLBACK(
+        ExecutionSpace{}, tree, nearest_queries,
+        DistributedNearestCallbackWithVariableOutput{comm_rank},
+        make_compressed_storage(offsets, values));
+  }
 }
