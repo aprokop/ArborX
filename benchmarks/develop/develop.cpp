@@ -1,49 +1,36 @@
-/****************************************************************************
- * Copyright (c) 2025, ArborX authors                                       *
- * All rights reserved.                                                     *
- *                                                                          *
- * This file is part of the ArborX library. ArborX is                       *
- * distributed under a BSD 3-clause license. For the licensing terms see    *
- * the LICENSE file in the top-level directory.                             *
- *                                                                          *
- * SPDX-License-Identifier: BSD-3-Clause                                    *
- ****************************************************************************/
-
 #include <Kokkos_Core.hpp>
-
-#include <benchmark/benchmark.h>
-
-void BM_benchmark(benchmark::State &state)
-{
-  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
-
-  ExecutionSpace exec_space;
-
-  auto const n = state.range(0);
-
-  Kokkos::View<int *> view(Kokkos::view_alloc(exec_space, "Benchmark::view",
-                                              Kokkos::WithoutInitializing),
-                           n);
-
-  exec_space.fence();
-  for (auto _ : state)
-  {
-    // This code gets timed
-    Kokkos::parallel_for(
-        "Benchmark::iota", Kokkos::RangePolicy(exec_space, 0, n),
-        KOKKOS_LAMBDA(int i) { view(i) = i; });
-    exec_space.fence();
-  }
-}
+#include <Kokkos_Random.hpp>
 
 int main(int argc, char *argv[])
 {
   Kokkos::ScopeGuard guard(argc, argv);
-  benchmark::Initialize(&argc, argv);
 
-  BENCHMARK(BM_benchmark)->RangeMultiplier(10)->Range(100, 10000);
+  using ExecutionSpace = Kokkos::DefaultExecutionSpace;
+  using MemorySpace = ExecutionSpace::memory_space;
+  using value_type = float;
 
-  benchmark::RunSpecifiedBenchmarks();
+  value_type min_value = -1;
+  value_type max_value = 1;
+
+  int const n = 100'000;
+
+  Kokkos::View<value_type *, MemorySpace> x("x", n);
+
+  constexpr int seed = 1337;
+  Kokkos::Random_SFC64_Pool<ExecutionSpace> rand_pool(seed);
+
+  Kokkos::parallel_for(
+      "fill_random", Kokkos::RangePolicy<ExecutionSpace>(0, n),
+      KOKKOS_LAMBDA(int i) {
+#if defined(KOKKOS_ENABLE_CUDA) || defined(KOKKOS_ENABLE_HIP)
+        auto generator = rand_pool.get_state(i);
+#else
+        auto generator = rand_pool.get_state();
+#endif
+        x(i) = Kokkos::rand<decltype(generator), value_type>::draw(
+            generator, min_value, max_value);
+        rand_pool.free_state(generator);
+      });
 
   return EXIT_SUCCESS;
 }
