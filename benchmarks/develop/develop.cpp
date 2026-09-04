@@ -13,8 +13,9 @@ int main(int argc, char *argv[])
   value_type max_value = 1;
 
   int const n = 100'000;
+  int const num_vectors = 10;
 
-  Kokkos::View<value_type *, MemorySpace> x("x", n);
+  Kokkos::View<value_type **, MemorySpace> x("x", n, num_vectors);
 
   constexpr int seed = 1337;
   Kokkos::Random_SFC64_Pool<ExecutionSpace> rand_pool(seed);
@@ -27,8 +28,9 @@ int main(int argc, char *argv[])
 #else
         auto generator = rand_pool.get_state();
 #endif
-        x(i) = Kokkos::rand<decltype(generator), value_type>::draw(
-            generator, min_value, max_value);
+        for (int j = 0; j < num_vectors; ++j)
+          x(i, j) = Kokkos::rand<decltype(generator), value_type>::draw(
+              generator, min_value, max_value);
         rand_pool.free_state(generator);
       });
 
