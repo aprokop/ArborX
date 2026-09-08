@@ -307,6 +307,8 @@ void interpolate_field(
   timer->start();
 
   ElementAccessTraits<DIM, Coordinate, ExecutionSpace> access_traits;
+  auto element_node_indices_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
   if constexpr (DIM == 2)
   {
@@ -314,8 +316,6 @@ void interpolate_field(
     Kokkos::View<ArborX::Triangle<2, Coordinate> *, MemorySpace> triangles(
         "triangles", num_source_elements);
     auto triangles_host = Kokkos::create_mirror_view(triangles);
-    auto element_node_indices_host =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
     for (int el = 0; el < num_source_elements; ++el)
     {
@@ -336,8 +336,6 @@ void interpolate_field(
     Kokkos::View<Tetrahedron *, MemorySpace> tetrahedra(
         "tetrahedra", num_source_elements);
     auto tetrahedra_host = Kokkos::create_mirror_view(tetrahedra);
-    auto element_node_indices_host =
-        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
     for (int el = 0; el < num_source_elements; ++el)
     {
@@ -397,8 +395,6 @@ void interpolate_field(
   Kokkos::View<Coordinate *, MemorySpace> target_field_vals(
       "target_field_values", num_target_nodes);
   auto target_field_host = Kokkos::create_mirror_view(target_field_vals);
-  auto element_node_indices_host =
-      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
   for (int i = 0; i < num_target_nodes; ++i)
   {
