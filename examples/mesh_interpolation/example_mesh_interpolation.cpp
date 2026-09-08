@@ -20,6 +20,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 #include "helpers.hpp"
 #include <Panzer_STK_Interface.hpp>
@@ -125,8 +126,9 @@ void interpolate_field(
 
   ArborXBenchmark::TimeMonitor time_monitor;
 
-  // Extract source mesh nodes and elements
-  auto timer = time_monitor.getNewTimer("extract_source_mesh");
+  // ============================================================================
+  // STEP 1: Extract source mesh data (nodes and elements)
+  // ============================================================================
   timer->start();
 
   auto source_meta = source_mesh->getMetaData();
@@ -155,9 +157,11 @@ void interpolate_field(
       num_source_nodes);
 
   auto source_coords_host = Kokkos::create_mirror_view(source_coords);
+  auto const &source_coords_field = source_mesh->getCoordinatesField();
+
   for (int i = 0; i < num_source_nodes; ++i)
   {
-    auto const *coords = source_bulk->begin_nodes(source_nodes[i]);
+    auto const *coords = stk::mesh::field_data(source_coords_field, source_nodes[i]);
     for (int d = 0; d < DIM; ++d)
       source_coords_host(i)[d] = coords[d];
   }
@@ -172,9 +176,12 @@ void interpolate_field(
   if (comm_rank == 0)
     std::cout << "Source mesh: " << num_source_elements << " elements\n";
 
-  // Extract element connectivity
-  Kokkos::View<int *, MemorySpace> element_nodes_flat;
-  Kokkos::View<int *, MemorySpace> element_offsets;
+  // Extract element connectivity and create mapping from global node IDs to local indices
+  std::map<stk::mesh::EntityId, int> node_id_to_index;
+  for (int i = 0; i < num_source_nodes; ++i)
+    node_id_to_index[source_bulk->identifier(source_nodes[i])] = i;
+
+  Kokkos::View<int *, MemorySpace> element_node_indices;
 
   if constexpr (DIM == 2)
   {
@@ -189,19 +196,14 @@ void interpolate_field(
       int num_nodes = source_bulk->num_nodes(source_elements[el]);
       ARBORX_ASSERT(num_nodes == 3);
       for (int i = 0; i < num_nodes; ++i)
-        element_nodes_host(el * 3 + i) =
-            source_bulk->identifier(nodes[i]) - 1; // Convert to 0-based
+      {
+        auto node_id = source_bulk->identifier(nodes[i]);
+        element_nodes_host(el * 3 + i) = node_id_to_index[node_id];
+      }
     }
 
     Kokkos::deep_copy(element_nodes_temp, element_nodes_host);
-    element_nodes_flat = element_nodes_temp;
-
-    element_offsets = Kokkos::View<int *, MemorySpace>("element_offsets",
-                                                        num_source_elements + 1);
-    auto element_offsets_host = Kokkos::create_mirror_view(element_offsets);
-    for (int i = 0; i <= num_source_elements; ++i)
-      element_offsets_host(i) = i * 3;
-    Kokkos::deep_copy(element_offsets, element_offsets_host);
+    element_node_indices = element_nodes_temp;
   }
   else
   {
@@ -216,24 +218,22 @@ void interpolate_field(
       int num_nodes = source_bulk->num_nodes(source_elements[el]);
       ARBORX_ASSERT(num_nodes == 4);
       for (int i = 0; i < num_nodes; ++i)
-        element_nodes_host(el * 4 + i) =
-            source_bulk->identifier(nodes[i]) - 1; // Convert to 0-based
+      {
+        auto node_id = source_bulk->identifier(nodes[i]);
+        element_nodes_host(el * 4 + i) = node_id_to_index[node_id];
+      }
     }
 
     Kokkos::deep_copy(element_nodes_temp, element_nodes_host);
-    element_nodes_flat = element_nodes_temp;
-
-    element_offsets = Kokkos::View<int *, MemorySpace>("element_offsets",
-                                                        num_source_elements + 1);
-    auto element_offsets_host = Kokkos::create_mirror_view(element_offsets);
-    for (int i = 0; i <= num_source_elements; ++i)
-      element_offsets_host(i) = i * 4;
-    Kokkos::deep_copy(element_offsets, element_offsets_host);
+    element_node_indices = element_nodes_temp;
   }
 
   timer->stop();
 
-  // Extract target mesh nodes
+  // ============================================================================
+  // STEP 2: Extract target mesh data (nodes)
+  // ============================================================================
+
   timer = time_monitor.getNewTimer("extract_target_mesh");
   timer->start();
 
@@ -262,13 +262,19 @@ void interpolate_field(
       num_target_nodes);
 
   auto target_coords_host = Kokkos::create_mirror_view(target_coords);
+  auto const &target_coords_field = target_mesh->getCoordinatesField();
+
   for (int i = 0; i < num_target_nodes; ++i)
   {
-    auto const *coords = target_bulk->begin_nodes(target_nodes[i]);
+    auto const *coords = stk::mesh::field_data(target_coords_field, target_nodes[i]);
     for (int d = 0; d < DIM; ++d)
       target_coords_host(i)[d] = coords[d];
   }
   Kokkos::deep_copy(target_coords, target_coords_host);
+
+  // ============================================================================
+  // STEP 3: Read source field values
+  // ============================================================================
 
   // Read source field
   timer = time_monitor.getNewTimer("read_source_field");
@@ -292,6 +298,10 @@ void interpolate_field(
 
   timer->stop();
 
+  // ============================================================================
+  // STEP 4: Build BVH tree from source mesh elements
+  // ============================================================================
+
   // Create BVH tree
   timer = time_monitor.getNewTimer("build_bvh");
   timer->start();
@@ -304,12 +314,14 @@ void interpolate_field(
     Kokkos::View<ArborX::Triangle<2, Coordinate> *, MemorySpace> triangles(
         "triangles", num_source_elements);
     auto triangles_host = Kokkos::create_mirror_view(triangles);
+    auto element_node_indices_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
     for (int el = 0; el < num_source_elements; ++el)
     {
-      auto n0 = element_nodes_flat((el + 0) * 3);
-      auto n1 = element_nodes_flat((el + 1) * 3);
-      auto n2 = element_nodes_flat((el + 2) * 3);
+      int n0 = element_node_indices_host(el * 3 + 0);
+      int n1 = element_node_indices_host(el * 3 + 1);
+      int n2 = element_node_indices_host(el * 3 + 2);
       triangles_host(el) = {source_coords_host(n0), source_coords_host(n1),
                              source_coords_host(n2)};
     }
@@ -324,13 +336,15 @@ void interpolate_field(
     Kokkos::View<Tetrahedron *, MemorySpace> tetrahedra(
         "tetrahedra", num_source_elements);
     auto tetrahedra_host = Kokkos::create_mirror_view(tetrahedra);
+    auto element_node_indices_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
     for (int el = 0; el < num_source_elements; ++el)
     {
-      auto n0 = element_nodes_flat((el + 0) * 4);
-      auto n1 = element_nodes_flat((el + 1) * 4);
-      auto n2 = element_nodes_flat((el + 2) * 4);
-      auto n3 = element_nodes_flat((el + 3) * 4);
+      int n0 = element_node_indices_host(el * 4 + 0);
+      int n1 = element_node_indices_host(el * 4 + 1);
+      int n2 = element_node_indices_host(el * 4 + 2);
+      int n3 = element_node_indices_host(el * 4 + 3);
       tetrahedra_host(el) = {source_coords_host(n0), source_coords_host(n1),
                               source_coords_host(n2), source_coords_host(n3)};
     }
@@ -342,6 +356,10 @@ void interpolate_field(
   ArborX::BoundingVolumeHierarchy<MemorySpace> tree(space, access_traits);
 
   timer->stop();
+
+  // ============================================================================
+  // STEP 5: Query BVH for containing elements
+  // ============================================================================
 
   // Query for containment
   timer = time_monitor.getNewTimer("query");
@@ -368,6 +386,10 @@ void interpolate_field(
 
   timer->stop();
 
+  // ============================================================================
+  // STEP 6: Compute barycentric coordinates and interpolate field values
+  // ============================================================================
+
   // Interpolate field values
   timer = time_monitor.getNewTimer("interpolate");
   timer->start();
@@ -375,6 +397,8 @@ void interpolate_field(
   Kokkos::View<Coordinate *, MemorySpace> target_field_vals(
       "target_field_values", num_target_nodes);
   auto target_field_host = Kokkos::create_mirror_view(target_field_vals);
+  auto element_node_indices_host =
+      Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, element_node_indices);
 
   for (int i = 0; i < num_target_nodes; ++i)
   {
@@ -395,10 +419,10 @@ void interpolate_field(
 
       if constexpr (DIM == 2)
       {
-        // Get element nodes and coordinates
-        auto n0 = element_nodes_flat((element_id + 0) * 3);
-        auto n1 = element_nodes_flat((element_id + 1) * 3);
-        auto n2 = element_nodes_flat((element_id + 2) * 3);
+        // Get element nodes
+        int n0 = element_node_indices_host(element_id * 3 + 0);
+        int n1 = element_node_indices_host(element_id * 3 + 1);
+        int n2 = element_node_indices_host(element_id * 3 + 2);
 
         ArborX::Triangle<2, Coordinate> triangle{source_coords_host(n0),
                                                   source_coords_host(n1),
@@ -414,11 +438,11 @@ void interpolate_field(
       }
       else
       {
-        // Get element nodes and coordinates
-        auto n0 = element_nodes_flat((element_id + 0) * 4);
-        auto n1 = element_nodes_flat((element_id + 1) * 4);
-        auto n2 = element_nodes_flat((element_id + 2) * 4);
-        auto n3 = element_nodes_flat((element_id + 3) * 4);
+        // Get element nodes
+        int n0 = element_node_indices_host(element_id * 4 + 0);
+        int n1 = element_node_indices_host(element_id * 4 + 1);
+        int n2 = element_node_indices_host(element_id * 4 + 2);
+        int n3 = element_node_indices_host(element_id * 4 + 3);
 
         ArborX::ExperimentalHyperGeometry::Tetrahedron<Coordinate> tet{
             source_coords_host(n0), source_coords_host(n1),
@@ -438,6 +462,10 @@ void interpolate_field(
   Kokkos::deep_copy(target_field_vals, target_field_host);
 
   timer->stop();
+
+  // ============================================================================
+  // STEP 7: Write interpolated field to target mesh
+  // ============================================================================
 
   // Write interpolated field to target mesh
   timer = time_monitor.getNewTimer("write_output");

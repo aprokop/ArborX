@@ -19,6 +19,8 @@
 #include <Panzer_STK_ExodusReaderFactory.hpp>
 #include <Teuchos_RCPStdSharedPtrConversions.hpp>
 #include <mpi.h>
+#include <sstream>
+#include <iterator>
 
 class STKMeshFactory : public panzer_stk::STK_ExodusReaderFactory
 {
