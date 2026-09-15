@@ -440,8 +440,11 @@ void DistributedTreeImpl::queryDispatch(NearestPredicateTag, Tree const &tree,
     queryDispatch2RoundImpl(NearestPredicateTag{}, tree, space, predicates,
                             callback, values, offset);
   else
+  {
+    static_assert(!is_tagged_post_callback<Callback>::value);
     queryDispatch3RoundImpl(NearestPredicateTag{}, tree, space, predicates,
                             callback, values, offset);
+  }
 }
 
 } // namespace ArborX::Details
