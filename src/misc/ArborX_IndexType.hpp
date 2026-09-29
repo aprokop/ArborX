@@ -9,47 +9,29 @@
  * SPDX-License-Identifier: BSD-3-Clause                                    *
  ****************************************************************************/
 
-#ifndef ARBORX_NODE_HPP
-#define ARBORX_NODE_HPP
+#ifndef ARBORX_INDEX_TYPE_HPP
+#define ARBORX_INDEX_TYPE_HPP
 
-#include <ArborX_Box.hpp>
-#include <misc/ArborX_IndexType.hpp>
+#include <ArborX_Config.hpp> // ARBORX_ENABLE_LARGE_INDEX
 
-#include <Kokkos_Macros.hpp>
+#include <Kokkos_Core.hpp>
 
-#include <utility> // std::move
+#include <cstdint>
 
 namespace ArborX::Details
 {
 
-constexpr index_type ROPE_SENTINEL = -1;
+// Signed integer type used for indexing nodes and values of a hierarchy. It is
+// also used as the Kokkos::IndexType of the parallel kernels.
+#ifdef ARBORX_ENABLE_LARGE_INDEX
+using index_type = std::int64_t;
+#else
+using index_type = int;
+#endif
 
-template <class Value>
-struct LeafNode
-{
-  using value_type = Value;
-
-  index_type rope = ROPE_SENTINEL;
-  Value value;
-};
-
-template <class BoundingVolume>
-struct InternalNode
-{
-  using bounding_volume_type = BoundingVolume;
-
-  // Right child is the rope of the left child
-  index_type left_child = -1;
-  index_type rope = ROPE_SENTINEL;
-  BoundingVolume bounding_volume;
-};
-
-template <class Value>
-KOKKOS_INLINE_FUNCTION constexpr LeafNode<Value>
-makeLeafNode(Value value) noexcept
-{
-  return {ROPE_SENTINEL, std::move(value)};
-}
+template <typename ExecutionSpace, typename... Args>
+using IndexRangePolicy =
+    Kokkos::RangePolicy<ExecutionSpace, Kokkos::IndexType<index_type>, Args...>;
 
 } // namespace ArborX::Details
 

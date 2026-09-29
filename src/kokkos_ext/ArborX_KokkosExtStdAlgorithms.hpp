@@ -13,6 +13,7 @@
 #define ARBORX_KOKKOS_EXT_STD_ALGORITHMS_HPP
 
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 #include <Kokkos_StdAlgorithms.hpp>
@@ -44,8 +45,9 @@ void iota(ExecutionSpace const &space, ViewType const &v,
       "iota requires a View with non-const value type");
 
   Kokkos::parallel_for(
-      "ArborX::Algorithms::iota", Kokkos::RangePolicy(space, 0, v.extent(0)),
-      KOKKOS_LAMBDA(int i) { v(i) = value + (ValueType)i; });
+      "ArborX::Algorithms::iota",
+      IndexRangePolicy<ExecutionSpace>(space, 0, v.extent(0)),
+      KOKKOS_LAMBDA(index_type i) { v(i) = value + (ValueType)i; });
 }
 
 } // namespace ArborX::Details::KokkosExt

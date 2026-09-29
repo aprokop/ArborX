@@ -23,8 +23,8 @@ namespace ArborX::Details
 {
 
 // NOTE returns the permutation indices **and** sorts the input view
-template <typename ExecutionSpace, typename ViewType,
-          class SizeType = unsigned int>
+template <class SizeType = unsigned int, typename ExecutionSpace,
+          typename ViewType>
 auto sortObjects(ExecutionSpace const &space, ViewType &view)
 {
   Kokkos::Profiling::pushRegion("ArborX::Sorting");

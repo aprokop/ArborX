@@ -183,6 +183,14 @@ target_link_libraries(ArborX_Test_DetailsTreeConstruction.exe PRIVATE ArborX Boo
 target_include_directories(ArborX_Test_DetailsTreeConstruction.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 add_test(NAME ArborX_Test_DetailsTreeConstruction COMMAND ArborX_Test_DetailsTreeConstruction.exe)
 
+add_executable(ArborX_Test_LargeIndex.exe
+  tstLargeIndex.cpp
+  utf_main.cpp
+)
+target_link_libraries(ArborX_Test_LargeIndex.exe PRIVATE ArborX Boost::unit_test_framework Boost::dynamic_linking)
+target_include_directories(ArborX_Test_LargeIndex.exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME ArborX_Test_LargeIndex COMMAND ArborX_Test_LargeIndex.exe)
+
 add_executable(ArborX_Test_DetailsContainers.exe
   tstSequenceContainers.cpp
   tstContainerAdaptors.cpp

@@ -19,6 +19,7 @@
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 #include <kokkos_ext/ArborX_KokkosExtViewHelpers.hpp>
 #include <misc/ArborX_Exception.hpp>
+#include <misc/ArborX_IndexType.hpp>
 #include <misc/ArborX_PriorityQueue.hpp>
 #include <misc/ArborX_Stack.hpp>
 
@@ -97,7 +98,7 @@ struct TreeTraversal<BVH, Predicates, Callback, SpatialPredicateTag>
   template <typename Predicate>
   KOKKOS_FUNCTION void operator()(Predicate const &predicate) const
   {
-    int node = HappyTreeFriends::getRoot(_bvh); // start with root
+    index_type node = HappyTreeFriends::getRoot(_bvh); // start with root
     do
     {
       if (HappyTreeFriends::isLeaf(_bvh, node))
@@ -207,15 +208,15 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
                                                       buffer.size()));
 
     auto &bvh = _bvh;
-    auto const distance = [&predicate, &bvh](int j) {
+    auto const distance = [&predicate, &bvh](index_type j) {
       return HappyTreeFriends::isLeaf(bvh, j)
                  ? predicate.distance(HappyTreeFriends::getIndexable(bvh, j))
                  : predicate.distance(
                        HappyTreeFriends::getInternalBoundingVolume(bvh, j));
     };
 
-    constexpr int SENTINEL = -1;
-    int stack[64];
+    constexpr index_type SENTINEL = -1;
+    index_type stack[64];
     auto *stack_ptr = stack;
     *stack_ptr++ = SENTINEL;
 #if !defined(__CUDA_ARCH__)
@@ -224,9 +225,9 @@ struct TreeTraversal<BVH, Predicates, Callback, NearestPredicateTag>
     *stack_distance_ptr++ = 0.f;
 #endif
 
-    int node = HappyTreeFriends::getRoot(_bvh);
-    int left_child;
-    int right_child;
+    index_type node = HappyTreeFriends::getRoot(_bvh);
+    index_type left_child;
+    index_type right_child;
 
     Coordinate distance_left = 0;
     Coordinate distance_right = 0;
@@ -411,7 +412,7 @@ struct TreeTraversal<BVH, Predicates, Callback, OrderedSpatialPredicateTag>
 
     using distance_type = decltype(predicate.distance(
         HappyTreeFriends::getInternalBoundingVolume(_bvh, 0)));
-    using PairIndexDistance = Kokkos::pair<int, distance_type>;
+    using PairIndexDistance = Kokkos::pair<index_type, distance_type>;
     struct CompareDistance
     {
       KOKKOS_FUNCTION bool operator()(PairIndexDistance const &lhs,
@@ -431,16 +432,16 @@ struct TreeTraversal<BVH, Predicates, Callback, OrderedSpatialPredicateTag>
         KokkosExt::ArithmeticTraits::infinity<distance_type>::value;
 
     auto &bvh = _bvh;
-    auto const distance = [&predicate, &bvh](int j) {
+    auto const distance = [&predicate, &bvh](index_type j) {
       return HappyTreeFriends::isLeaf(bvh, j)
                  ? predicate.distance(HappyTreeFriends::getIndexable(bvh, j))
                  : predicate.distance(
                        HappyTreeFriends::getInternalBoundingVolume(bvh, j));
     };
 
-    int node = HappyTreeFriends::getRoot(_bvh);
-    int left_child;
-    int right_child;
+    index_type node = HappyTreeFriends::getRoot(_bvh);
+    index_type left_child;
+    index_type right_child;
 
     while (true)
     {

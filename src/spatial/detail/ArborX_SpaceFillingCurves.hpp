@@ -78,7 +78,8 @@ projectOntoSpaceFillingCurve(ExecutionSpace const &space, Values const &values,
 
   Kokkos::parallel_for(
       "ArborX::SpaceFillingCurve::project_onto_space_filling_curve",
-      Kokkos::RangePolicy(space, 0, values.size()), KOKKOS_LAMBDA(int i) {
+      IndexRangePolicy<ExecutionSpace>(space, 0, values.size()),
+      KOKKOS_LAMBDA(index_type i) {
         linear_ordering_indices(i) = curve(scene_bounding_box, values(i));
       });
 }

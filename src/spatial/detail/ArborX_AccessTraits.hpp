@@ -15,6 +15,7 @@
 #include <ArborX_GeometryTraits.hpp>
 #include <ArborX_Point.hpp>
 #include <detail/ArborX_Predicates.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -36,8 +37,8 @@ template <typename View>
 struct AccessTraits<View>
 {
   // Returns a const reference
-  KOKKOS_FUNCTION static typename View::const_value_type &get(View const &v,
-                                                              int i)
+  KOKKOS_FUNCTION static typename View::const_value_type &
+  get(View const &v, Details::index_type i)
   {
     return v(i);
   }
@@ -54,13 +55,13 @@ struct AccessTraits<View>
 {
   template <std::size_t... Is>
   KOKKOS_FUNCTION static auto getPoint(std::index_sequence<Is...>,
-                                       View const &v, int i)
+                                       View const &v, Details::index_type i)
   {
     return Point<sizeof...(Is)>{v(i, Is)...};
   }
 
   // Returns by value
-  KOKKOS_FUNCTION static auto get(View const &v, int i)
+  KOKKOS_FUNCTION static auto get(View const &v, Details::index_type i)
   {
     constexpr int dim = View::static_extent(1);
     if constexpr (dim > 0) // dimension known at compile time
@@ -154,16 +155,12 @@ concept AccessTraits = requires() {
   requires Kokkos::is_memory_space_v<
       typename ArborX::AccessTraits<T>::memory_space>;
 } && requires(T const &v) {
-  {
-    ArborX::AccessTraits<T>::size(v)
-  } -> std::integral;
+  { ArborX::AccessTraits<T>::size(v) } -> std::integral;
   // Cannot check return type of get() here as we need to test for non-void, but
   // there's no not_same_as concept, and !std::same_as<void> does not work
   ArborX::AccessTraits<T>::get(v, 0);
 } && !requires(T const &v) {
-  {
-    ArborX::AccessTraits<T>::get(v, 0)
-  } -> std::same_as<void>;
+  { ArborX::AccessTraits<T>::get(v, 0) } -> std::same_as<void>;
 };
 
 template <typename T>
@@ -174,9 +171,7 @@ concept Primitives = AccessTraits<T>;
 
 template <typename T>
 concept Predicates = AccessTraits<T> && requires(T const &v) {
-  {
-    ArborX::AccessTraits<T>::get(v, 0)
-  } -> HasTag;
+  { ArborX::AccessTraits<T>::get(v, 0) } -> HasTag;
   requires Details::is_valid_predicate_tag<
       typename std::decay_t<decltype(ArborX::AccessTraits<T>::get(v, 0))>::Tag>;
 };
@@ -198,7 +193,10 @@ public:
   using value_type = std::decay_t<decltype(Access::get(_values, 0))>;
 
   KOKKOS_FUNCTION
-  decltype(auto) operator()(int i) const { return Access::get(_values, i); }
+  decltype(auto) operator()(index_type i) const
+  {
+    return Access::get(_values, i);
+  }
 
   KOKKOS_FUNCTION
   std::size_t size() const { return Access::size(_values); }
@@ -229,7 +227,8 @@ struct AccessTraits<Details::AccessValuesI<Values>>
 
   using memory_space = typename AccessValues::memory_space;
 
-  KOKKOS_FUNCTION static decltype(auto) get(AccessValues const &w, int i)
+  KOKKOS_FUNCTION static decltype(auto) get(AccessValues const &w,
+                                            Details::index_type i)
   {
     return w(i);
   }

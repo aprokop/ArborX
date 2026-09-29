@@ -14,6 +14,7 @@
 
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
 #include <misc/ArborX_Exception.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -41,8 +42,10 @@ minmax_reduce(ExecutionSpace const &space, ViewType const &v)
   ValueType min_val;
   ValueType max_val;
   Kokkos::parallel_reduce(
-      "ArborX::Algorithms::minmax", Kokkos::RangePolicy(space, 0, n),
-      KOKKOS_LAMBDA(int i, ValueType &partial_min, ValueType &partial_max) {
+      "ArborX::Algorithms::minmax",
+      IndexRangePolicy<ExecutionSpace>(space, 0, n),
+      KOKKOS_LAMBDA(index_type i, ValueType & partial_min,
+                    ValueType & partial_max) {
         auto const &val = v(i);
         if (val < partial_min)
         {
@@ -75,8 +78,8 @@ typename ViewType::non_const_value_type min_reduce(ExecutionSpace const &space,
 
   ValueType result;
   Kokkos::parallel_reduce(
-      "ArborX::Algorithms::min", Kokkos::RangePolicy(space, 0, n),
-      KOKKOS_LAMBDA(int i, ValueType &update) {
+      "ArborX::Algorithms::min", IndexRangePolicy<ExecutionSpace>(space, 0, n),
+      KOKKOS_LAMBDA(index_type i, ValueType & update) {
         if (v(i) < update)
           update = v(i);
       },
@@ -102,8 +105,8 @@ typename ViewType::non_const_value_type max_reduce(ExecutionSpace const &space,
 
   ValueType result;
   Kokkos::parallel_reduce(
-      "ArborX::Algorithms::max", Kokkos::RangePolicy(space, 0, n),
-      KOKKOS_LAMBDA(int i, ValueType &update) {
+      "ArborX::Algorithms::max", IndexRangePolicy<ExecutionSpace>(space, 0, n),
+      KOKKOS_LAMBDA(index_type i, ValueType & update) {
         if (v(i) > update)
           update = v(i);
       },

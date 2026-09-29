@@ -15,6 +15,7 @@
 #include <ArborX_GeometryTraits.hpp>
 #include <detail/ArborX_AccessTraits.hpp>
 #include <detail/ArborX_PairValueIndex.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 namespace ArborX
 {
@@ -68,7 +69,7 @@ struct Indexables
 
   using memory_space = typename Values::memory_space;
 
-  KOKKOS_FUNCTION decltype(auto) operator()(int i) const
+  KOKKOS_FUNCTION decltype(auto) operator()(index_type i) const
   {
     return _indexable_getter(_values(i));
   }
@@ -82,8 +83,8 @@ struct Indexables
 // Reproducer: https://godbolt.org/z/nEdjb5rP4
 #if defined(__clang__) && KOKKOS_COMPILER_CLANG < 17001
 template <typename Values, typename IndexableGetter>
-KOKKOS_DEDUCTION_GUIDE Indexables(Values, IndexableGetter)
-    -> Indexables<Values, IndexableGetter>;
+KOKKOS_DEDUCTION_GUIDE
+    Indexables(Values, IndexableGetter) -> Indexables<Values, IndexableGetter>;
 #endif
 
 } // namespace Details

@@ -14,6 +14,7 @@
 
 #include <detail/ArborX_HappyTreeFriends.hpp>
 #include <misc/ArborX_Exception.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -26,14 +27,15 @@ template <class ExecutionSpace, class BVH, class Parents>
 void findParents(ExecutionSpace const &exec_space, BVH const &bvh,
                  Parents const &parents)
 {
-  int const n = bvh.size();
+  index_type const n = bvh.size();
 
   ARBORX_ASSERT(n >= 2);
-  ARBORX_ASSERT((int)parents.size() == 2 * n - 1);
+  ARBORX_ASSERT((index_type)parents.size() == 2 * n - 1);
 
   Kokkos::parallel_for(
       "ArborX::recompute_internal_and_leaf_node_parents",
-      Kokkos::RangePolicy(exec_space, n, 2 * n - 1), KOKKOS_LAMBDA(int i) {
+      IndexRangePolicy<ExecutionSpace>(exec_space, n, 2 * n - 1),
+      KOKKOS_LAMBDA(index_type i) {
         parents(HappyTreeFriends::getLeftChild(bvh, i)) = i;
         parents(HappyTreeFriends::getRightChild(bvh, i)) = i;
       });
@@ -43,7 +45,7 @@ template <class ExecutionSpace, class Parents, class Labels>
 void reduceLabels(ExecutionSpace const &exec_space, Parents const &parents,
                   Labels labels)
 {
-  int const n = (parents.size() + 1) / 2;
+  index_type const n = (parents.size() + 1) / 2;
 
   ARBORX_ASSERT(n >= 2);
   ARBORX_ASSERT(labels.size() == parents.size());
@@ -58,18 +60,19 @@ void reduceLabels(ExecutionSpace const &exec_space, Parents const &parents,
   Kokkos::deep_copy(exec_space, internal_node_labels, untouched);
   Kokkos::parallel_for(
       "ArborX::reduce_internal_node_labels",
-      Kokkos::RangePolicy(exec_space, 0, n), KOKKOS_LAMBDA(int i) {
+      IndexRangePolicy<ExecutionSpace>(exec_space, 0, n),
+      KOKKOS_LAMBDA(index_type i) {
         KOKKOS_ASSERT(labels(i) != indeterminate);
         KOKKOS_ASSERT(labels(i) != untouched);
         KOKKOS_ASSERT(parents(i) >= 0);
 
         // TODO consider asserting the precondition below holds at call site or
         // taking root as an input argument
-        int const root = n; // Details::HappyTreeFriends::getRoot(bvh)
+        index_type const root = n; // Details::HappyTreeFriends::getRoot(bvh)
         do
         {
           int const label = labels(i);
-          int const parent = parents(i);
+          index_type const parent = parents(i);
 
           int const parent_label = Kokkos::atomic_compare_exchange(
               &labels(parent), untouched, label);

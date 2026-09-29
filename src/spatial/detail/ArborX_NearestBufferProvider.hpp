@@ -14,6 +14,7 @@
 #include <detail/ArborX_AccessTraits.hpp>
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 #include <kokkos_ext/ArborX_KokkosExtViewHelpers.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -25,7 +26,7 @@ struct NearestBufferProvider
 {
   static_assert(Kokkos::is_memory_space_v<MemorySpace>);
 
-  using PairIndexDistance = Kokkos::pair<int, Coordinate>;
+  using PairIndexDistance = Kokkos::pair<index_type, Coordinate>;
 
   Kokkos::View<PairIndexDistance *, MemorySpace> _buffer;
   Kokkos::View<int *, MemorySpace> _offset;

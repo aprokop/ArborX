@@ -17,6 +17,7 @@
 #include <detail/ArborX_Node.hpp> // makeLeafNode
 #include <kokkos_ext/ArborX_KokkosExtArithmeticTraits.hpp>
 #include <misc/ArborX_Exception.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -30,8 +31,8 @@ inline void calculateBoundingBoxOfTheScene(ExecutionSpace const &space,
 {
   Kokkos::parallel_reduce(
       "ArborX::TreeConstruction::calculate_bounding_box_of_the_scene",
-      Kokkos::RangePolicy(space, 0, indexables.size()),
-      KOKKOS_LAMBDA(int i, Box &update) {
+      IndexRangePolicy<ExecutionSpace>(space, 0, indexables.size()),
+      KOKKOS_LAMBDA(index_type i, Box & update) {
         using Details::expand;
         expand(update, indexables(i));
       },
@@ -54,7 +55,7 @@ initializeSingleLeafTree(ExecutionSpace const &space, Values const &values,
                          "ArborX::BVH::getSingleLeafBounds::bounding_volume"));
   Kokkos::parallel_for(
       "ArborX::TreeConstruction::initialize_single_leaf_tree",
-      Kokkos::RangePolicy(space, 0, 1), KOKKOS_LAMBDA(int) {
+      IndexRangePolicy<ExecutionSpace>(space, 0, 1), KOKKOS_LAMBDA(index_type) {
         leaf_nodes(0) = makeLeafNode(values(0));
         BoundingVolume bv;
         expand(bv, indexable_getter(leaf_nodes(0).value));
@@ -73,7 +74,7 @@ template <typename Values, typename IndexableGetter,
           typename LeafNodes, typename InternalNodes>
 class GenerateHierarchy
 {
-  static constexpr int UNTOUCHED_NODE = -1;
+  static constexpr index_type UNTOUCHED_NODE = -1;
 
   using MemorySpace = typename LeafNodes::memory_space;
   using LinearOrderingValueType = typename LinearOrdering::non_const_value_type;
@@ -97,13 +98,14 @@ public:
       , _ranges(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                                    "ArborX::BVH::BVH::ranges"),
                 internal_nodes.extent(0))
-      , _num_internal_nodes(_internal_nodes.extent_int(0))
+      , _num_internal_nodes(static_cast<index_type>(_internal_nodes.extent(0)))
   {
     Kokkos::deep_copy(space, _ranges, UNTOUCHED_NODE);
 
-    Kokkos::parallel_for("ArborX::TreeConstruction::generate_hierarchy",
-                         Kokkos::RangePolicy(space, 0, leaf_nodes.extent(0)),
-                         *this);
+    Kokkos::parallel_for(
+        "ArborX::TreeConstruction::generate_hierarchy",
+        IndexRangePolicy<ExecutionSpace>(space, 0, leaf_nodes.extent(0)),
+        *this);
 
     Kokkos::deep_copy(
         space,
@@ -125,10 +127,13 @@ public:
   using DeltaValueType = std::make_signed_t<LinearOrderingValueType>;
 
   KOKKOS_FUNCTION
-  auto internalIndex(int const i) const { return i + _num_internal_nodes + 1; }
+  auto internalIndex(index_type const i) const
+  {
+    return i + _num_internal_nodes + 1;
+  }
 
   KOKKOS_FUNCTION
-  DeltaValueType delta(int const i) const
+  DeltaValueType delta(index_type const i) const
   {
     // Per Apetrei:
     //   Because we already know where the highest differing bit is for each
@@ -170,10 +175,10 @@ public:
   }
 
   template <typename Node>
-  KOKKOS_FUNCTION void setRope(Node &node, int range_right,
+  KOKKOS_FUNCTION void setRope(Node &node, index_type range_right,
                                DeltaValueType delta_right) const
   {
-    int rope;
+    index_type rope;
     if (range_right != _num_internal_nodes)
     {
       // The way Karras indices constructed, the rope is going to be the right
@@ -194,7 +199,7 @@ public:
     node.rope = rope;
   }
 
-  KOKKOS_FUNCTION void operator()(int i) const
+  KOKKOS_FUNCTION void operator()(index_type i) const
   {
     // Index in the original order values were given in
     auto const original_index = _permutation_indices(i);
@@ -207,8 +212,8 @@ public:
     expand(bounding_volume, _indexable_getter(leaf_node.value));
 
     // For a leaf node, the range is just one index
-    int range_left = i;
-    int range_right = i;
+    index_type range_left = i;
+    index_type range_right = i;
 
     auto delta_left = delta(range_left - 1);
     auto delta_right = delta(range_right);
@@ -223,7 +228,7 @@ public:
       // Determine whether this node is left or right child of its parent
       bool const is_left_child = (delta_right < delta_left);
 
-      int left_child;
+      index_type left_child;
       if (is_left_child)
       {
         // The main benefit of the Apetrei index (which is also called a split
@@ -231,7 +236,7 @@ public:
         // just on the child's range. This is different from a Karras index,
         // where the index can only be computed based on the range of the
         // parent, and thus requires knowing the ranges of both children.
-        int const apetrei_parent = range_right;
+        index_type const apetrei_parent = range_right;
 
         // The range of the parent is the union of the ranges of children. Each
         // child updates one of these range values, the farthest from the
@@ -253,7 +258,7 @@ public:
         // is a leaf node depends on the position of the split (which is
         // apetrei index) to the range boundary.
         left_child = i;
-        int right_child = apetrei_parent + 1;
+        index_type right_child = apetrei_parent + 1;
         bool const right_child_is_leaf = (right_child == range_right);
 
         delta_right = delta(range_right);
@@ -274,7 +279,7 @@ public:
         // The comments for this clause are identical to the ones above (in the
         // if clause), and thus omitted for brevity.
 
-        int const apetrei_parent = range_left - 1;
+        index_type const apetrei_parent = range_left - 1;
 
         range_left = Kokkos::atomic_compare_exchange(
             &_ranges(apetrei_parent), UNTOUCHED_NODE, range_right);
@@ -298,7 +303,7 @@ public:
       }
 
       // Having the full range for the parent, we can compute the Karras index.
-      int const karras_parent =
+      index_type const karras_parent =
           delta_right < delta_left ? range_right : range_left;
 
       auto &parent_node = _internal_nodes(karras_parent);
@@ -317,11 +322,12 @@ private:
   LinearOrdering _sorted_morton_codes;
   LeafNodes _leaf_nodes;
   InternalNodes _internal_nodes;
-  Kokkos::View<int *, MemorySpace> _ranges;
-  int _num_internal_nodes;
+  Kokkos::View<index_type *, MemorySpace> _ranges;
+  index_type _num_internal_nodes;
 };
 
 template <typename ExecutionSpace, typename Values, typename IndexableGetter,
+          typename PermutationIndicesValueType,
           typename... PermutationIndicesViewProperties,
           typename LinearOrderingValueType,
           typename... LinearOrderingViewProperties, typename LeafNodes,
@@ -329,7 +335,8 @@ template <typename ExecutionSpace, typename Values, typename IndexableGetter,
 void generateHierarchy(
     ExecutionSpace const &space, Values const &values,
     IndexableGetter const &indexable_getter,
-    Kokkos::View<unsigned int *, PermutationIndicesViewProperties...>
+    Kokkos::View<PermutationIndicesValueType *,
+                 PermutationIndicesViewProperties...>
         permutation_indices,
     Kokkos::View<LinearOrderingValueType *, LinearOrderingViewProperties...>
         sorted_morton_codes,
@@ -337,7 +344,8 @@ void generateHierarchy(
     typename InternalNodes::value_type::bounding_volume_type &bounds)
 {
   using ConstPermutationIndices =
-      Kokkos::View<unsigned int const *, PermutationIndicesViewProperties...>;
+      Kokkos::View<PermutationIndicesValueType const *,
+                   PermutationIndicesViewProperties...>;
   using ConstLinearOrdering = Kokkos::View<LinearOrderingValueType const *,
                                            LinearOrderingViewProperties...>;
 

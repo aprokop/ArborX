@@ -13,6 +13,7 @@
 #define ARBORX_IOTA_HPP
 
 #include "ArborX_AccessTraits.hpp"
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -53,7 +54,10 @@ struct AccessTraits<Details::Iota<MemorySpace>>
 
   using memory_space = typename Self::memory_space;
   static KOKKOS_FUNCTION auto size(Self const &self) { return self._n; }
-  static KOKKOS_FUNCTION auto get(Self const &, int i) { return i; }
+  static KOKKOS_FUNCTION auto get(Self const &, Details::index_type i)
+  {
+    return i;
+  }
 };
 
 } // namespace ArborX

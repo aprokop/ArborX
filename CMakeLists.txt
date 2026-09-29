@@ -57,6 +57,7 @@ endif()
 # against an installed ArborX
 add_library(ArborX::ArborX ALIAS ArborX)
 
+option(ARBORX_ENABLE_LARGE_INDEX "Use 64-bit indices in bounding volume hierarchies (allows more than 2^31-1 values)" OFF)
 option(ARBORX_ENABLE_MPI "Enable MPI support" OFF)
 if(ARBORX_ENABLE_MPI)
   find_package(MPI REQUIRED)

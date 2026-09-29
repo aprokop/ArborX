@@ -13,6 +13,7 @@
 #define ARBORX_PERMUTED_DATA_HPP
 
 #include <detail/ArborX_AccessTraits.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 namespace ArborX
 {
@@ -29,7 +30,7 @@ struct PermutedData
   Data _data;
   Permute _permute;
 
-  KOKKOS_FUNCTION decltype(auto) operator()(int i) const
+  KOKKOS_FUNCTION decltype(auto) operator()(index_type i) const
   {
     return _data(_permute(i));
   }

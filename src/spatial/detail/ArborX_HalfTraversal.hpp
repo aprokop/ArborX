@@ -14,6 +14,7 @@
 
 #include <detail/ArborX_HappyTreeFriends.hpp>
 #include <detail/ArborX_Node.hpp> // ROPE_SENTINEL
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -44,17 +45,18 @@ struct HalfTraversal
     }
     else
     {
-      Kokkos::parallel_for("ArborX::Experimental::HalfTraversal",
-                           Kokkos::RangePolicy(space, 0, _bvh.size()), *this);
+      Kokkos::parallel_for(
+          "ArborX::Experimental::HalfTraversal",
+          IndexRangePolicy<ExecutionSpace>(space, 0, _bvh.size()), *this);
     }
   }
 
-  KOKKOS_FUNCTION void operator()(int i) const
+  KOKKOS_FUNCTION void operator()(index_type i) const
   {
     auto const leaf_value = HappyTreeFriends::getValue(_bvh, i);
     auto const predicate = _get_predicate(leaf_value);
 
-    int node = HappyTreeFriends::getRope(_bvh, i);
+    index_type node = HappyTreeFriends::getRope(_bvh, i);
     while (node != ROPE_SENTINEL)
     {
       if (HappyTreeFriends::isLeaf(_bvh, node))

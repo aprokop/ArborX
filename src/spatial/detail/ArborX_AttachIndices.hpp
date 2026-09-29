@@ -14,6 +14,7 @@
 #include <detail/ArborX_AccessTraits.hpp>
 #include <detail/ArborX_PairValueIndex.hpp>
 #include <detail/ArborX_Predicates.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 namespace ArborX
 {
@@ -51,7 +52,7 @@ public:
   {
     return Access::size(self._values);
   }
-  KOKKOS_FUNCTION static auto get(Self const &self, int i)
+  KOKKOS_FUNCTION static auto get(Self const &self, Details::index_type i)
   {
     if constexpr (Details::Concepts::Predicates<Values>)
       return attach(Access::get(self._values, i), Index(i));

@@ -15,6 +15,7 @@
 #include <detail/ArborX_HappyTreeFriends.hpp>
 #include <detail/ArborX_TreeTraversal.hpp>
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Core.hpp>
 
@@ -34,7 +35,7 @@ std::ostream &operator<<(std::ostream &os, Point<3> const &p)
 struct TreeVisualization
 {
   template <typename Tree>
-  static std::string getNodeLabel(Tree const &tree, int node)
+  static std::string getNodeLabel(Tree const &tree, index_type node)
   {
     auto const node_is_leaf = HappyTreeFriends::isLeaf(tree, node);
     auto const node_index =
@@ -45,14 +46,14 @@ struct TreeVisualization
   }
 
   template <typename Tree>
-  static std::string getNodeAttributes(Tree const &tree, int node)
+  static std::string getNodeAttributes(Tree const &tree, index_type node)
   {
     return HappyTreeFriends::isLeaf(tree, node) ? "[leaf]" : "[internal]";
   }
 
   template <typename Tree>
-  static std::string getEdgeAttributes(Tree const &tree, int /*parent*/,
-                                       int child)
+  static std::string getEdgeAttributes(Tree const &tree, index_type /*parent*/,
+                                       index_type child)
   {
     return HappyTreeFriends::isLeaf(tree, child) ? "[pendant]" : "[edge]";
   }
@@ -70,14 +71,14 @@ struct TreeVisualization
     std::ostream &_os;
 
     template <typename Tree>
-    void visit(Tree const &tree, int node) const
+    void visit(Tree const &tree, index_type node) const
     {
       visitNode(tree, node);
       visitEdgesStartingFromNode(tree, node);
     }
 
     template <typename Tree>
-    void visitNode(Tree const &tree, int node) const
+    void visitNode(Tree const &tree, index_type node) const
     {
       auto const node_label = getNodeLabel(tree, node);
       auto const node_attributes = getNodeAttributes(tree, node);
@@ -86,7 +87,7 @@ struct TreeVisualization
     }
 
     template <typename Tree>
-    void visitEdgesStartingFromNode(Tree const &tree, int node) const
+    void visitEdgesStartingFromNode(Tree const &tree, index_type node) const
     {
       auto const node_label = getNodeLabel(tree, node);
       auto const node_is_internal = !HappyTreeFriends::isLeaf(tree, node);
@@ -116,7 +117,7 @@ struct TreeVisualization
     std::ostream &_os;
 
     template <typename Tree>
-    void visit(Tree const &tree, int node) const
+    void visit(Tree const &tree, index_type node) const
     {
       auto const node_label = getNodeLabel(tree, node);
       auto const node_attributes = getNodeAttributes(tree, node);
@@ -134,7 +135,7 @@ struct TreeVisualization
   template <typename Tree, typename Visitor>
   static void visitAllIterative(Tree const &tree, Visitor const &visitor)
   {
-    Stack<int> stack;
+    Stack<index_type> stack;
     stack.emplace(HappyTreeFriends::getRoot(tree));
     while (!stack.empty())
     {
@@ -180,18 +181,19 @@ struct TreeVisualization
 #else
     using ExecutionSpace = Kokkos::DefaultHostExecutionSpace;
     using Predicates = Kokkos::View<Predicate *, ExecutionSpace>;
-    using Permute = Kokkos::View<int *, ExecutionSpace>;
+    using Permute = Kokkos::View<index_type *, ExecutionSpace>;
     using Callback = VisitorCallback<Tree, Visitor, Permute>;
 
     ExecutionSpace space;
 
-    int const n = tree.size();
+    index_type const n = tree.size();
     Permute permute(Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
                                        "ArborX::permute"),
                     n);
     Kokkos::parallel_for(
-        "ArborX::Viz::compute_permutation", Kokkos::RangePolicy(space, 0, n),
-        KOKKOS_LAMBDA(int i) {
+        "ArborX::Viz::compute_permutation",
+        IndexRangePolicy<ExecutionSpace>(space, 0, n),
+        KOKKOS_LAMBDA(index_type i) {
           permute(HappyTreeFriends::getValue(tree, i).index) = i;
         });
 

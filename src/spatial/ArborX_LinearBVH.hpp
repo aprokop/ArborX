@@ -28,6 +28,7 @@
 #include <detail/ArborX_TreeConstruction.hpp>
 #include <detail/ArborX_TreeTraversal.hpp>
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
+#include <misc/ArborX_IndexType.hpp>
 #include <misc/ArborX_SortUtils.hpp>
 
 #include <Kokkos_Core.hpp>
@@ -242,7 +243,7 @@ BoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter, BoundingVolume>::
 
   // Compute the ordering of the indexables along the space-filling curve
   auto permutation_indices =
-      Details::sortObjects(space, linear_ordering_indices);
+      Details::sortObjects<Details::index_type>(space, linear_ordering_indices);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");

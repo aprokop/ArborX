@@ -15,9 +15,14 @@
 #include <ArborX_Config.hpp> // ARBORX_ENABLE_ROCTHRUST
 
 #include <kokkos_ext/ArborX_KokkosExtMinMaxReduce.hpp>
+#include <misc/ArborX_IndexType.hpp>
 
 #include <Kokkos_Profiling_ScopedRegion.hpp>
 #include <Kokkos_Sort.hpp>
+
+#include <algorithm>
+#include <limits>
+#include <type_traits>
 
 // clang-format off
 #if defined(KOKKOS_ENABLE_CUDA)
@@ -99,11 +104,15 @@ void sortByKey(ExecutionSpace const &space, Keys &keys, Values &values)
   if (min_val == max_val)
     return;
 
-  using SizeType = unsigned int;
+  using SizeType = std::make_unsigned_t<Details::index_type>;
   using CompType = Kokkos::BinOp1D<Keys>;
 
+  // Kokkos::BinOp1D takes the number of bins as an int
+  int const num_bins = static_cast<int>(
+      std::min<std::size_t>(n / 2, std::numeric_limits<int>::max()));
+
   Kokkos::BinSort<Keys, CompType, typename Keys::device_type, SizeType>
-      bin_sort(space, keys, CompType(n / 2, min_val, max_val), true);
+      bin_sort(space, keys, CompType(num_bins, min_val, max_val), true);
   bin_sort.create_permute_vector(space);
   bin_sort.sort(space, keys);
   bin_sort.sort(space, values);
