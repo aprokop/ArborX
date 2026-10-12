@@ -1,4 +1,10 @@
-<img src="docs/logos/arborx_logo_v1.0.png" width="192">
+<div align="center">
+
+[<img src="https://kokkos.org/download/logos/kokkos.png" width="15%">](https://kokkos.org)
+[<img src="docs/logos/arborx_logo_v1.0.png" width="25%">](https://github.com/kokkos/ArborX/wiki)
+
+</div>
+
 
 ArborX
 ======
