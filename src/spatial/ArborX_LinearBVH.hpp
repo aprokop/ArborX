@@ -26,6 +26,7 @@
 #include <detail/ArborX_SpaceFillingCurves.hpp>
 #include <detail/ArborX_TraversalPolicy.hpp>
 #include <detail/ArborX_TreeConstruction.hpp>
+#include <detail/ArborX_TreeOptimization.hpp>
 #include <detail/ArborX_TreeTraversal.hpp>
 #include <kokkos_ext/ArborX_KokkosExtAccessibilityTraits.hpp>
 #include <misc/ArborX_SortUtils.hpp>
@@ -71,6 +72,28 @@ public:
       ExecutionSpace const &space, Values const &values,
       IndexableGetter const &indexable_getter = IndexableGetter(),
       SpaceFillingCurve const &curve = SpaceFillingCurve());
+
+  // Improve an existing hierarchy using agglomerative treelet restructuring
+  // (Domingues and Pedrini, HPG 2015). The device-callable cost functor must
+  // return a finite, nonnegative node cost. The objective is the sum of
+  // internal node costs; surface area gives SAH. TreeletSize defaults to 7 and
+  // controls the quality/work tradeoff: optimize(space) or optimize<12>(space,
+  // cost). This modifies shared node storage: shallow copies must not be
+  // queried concurrently. Operations are ordered on the supplied execution
+  // space.
+  template <int TreeletSize = 7, class ExecutionSpace,
+            class CostFunction = Details::SurfaceArea>
+  void optimize(ExecutionSpace const &space,
+                CostFunction const &cost_function = CostFunction{})
+  {
+    static_assert(
+        Details::KokkosExt::is_accessible_from<MemorySpace,
+                                               ExecutionSpace>::value);
+    Kokkos::Profiling::ScopedRegion guard("ArborX::BVH::optimize");
+    Details::optimizeHierarchy<TreeletSize>(space, *this, _leaf_nodes,
+                                            _internal_nodes, _indexable_getter,
+                                            cost_function);
+  }
 
   KOKKOS_FUNCTION
   size_type size() const noexcept { return _size; }
