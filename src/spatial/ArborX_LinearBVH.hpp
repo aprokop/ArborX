@@ -276,6 +276,9 @@ BoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter, BoundingVolume>::
       linear_ordering_indices, _leaf_nodes, _internal_nodes, _bounds);
 
   Kokkos::Profiling::popRegion();
+
+  if constexpr (GeometryTraits::is_box_v<BoundingVolume>)
+    optimize(space);
 }
 
 template <typename MemorySpace, typename Value, typename IndexableGetter,
