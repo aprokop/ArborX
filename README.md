@@ -7,11 +7,11 @@ algorithms for geometric search, similarly to nanoflann and Boost Geometry.
 
 Installation
 ------------
-The installation instructions can be found [here](https://github.com/arborx/ArborX/wiki/Build).
+The installation instructions can be found [here](https://kokkos.org/ArborX/docs/Build.html).
 
 Using ArborX
 ------------
-The interface is described [here](https://github.com/arborx/ArborX/wiki/ArborX%3A%3ABoundingVolumeHierarchy).
+The interface is described [here](https://kokkos.org/ArborX/docs/).
 
 Examples
 --------
