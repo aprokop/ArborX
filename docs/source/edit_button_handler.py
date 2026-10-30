@@ -13,7 +13,7 @@ from urllib.parse import quote
 SOURCE_DIR = Path(__file__).resolve().parent
 BUILD_DIR = SOURCE_DIR.parent / "generated_docs"
 REPOSITORY_URL = "https://github.com/kokkos/ArborX"
-BRANCH = "docs"
+BRANCH = "master"
 SOURCE_PATH_IN_REPOSITORY = "docs/source"
 
 EDIT_BUTTON = re.compile(

@@ -22,6 +22,6 @@ html_css_files = ["arborx.css"]
 
 html_theme_options = {
     "source_repository": "https://github.com/kokkos/ArborX/",
-    "source_branch": "docs",
+    "source_branch": "master",
     "source_directory": "docs/source/",
 }
