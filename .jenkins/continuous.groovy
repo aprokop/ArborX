@@ -22,7 +22,31 @@ pipeline {
     }
     stages {
 
+        // changeset reads collected SCM changelog. As we use beforeAgent,
+        // changeset may see an empty changelog without this stage.
+        stage('SCM checkout') {
+            agent {
+                label 'docker'
+            }
+            options {
+                skipDefaultCheckout()
+            }
+            steps {
+                checkout scm
+            }
+        }
+
         stage("Style") {
+            when {
+                beforeAgent true
+                anyOf {
+                    changeset pattern: '^(?!docs/).+$', comparator: 'REGEXP', caseSensitive: true
+                    // allow running with an empty changelog
+                    not {
+                        changeset pattern: '.*', comparator: 'REGEXP', caseSensitive: true
+                    }
+                }
+            }
             agent {
                 dockerfile {
                     filename "Dockerfile.clang-format"
@@ -38,6 +62,15 @@ pipeline {
         }
 
         stage('Build') {
+            when {
+                anyOf {
+                    changeset pattern: '^(?!docs/).+$', comparator: 'REGEXP', caseSensitive: true
+                    // allow running with an empty changelog
+                    not {
+                        changeset pattern: '.*', comparator: 'REGEXP', caseSensitive: true
+                    }
+                }
+            }
             parallel {
                 stage('CUDA-12.2.2-NVCC-CUDA-AWARE-MPI') {
                     agent {

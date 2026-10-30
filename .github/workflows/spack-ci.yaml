@@ -3,7 +3,11 @@ name: CI [Ubuntu 24.04]
 on:
   push:
     branches: [ master ]
+    paths-ignore:
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
 
 env:
   BUILD_TYPE: Debug
