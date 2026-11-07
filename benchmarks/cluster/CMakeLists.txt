@@ -15,12 +15,12 @@ add_test(NAME ArborX_Benchmark_DBSCAN COMMAND ArborX_Benchmark_DBSCAN.exe --asci
 add_executable(ArborX_Benchmark_MST.exe mst.cpp)
 target_include_directories(ArborX_Benchmark_MST.exe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ArborX_Benchmark_MST.exe ArborX::ArborX Boost::program_options cluster_benchmark_helpers)
-add_test(NAME ArborX_Benchmark_HDBSCAN COMMAND ArborX_Benchmark_HDBSCAN.exe --ascii --filename=${input_file})
+add_test(NAME ArborX_Benchmark_MST COMMAND ArborX_Benchmark_MST.exe --ascii --filename=${input_file})
 
 add_executable(ArborX_Benchmark_HDBSCAN.exe hdbscan.cpp)
 target_include_directories(ArborX_Benchmark_HDBSCAN.exe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ArborX_Benchmark_HDBSCAN.exe ArborX::ArborX Boost::program_options cluster_benchmark_helpers)
-add_test(NAME ArborX_Benchmark_MST COMMAND ArborX_Benchmark_MST.exe --ascii --filename=${input_file})
+add_test(NAME ArborX_Benchmark_HDBSCAN COMMAND ArborX_Benchmark_HDBSCAN.exe --ascii --filename=${input_file})
 
 if (ARBORX_ENABLE_MPI)
   set(ARBORX_BENCHMARK_UTILS_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/benchmarks/utils)
