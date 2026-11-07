@@ -16,6 +16,8 @@
 #include "BoostTest_CUDA_clang_workarounds.hpp"
 #include <boost/test/unit_test.hpp>
 
+#include <vector>
+
 template <typename View>
 struct HiddenView
 {
@@ -38,6 +40,28 @@ struct ArborX::AccessTraits<HiddenView<View>>
 };
 
 using ArborXTest::toView;
+
+struct CustomPoint
+{
+  float y;
+  float x;
+  KOKKOS_FUNCTION float operator[](int i) const { return i == 0 ? x : 2 * y; }
+};
+
+template <>
+struct ArborX::GeometryTraits::dimension<CustomPoint>
+    : std::integral_constant<int, 2>
+{};
+template <>
+struct ArborX::GeometryTraits::tag<CustomPoint>
+{
+  using type = PointTag;
+};
+template <>
+struct ArborX::GeometryTraits::coordinate_type<CustomPoint>
+{
+  using type = float;
+};
 
 BOOST_AUTO_TEST_SUITE(DBSCAN)
 
@@ -344,6 +368,48 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_star_fdbscan_densebox_double, DeviceType,
 {
   dbscan_f<DeviceType, double>(ArborX::DBSCAN::Implementation::FDBSCAN_DenseBox,
                                ArborX::DBSCAN::Algorithm::DBSCAN_STAR);
+}
+
+BOOST_AUTO_TEST_CASE_TEMPLATE(dbscan_custom_point, DeviceType,
+                              ARBORX_DEVICE_TYPES)
+{
+  using ExecutionSpace = typename DeviceType::execution_space;
+  using MemorySpace = typename DeviceType::memory_space;
+
+  ExecutionSpace space;
+
+  // The custom points correspond to the following points in the (x, y) plane:
+  // (0, 0), (1, 0), (0, 2), (1, 2)
+  // If they have not been interpreted correctly, the custom points would belong
+  // to a single cluster.
+  std::vector<CustomPoint> points_v = {
+      {0.f, 0.f}, {0.f, 1.f}, {1.f, 0.f}, {1.f, 1.f}};
+  auto const n = points_v.size();
+
+  Kokkos::View<CustomPoint *, MemorySpace> points("points", n);
+  Kokkos::deep_copy(
+      space, points,
+      Kokkos::View<CustomPoint *, Kokkos::HostSpace, Kokkos::MemoryUnmanaged>(
+          points_v.data(), n));
+
+  for (auto impl : {ArborX::DBSCAN::Implementation::FDBSCAN,
+                    ArborX::DBSCAN::Implementation::FDBSCAN_DenseBox})
+  {
+    Kokkos::View<int *, MemorySpace> labels("labels", 0);
+
+    ArborX::DBSCAN::Parameters params;
+    params.setImplementation(impl);
+    ArborX::dbscan(space, points, 1.1, 2, labels, params);
+    space.fence();
+
+    auto labels_host =
+        Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace{}, labels);
+    BOOST_TEST(labels_host(0) != -1);
+    BOOST_TEST(labels_host(2) != -1);
+    BOOST_TEST(labels_host(0) == labels_host(1));
+    BOOST_TEST(labels_host(2) == labels_host(3));
+    BOOST_TEST(labels_host(0) != labels_host(2));
+  }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
