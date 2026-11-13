@@ -116,7 +116,7 @@ private:
   TopTree _top_tree;       // replicated
   size_type _top_tree_size{0};
   // Top tree filters out ranks with no primitives, so there is a mistmatch in
-  // size and indexing of top tree leaves and rank sizes;
+  // size and indexing of top tree leaves and rank sizes.
   Kokkos::View<size_type *, MemorySpace> _rank_sizes;
 };
 
@@ -164,7 +164,7 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
     MPI_Comm comm, ExecutionSpace const &space, Args &&...args)
 {
   std::string prefix = "ArborX::DistributedTree::DistributedTree";
-  Kokkos::Profiling::pushRegion(prefix);
+  Kokkos::Profiling::ScopedRegion guard(prefix);
 
   static_assert(Kokkos::is_execution_space<ExecutionSpace>::value);
 
@@ -230,32 +230,15 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
   // Filter out empty ranks
   Kokkos::View<PairValueIndex<BoundingVolume, int> *, MemorySpace>
       attached_volumes(prefix + "::predicates", 0);
-  Details::DistributedTree::filterOutEmptyRanks(space, volumes_and_sizes,
-                                                attached_volumes);
+  Details::DistributedTree::filterOutEmptyRanks(
+      space, volumes_and_sizes, attached_volumes, _rank_sizes, _top_tree_size);
 
   // Build top tree with only non-empty ranks
   _top_tree = TopTree{space, attached_volumes};
 
   Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::pushRegion(prefix + "::size_calculation");
 
-  _rank_sizes = Kokkos::View<size_type *, MemorySpace>(
-      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                         prefix + "::leaf_counts_in_local_trees"),
-      comm_size);
-  _top_tree_size = 0;
-  Kokkos::parallel_reduce(
-      prefix + "::set_rank_sizes_and_calculate_global_size",
-      Kokkos::RangePolicy<ExecutionSpace>(space, 0, comm_size),
-      KOKKOS_LAMBDA(int i, size_type &update) {
-        auto const rank_size = volumes_and_sizes(i).second;
-        _rank_sizes(i) = rank_size;
-        update += rank_size;
-      },
-      _top_tree_size);
-
-  Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::popRegion();
+  storeRankSizes(space, volumes_and_sizes, _rank_sizes, _top_tree_size);
 }
 
 } // namespace ArborX
