@@ -17,6 +17,7 @@
 #include <detail/ArborX_AccessTraits.hpp>
 #include <detail/ArborX_DistributedTreeNearest.hpp>
 #include <detail/ArborX_DistributedTreeSpatial.hpp>
+#include <detail/ArborX_DistributedTreeUtils.hpp>
 #include <detail/ArborX_PairValueIndex.hpp>
 #include <kokkos_ext/ArborX_KokkosExtStdAlgorithms.hpp>
 
@@ -114,7 +115,9 @@ private:
   BottomTree _bottom_tree; // local
   TopTree _top_tree;       // replicated
   size_type _top_tree_size{0};
-  Kokkos::View<size_type *, MemorySpace> _bottom_tree_sizes;
+  // Top tree filters out ranks with no primitives, so there is a mistmatch in
+  // size and indexing of top tree leaves and rank sizes;
+  Kokkos::View<size_type *, MemorySpace> _rank_sizes;
 };
 
 // NOTE: query() must be called as collective over all processes in the
@@ -236,21 +239,20 @@ DistributedTreeBase<BottomTree>::DistributedTreeBase(
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion(prefix + "::size_calculation");
 
-  _bottom_tree_sizes = Kokkos::View<size_type *, MemorySpace>(
+  _rank_sizes = Kokkos::View<size_type *, MemorySpace>(
       Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                         prefix + "::leave_count_in_local_trees"),
+                         prefix + "::leaf_counts_in_local_trees"),
       comm_size);
-  auto bottom_tree_sizes_host = Kokkos::create_mirror_view(
-      Kokkos::view_alloc(host_exec, Kokkos::WithoutInitializing),
-      _bottom_tree_sizes);
-  host_exec.fence();
-  bottom_tree_sizes_host(comm_rank) = _bottom_tree.size();
-  MPI_Allgather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL,
-                static_cast<void *>(bottom_tree_sizes_host.data()),
-                sizeof(size_type), MPI_BYTE, getComm());
-  Kokkos::deep_copy(space, _bottom_tree_sizes, bottom_tree_sizes_host);
-
-  _top_tree_size = Details::KokkosExt::reduce(space, _bottom_tree_sizes, 0);
+  _top_tree_size = 0;
+  Kokkos::parallel_reduce(
+      prefix + "::set_rank_sizes_and_calculate_global_size",
+      Kokkos::RangePolicy<ExecutionSpace>(space, 0, comm_size),
+      KOKKOS_LAMBDA(int i, size_type &update) {
+        auto const rank_size = volumes_and_sizes(i).second;
+        _rank_sizes(i) = rank_size;
+        update += rank_size;
+      },
+      _top_tree_size);
 
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::popRegion();
