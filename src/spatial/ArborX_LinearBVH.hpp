@@ -80,11 +80,14 @@ public:
   // controls the quality/work tradeoff: optimize(space) or optimize<12>(space,
   // cost). This modifies shared node storage: shallow copies must not be
   // queried concurrently. Operations are ordered on the supplied execution
-  // space.
+  // space. Each sweep skips subtrees with fewer than gamma leaves, starting
+  // at gamma=TreeletSize and doubling gamma between sweeps. Global workspace
+  // is reused across the requested iterations (two by default).
   template <int TreeletSize = 7, class ExecutionSpace,
             class CostFunction = Details::SurfaceArea>
   void optimize(ExecutionSpace const &space,
-                CostFunction const &cost_function = CostFunction{})
+                CostFunction const &cost_function = CostFunction{},
+                int iterations = 2)
   {
     static_assert(
         Details::KokkosExt::is_accessible_from<MemorySpace,
@@ -92,7 +95,7 @@ public:
     Kokkos::Profiling::ScopedRegion guard("ArborX::BVH::optimize");
     Details::optimizeHierarchy<TreeletSize>(space, *this, _leaf_nodes,
                                             _internal_nodes, _indexable_getter,
-                                            cost_function);
+                                            cost_function, iterations);
   }
 
   KOKKOS_FUNCTION
@@ -248,35 +251,38 @@ BoundingVolumeHierarchy<MemorySpace, Value, IndexableGetter, BoundingVolume>::
   Kokkos::Profiling::popRegion();
   Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::compute_linear_ordering");
 
-  // Map indexables from multidimensional domain to one-dimensional interval
-  using Details::returnCentroid;
-  using LinearOrderingValueType = std::invoke_result_t<
-      SpaceFillingCurve, decltype(scene_bounding_box),
-      std::decay_t<decltype(returnCentroid(indexables(0)))>>;
-  Kokkos::View<LinearOrderingValueType *, MemorySpace> linear_ordering_indices(
-      Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
-                         "ArborX::BVH::BVH::linear_ordering"),
-      size());
-  Details::projectOntoSpaceFillingCurve(
-      space, indexables, curve, scene_bounding_box, linear_ordering_indices);
+  {
+    // Map indexables from multidimensional domain to one-dimensional interval
+    using Details::returnCentroid;
+    using LinearOrderingValueType = std::invoke_result_t<
+        SpaceFillingCurve, decltype(scene_bounding_box),
+        std::decay_t<decltype(returnCentroid(indexables(0)))>>;
+    Kokkos::View<LinearOrderingValueType *, MemorySpace>
+        linear_ordering_indices(
+            Kokkos::view_alloc(space, Kokkos::WithoutInitializing,
+                               "ArborX::BVH::BVH::linear_ordering"),
+            size());
+    Details::projectOntoSpaceFillingCurve(
+        space, indexables, curve, scene_bounding_box, linear_ordering_indices);
 
-  Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::sort_linearized_order");
+    Kokkos::Profiling::popRegion();
+    Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::sort_linearized_order");
 
-  // Compute the ordering of the indexables along the space-filling curve
-  auto permutation_indices =
-      Details::sortObjects(space, linear_ordering_indices);
+    // Compute the ordering of the indexables along the space-filling curve
+    auto permutation_indices =
+        Details::sortObjects(space, linear_ordering_indices);
 
-  Kokkos::Profiling::popRegion();
-  Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
+    Kokkos::Profiling::popRegion();
+    Kokkos::Profiling::pushRegion("ArborX::BVH::BVH::generate_hierarchy");
 
-  // Generate bounding volume hierarchy
-  Details::TreeConstruction::generateHierarchy(
-      space, values, _indexable_getter, permutation_indices,
-      linear_ordering_indices, _leaf_nodes, _internal_nodes, _bounds);
+    // Generate bounding volume hierarchy
+    Details::TreeConstruction::generateHierarchy(
+        space, values, _indexable_getter, permutation_indices,
+        linear_ordering_indices, _leaf_nodes, _internal_nodes, _bounds);
 
-  Kokkos::Profiling::popRegion();
+    Kokkos::Profiling::popRegion();
 
+  } // Release Morton keys and permutation before allocating optimizer scratch.
   if constexpr (GeometryTraits::is_box_v<BoundingVolume>)
     optimize(space);
 }

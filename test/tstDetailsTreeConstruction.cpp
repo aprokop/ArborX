@@ -425,6 +425,8 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(optimize_hierarchy, DeviceType,
   checkOptimization<4, 2, DeviceType>(31, ArborX::Details::SurfaceArea{});
   checkOptimization<12, 4, DeviceType>(31, BoxVolumeCost{});
   checkOptimization<7, 3, DeviceType>(31, ArborX::Details::SurfaceArea{}, true);
+  checkOptimization<7, 3, DeviceType>(
+      31, ArborX::Experimental::UniformRadiusSearchCost<float>{1.25f});
   // Exercise optimization and radius traversal on planar, collinear, and
   // coincident point boxes, whose bounds remain degenerate after merging.
   for (int active_dimensions : {0, 1, 2})
@@ -533,6 +535,11 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(optimize_treelet_cost, DeviceType,
     Kokkos::deep_copy(space, tree._internal_nodes, nodes);
     auto const cost = ArborX::Details::SurfaceArea{};
     double const before = checkOptimizedHierarchy(space, tree, cost);
+    // Zero sweeps must leave even an improvable topology untouched.
+    ArborX::Details::optimizeHierarchy<4>(space, tree, tree._leaf_nodes,
+                                          tree._internal_nodes,
+                                          tree._indexable_getter, cost, 0);
+    BOOST_TEST(checkOptimizedHierarchy(space, tree, cost) == before);
     ArborX::Details::optimizeHierarchy<4>(space, tree, tree._leaf_nodes,
                                           tree._internal_nodes,
                                           tree._indexable_getter, cost);
@@ -675,4 +682,18 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(optimize_custom_bounding_volume, DeviceType,
       BOOST_TEST(host_found(i, j) ==
                  (ArborX::intersects(box, host_points(j)) ? 1 : 0));
   }
+}
+
+BOOST_AUTO_TEST_CASE(uniform_radius_search_cost)
+{
+  ArborX::Experimental::UniformRadiusSearchCost<double> cost{1.};
+  double const pi = std::acos(-1.);
+  BOOST_TEST(cost(ArborX::Box<3>{{{0, 0, 0}}, {{0, 0, 0}}}) == 4 * pi / 3,
+             boost::test_tools::tolerance(1e-12));
+  BOOST_TEST(cost(ArborX::Box<3>{{{0, 0, 0}}, {{3, 0, 0}}}) ==
+                 3 * pi + 4 * pi / 3,
+             boost::test_tools::tolerance(1e-12));
+  BOOST_TEST(cost(ArborX::Box<3>{{{0, 0, 0}}, {{1, 1, 1}}}) ==
+                 7 + 3 * pi + 4 * pi / 3,
+             boost::test_tools::tolerance(1e-12));
 }
