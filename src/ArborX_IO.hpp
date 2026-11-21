@@ -45,7 +45,7 @@ struct IOTraits<Point>
       std::ios_base::fmtflags flags(os.flags());
 
       using T = std::decay_t<decltype(std::declval<Point>()[0])>;
-      os << std::fixed
+      os << std::defaultfloat
          << std::setprecision(std::numeric_limits<T>::max_digits10);
       os << point[0] << " " << point[1] << " " << point[2];
 
